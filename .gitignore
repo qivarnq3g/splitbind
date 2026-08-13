@@ -1,0 +1,60 @@
+# Local course materials and private project evidence
+/AGENTS.md
+/**/AGENTS.md
+/*.pdf
+/note.txt
+/docs/course/
+/docs/internal/
+/docs/project/lecturer-email-summary.md
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Rust
+/target/
+**/target/
+
+# Node.js and frontend
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Runtime and disposable outputs
+*.log
+tmp/
+temp/
+.cache/
+artifacts/
+reports/
+*.swp
+*.tmp
+
+# Local infrastructure state
+.lima/
+.terraform/
+*.tfstate
+*.tfstate.*
