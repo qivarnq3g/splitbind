@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://splitbind.qivarn.id.vn/contracts/jsonschema/job-request-v1.schema.json",
+  "title": "JobRequestV1",
+  "type": "object",
+  "additionalProperties": false,
+  "x-splitbind-input-limits": {
+    "max_bytes": 10485760,
+    "max_pdf_pages": 50,
+    "max_image_pixels": 40000000
+  },
+  "required": [
+    "schema_version",
+    "message_type",
+    "message_id",
+    "job_id",
+    "attempt",
+    "issuance_id",
+    "verification_id",
+    "input_object_key",
+    "input_sha256",
+    "deadline_at",
+    "correlation_id"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "message_type": {
+      "type": "string",
+      "enum": ["issuance.requested", "verification.requested"]
+    },
+    "message_id": {"type": "string", "format": "uuid"},
+    "job_id": {"type": "string", "format": "uuid"},
+    "attempt": {"type": "integer", "minimum": 0, "maximum": 2},
+    "issuance_id": {
+      "anyOf": [
+        {"type": "string", "format": "uuid"},
+        {"type": "null"}
+      ]
+    },
+    "verification_id": {
+      "anyOf": [
+        {"type": "string", "format": "uuid"},
+        {"type": "null"}
+      ]
+    },
+    "input_object_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^(?![a-zA-Z][a-zA-Z0-9+.-]*://)(?!/)(?!.*\\.\\.)(?!.*[?&]).+$"
+    },
+    "input_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "deadline_at": {"type": "string", "format": "date-time", "pattern": "Z$"},
+    "correlation_id": {"type": "string", "format": "uuid"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"message_type": {"const": "issuance.requested"}}},
+      "then": {
+        "properties": {
+          "issuance_id": {"type": "string", "format": "uuid"},
+          "verification_id": {"type": "null"}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"message_type": {"const": "verification.requested"}}},
+      "then": {
+        "properties": {
+          "issuance_id": {"type": "null"},
+          "verification_id": {"type": "string", "format": "uuid"}
+        }
+      }
+    }
+  ]
+}

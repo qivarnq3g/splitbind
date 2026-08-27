@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "profile_id": "splitbind-integrity-candidate-v1",
+  "status": "research-candidate",
+  "region_size_px": 128,
+  "content_feature": {
+    "color_channel": "luminance",
+    "transform": "dct",
+    "coefficient_band": "low-frequency-quantized"
+  },
+  "authentication": {
+    "algorithm": "hmac-sha256",
+    "tag_bytes": 4,
+    "binding_inputs": [
+      "content_feature",
+      "region_index_be32",
+      "document_nonce"
+    ],
+    "placement": "key-derived-partner-region",
+    "exclude_destination_coefficients_from_feature": true
+  },
+  "localization": {
+    "coordinate_space": "normalized-xywh",
+    "score_range": [0.0, 1.0]
+  }
+}

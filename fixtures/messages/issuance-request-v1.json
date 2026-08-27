@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "message_type": "issuance.requested",
+  "message_id": "11111111-1111-4111-8111-111111111111",
+  "job_id": "22222222-2222-4222-8222-222222222222",
+  "attempt": 0,
+  "issuance_id": "33333333-3333-4333-8333-333333333333",
+  "verification_id": null,
+  "input_object_key": "acceptance-corpus/v1/clean-one-page-vector.pdf",
+  "input_sha256": "ba1c3ef1b1742400aa646eb14215d094fee7a37d32589836530ee83549f79004",
+  "deadline_at": "2026-09-01T00:00:00Z",
+  "correlation_id": "44444444-4444-4444-8444-444444444444"
+}
