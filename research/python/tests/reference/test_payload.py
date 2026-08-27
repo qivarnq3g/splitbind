@@ -140,10 +140,18 @@ def test_non_editable_wheel_uses_locked_dependencies_and_shared_contracts(tmp_pa
     script = """
 from pathlib import Path
 from uuid import UUID
+import cv2
+import numpy
+import splitbind_ref.fingerprint as fingerprint
 import splitbind_ref.payload as payload
+import splitbind_ref.synchronization as synchronization
 
 print(Path(payload.__file__).resolve())
 print(payload.encode_payload(UUID('12345678-1234-5678-1234-567812345678')).hex())
+print(Path(fingerprint.__file__).resolve())
+print(Path(synchronization.__file__).resolve())
+print(numpy.__version__)
+print(cv2.__version__)
 """
     isolated_environment = os.environ.copy()
     isolated_environment["PYTHONPATH"] = str(target)
@@ -171,6 +179,17 @@ print(payload.encode_payload(UUID('12345678-1234-5678-1234-567812345678')).hex()
         check=False,
     )
     assert with_contracts.returncode == 0, with_contracts.stderr
-    module_path, payload_hex = with_contracts.stdout.splitlines()
+    (
+        module_path,
+        payload_hex,
+        fingerprint_path,
+        synchronization_path,
+        numpy_version,
+        opencv_version,
+    ) = with_contracts.stdout.splitlines()
     assert Path(module_path).is_relative_to(target)
+    assert Path(fingerprint_path).is_relative_to(target)
+    assert Path(synchronization_path).is_relative_to(target)
     assert payload_hex == GOLDEN_PAYLOAD.hex()
+    assert numpy_version == "2.4.6"
+    assert opencv_version == "4.13.0"

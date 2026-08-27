@@ -6,6 +6,8 @@ hypothesis==6.165.10
 iniconfig==2.3.0
 jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
+numpy==2.4.6
+opencv-python-headless==4.13.0.92
 packaging==26.3
 pluggy==1.6.0
 Pygments==2.21.0
