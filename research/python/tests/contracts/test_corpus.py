@@ -1,8 +1,10 @@
 import hashlib
 import json
+import re
 import struct
 import subprocess
 import sys
+import zlib
 from collections import Counter
 from pathlib import Path
 
@@ -37,6 +39,18 @@ def png_dimensions(path: Path) -> tuple[int, int]:
 
 def pdf_page_count(path: Path) -> int:
     return path.read_bytes().count(b"/Type /Page ")
+
+
+def pdf_grayscale_image(path: Path) -> bytes:
+    data = path.read_bytes()
+    image = re.search(
+        rb"/Subtype /Image /Width 160 /Height 120 .*?/Filter /FlateDecode /Length (\d+) >>\nstream\n",
+        data,
+    )
+    assert image, path
+    compressed_start = image.end()
+    compressed_length = int(image.group(1))
+    return zlib.decompress(data[compressed_start : compressed_start + compressed_length])
 
 
 def run_generator(output: Path) -> subprocess.CompletedProcess[str]:
@@ -119,6 +133,24 @@ def test_manifest_page_counts_and_dimensions_match_binary_artifacts():
             assert entry["pages"] == 1
         else:
             raise AssertionError(f"Unexpected corpus format: {path.suffix}")
+
+
+def test_gradient_pdf_contains_a_real_gradient_raster():
+    corpus = load_manifest()
+    fixture = next(entry for entry in corpus["entries"] if entry["fixture_id"] == "pdf-one-gradient")
+    pixels = pdf_grayscale_image(generated_path(ROOT / "fixtures" / "corpus", fixture))
+    assert len(pixels) == 160 * 120
+    assert [pixels[index] for index in [0, 80, 159, 119 * 160, 119 * 160 + 80, 120 * 160 - 1]] == [
+        0,
+        87,
+        173,
+        67,
+        154,
+        240,
+    ]
+    for row_index in range(120):
+        row = pixels[row_index * 160 : (row_index + 1) * 160]
+        assert all(left <= right for left, right in zip(row, row[1:]))
 
 
 def test_generator_reproduces_tracked_manifest_and_bytes(tmp_path: Path):

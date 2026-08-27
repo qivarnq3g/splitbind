@@ -79,7 +79,8 @@ def make_pdf(page_count: int, seed: int, style: str, fixture_id: str) -> bytes:
 
     for page_index in range(page_count):
         image_seed = seed + page_index * 7919
-        image_pixels = grayscale_pixels(160, 120, image_seed, "noise" if style == "noise" else "mixed")
+        raster_style = style if style in {"gradient", "noise"} else "mixed"
+        image_pixels = grayscale_pixels(160, 120, image_seed, raster_style)
         compressed_image = zlib.compress(image_pixels, level=9)
         page_id = len(objects) + 1
         content_id = page_id + 1

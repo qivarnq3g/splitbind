@@ -1,6 +1,8 @@
 import json
+import zlib
 from copy import deepcopy
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 from jsonschema import Draft202012Validator, FormatChecker, ValidationError
@@ -64,6 +66,39 @@ def test_payload_profile_freezes_binary_layout_and_shortened_rs_parameters():
     assert profile["interleave_depth"] == 8
 
 
+def test_payload_profile_publishes_a_real_crc32_golden_payload():
+    profile = load_json("contracts/algorithm/payload-profile.v1.json")
+    golden = profile["golden_vector"]
+    assert golden == {
+        "schema_version": 1,
+        "issuance_id": "12345678-1234-5678-1234-567812345678",
+        "body_hex": "53420112345678123456781234567812345678",
+        "crc32_hex": "9ae24281",
+        "payload_hex": "534201123456781234567812345678123456789ae24281",
+    }
+    assert profile["crc32"] == {
+        "name": "CRC-32/ISO-HDLC",
+        "polynomial": "0x04c11db7",
+        "initial_value": "0xffffffff",
+        "reflect_input": True,
+        "reflect_output": True,
+        "xor_output": "0xffffffff",
+        "input_bytes": 19,
+    }
+
+    body = bytes.fromhex(golden["body_hex"])
+    payload = bytes.fromhex(golden["payload_hex"])
+    expected_body = b"SB" + b"\x01" + UUID(golden["issuance_id"]).bytes
+    assert body == expected_body
+    assert len(body) == profile["crc32"]["input_bytes"] == 19
+    assert len(payload) == profile["payload"]["total_bytes"] == 23
+    assert payload[:19] == body
+    assert payload[19:] == bytes.fromhex("9ae24281")
+    assert zlib.crc32(payload[:19]).to_bytes(4, "big") == payload[19:]
+    assert zlib.crc32(payload[:18]).to_bytes(4, "big") != payload[19:]
+    assert zlib.crc32(payload[:20]).to_bytes(4, "big") != payload[19:]
+
+
 def test_fingerprint_candidate_grid_matches_the_research_sweep():
     candidates = load_json("contracts/algorithm/fingerprint-candidates.v1.json")
     assert candidates == {
@@ -115,7 +150,7 @@ def test_algorithm_vector_envelope_validates_bytes_and_rejects_extras():
         "profile_sha256": "0" * 64,
         "seed": 20260827,
         "input_hex": "12345678123456781234567812345678",
-        "expected_hex": "5342011234567812345678123456781234567800000000",
+        "expected_hex": "534201123456781234567812345678123456789ae24281",
     }
     validate("algorithm-vector-v1.schema.json", vector)
 
