@@ -1,8 +1,10 @@
 import json
 import os
 import pathlib
+import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 import tomllib
 import unittest
@@ -19,6 +21,7 @@ class RepositoryContractTest(unittest.TestCase):
             package["engines"],
             {"node": ">=24.18.0 <25", "npm": ">=12 <13"},
         )
+        self.assertEqual(package.get("packageManager"), "npm@12.0.1")
         self.assertEqual(
             package["scripts"],
             {
@@ -41,15 +44,127 @@ class RepositoryContractTest(unittest.TestCase):
                 "profile": "minimal",
             },
         )
-        self.assertIn(
-            "test_repository_contract.py",
-            (ROOT / ".github/workflows/smoke.yaml").read_text(encoding="utf-8"),
-        )
-
         lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
         self.assertEqual(lock["name"], "splitbind")
         self.assertEqual(lock["lockfileVersion"], 3)
         self.assertEqual(lock["packages"][""]["workspaces"], ["apps/*"])
+
+    def test_smoke_dry_run_publishes_the_exact_reproducible_command_plan(self):
+        result = subprocess.run(
+            [sys.executable, "infra/scripts/run_smoke.py", "--dry-run"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, self._combined_output(result))
+        self.assertEqual(
+            json.loads(result.stdout),
+            {
+                "schema_version": 1,
+                "commands": [
+                    {
+                        "name": "npm-ci",
+                        "argv": ["npm", "ci", "--ignore-scripts"],
+                    },
+                    {
+                        "name": "python-environment",
+                        "argv": [
+                            "{python}",
+                            "-m",
+                            "pip",
+                            "install",
+                            "-c",
+                            "research/python/constraints-py311.txt",
+                            "./research/python[test]",
+                        ],
+                    },
+                    {
+                        "name": "platform-tests",
+                        "argv": [
+                            "{python}",
+                            "-m",
+                            "unittest",
+                            "discover",
+                            "-s",
+                            "tests/platform",
+                            "-p",
+                            "test_*.py",
+                            "-v",
+                        ],
+                    },
+                    {
+                        "name": "research-tests",
+                        "argv": [
+                            "{python}",
+                            "-m",
+                            "pytest",
+                            "research/python/tests",
+                            "-v",
+                        ],
+                    },
+                ],
+            },
+        )
+
+    def test_smoke_runner_propagates_the_first_failure_and_stops(self):
+        program = """
+import pathlib
+import sys
+
+from infra.scripts import run_smoke
+
+sentinel = pathlib.Path(sys.argv[1])
+commands = [
+    {
+        "name": "first-failure",
+        "argv": [sys.executable, "-c", "import sys; sys.exit(7)"],
+    },
+    {
+        "name": "must-not-run",
+        "argv": [
+            sys.executable,
+            "-c",
+            "import pathlib, sys; pathlib.Path(sys.argv[1]).write_text('ran')",
+            str(sentinel),
+        ],
+    },
+]
+exit_code = run_smoke.run_commands(commands)
+raise SystemExit(0 if exit_code == 7 and not sentinel.exists() else 1)
+"""
+        with tempfile.TemporaryDirectory(prefix="splitbind-smoke-runner-test-") as temp:
+            sentinel = pathlib.Path(temp) / "second-command-ran"
+            result = subprocess.run(
+                [sys.executable, "-c", program, str(sentinel)],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 0, self._combined_output(result))
+
+    def test_smoke_runner_resolves_platform_command_shims(self):
+        program = """
+from infra.scripts import run_smoke
+
+raise SystemExit(
+    run_smoke.run_commands(
+        [{"name": "npm-version", "argv": ["npm", "--version"]}]
+    )
+)
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", program],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, self._combined_output(result))
 
     def test_default_toolchain_check_does_not_require_release_tools_or_docker_daemon(self):
         result, docker_was_invoked = self._run_toolchain()
@@ -57,6 +172,28 @@ class RepositoryContractTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, self._combined_output(result))
         self.assertIn("TOOLCHAIN_OK", result.stdout)
         self.assertFalse(docker_was_invoked)
+
+    def test_posix_fake_tool_emits_version_text_with_shell_metacharacters(self):
+        posix_shell = self._find_posix_shell()
+        if posix_shell is None:
+            self.skipTest("A POSIX shell is unavailable")
+
+        with tempfile.TemporaryDirectory(prefix="splitbind-posix-tool-test-") as temp:
+            tool = self._write_fake_tool(
+                pathlib.Path(temp),
+                "rustc",
+                output="rustc 1.97.1 (test fixture)",
+                platform="posix",
+            )
+            result = subprocess.run(
+                [posix_shell, str(tool), "--version"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 0, self._combined_output(result))
+        self.assertEqual(result.stdout.strip(), "rustc 1.97.1 (test fixture)")
 
     def test_release_toolchain_check_requires_github_and_azure_clis(self):
         cases = (({"az"}, "gh"), ({"gh"}, "az"))
@@ -91,9 +228,42 @@ class RepositoryContractTest(unittest.TestCase):
         self.assertNotEqual(wrong.returncode, 0)
         self.assertIn("TOOL_VERSION:node:v23.0.0", self._combined_output(wrong))
 
+    def test_toolchain_check_rejects_wrong_patch_versions(self):
+        cases = (
+            ("node", "v24.0.0"),
+            ("python", "Python 3.11.0"),
+            ("rustc", "rustc 1.97.9 (test fixture)"),
+        )
+        for name, version in cases:
+            with self.subTest(name=name, version=version):
+                result, _ = self._run_toolchain(versions={name: version})
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(
+                    f"TOOL_VERSION:{name}:{version}",
+                    self._combined_output(result),
+                )
+
+    def test_toolchain_check_rejects_correct_output_from_a_failed_probe(self):
+        result, _ = self._run_toolchain(exit_codes={"node": 7})
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("TOOL_EXIT:node:7", self._combined_output(result))
+
     @staticmethod
     def _combined_output(result):
         return f"{result.stdout}\n{result.stderr}"
+
+    @staticmethod
+    def _find_posix_shell():
+        candidates = [
+            shutil.which("sh"),
+            pathlib.Path(os.environ.get("ProgramFiles", "")) / "Git/bin/sh.exe",
+        ]
+        for candidate in candidates:
+            if candidate and pathlib.Path(candidate).is_file():
+                return str(candidate)
+        return None
 
     def _run_toolchain(
         self,
@@ -102,6 +272,7 @@ class RepositoryContractTest(unittest.TestCase):
         present_release_tools=frozenset(),
         omitted=frozenset(),
         versions=None,
+        exit_codes=None,
     ):
         powershell = shutil.which("pwsh") or shutil.which("powershell")
         self.assertIsNotNone(powershell, "PowerShell is required to exercise the script")
@@ -112,21 +283,27 @@ class RepositoryContractTest(unittest.TestCase):
             "rustc": "rustc 1.97.1 (test fixture)",
         }
         tool_versions.update(versions or {})
+        tool_exit_codes = exit_codes or {}
 
         with tempfile.TemporaryDirectory(prefix="splitbind-toolchain-test-") as temp:
             fake_bin = pathlib.Path(temp)
             docker_sentinel = fake_bin / "docker-invoked"
             for name, version in tool_versions.items():
                 if name not in omitted:
-                    self._write_fake_tool(fake_bin, name, f"echo {version}")
+                    self._write_fake_tool(
+                        fake_bin,
+                        name,
+                        output=version,
+                        exit_code=tool_exit_codes.get(name, 0),
+                    )
             self._write_fake_tool(
                 fake_bin,
                 "docker",
-                'echo invoked > "$TOOLCHAIN_DOCKER_SENTINEL"',
+                sentinel_env="TOOLCHAIN_DOCKER_SENTINEL",
             )
             for name in ("gh", "az"):
                 if name in present_release_tools:
-                    self._write_fake_tool(fake_bin, name, "exit 0")
+                    self._write_fake_tool(fake_bin, name)
 
             env = os.environ.copy()
             path_entries = [str(fake_bin)]
@@ -157,21 +334,39 @@ class RepositoryContractTest(unittest.TestCase):
         return result, docker_was_invoked
 
     @staticmethod
-    def _write_fake_tool(directory, name, body):
-        if os.name == "nt":
+    def _write_fake_tool(
+        directory,
+        name,
+        *,
+        output=None,
+        exit_code=0,
+        sentinel_env=None,
+        platform=None,
+    ):
+        platform = platform or os.name
+        if platform == "nt":
             path = directory / f"{name}.cmd"
-            normalized_body = body.replace(
-                "$TOOLCHAIN_DOCKER_SENTINEL",
-                "%TOOLCHAIN_DOCKER_SENTINEL%",
-            )
+            lines = ["@echo off"]
+            if output is not None:
+                lines.append(f"echo {output}")
+            if sentinel_env is not None:
+                lines.append(f'> "%{sentinel_env}%" echo invoked')
+            lines.append(f"exit /b {exit_code}")
             path.write_text(
-                f"@echo off\r\n{normalized_body}\r\n",
+                "\r\n".join(lines) + "\r\n",
                 encoding="utf-8",
             )
         else:
             path = directory / name
-            path.write_text(f"#!/bin/sh\n{body}\n", encoding="utf-8")
+            lines = ["#!/bin/sh"]
+            if output is not None:
+                lines.append(f"printf '%s\\n' {shlex.quote(output)}")
+            if sentinel_env is not None:
+                lines.append(f'echo invoked > "${sentinel_env}"')
+            lines.append(f"exit {exit_code}")
+            path.write_text("\n".join(lines) + "\n", encoding="utf-8")
             path.chmod(0o755)
+        return path
 
 
 if __name__ == "__main__":
