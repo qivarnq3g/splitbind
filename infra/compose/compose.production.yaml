@@ -11,11 +11,16 @@ services:
   api:
     image: ${API_IMAGE:?API_IMAGE must be an immutable digest}
     env_file: ["${API_ENV_FILE:-/run/splitbind/secrets/api.env}"]
+    environment:
+      SPLITBIND_DATABASE_HOST: ${NEON_DATABASE_HOST:?NEON_DATABASE_HOST is required}
+      OBJECT_STORAGE_ENDPOINT: ${R2_ENDPOINT:?R2_ENDPOINT is required}
     networks: [app]
   outbox:
     image: ${API_IMAGE:?API_IMAGE must be an immutable digest}
     command: ["python", "manage.py", "run_event_bridge"]
     env_file: ["${API_ENV_FILE:-/run/splitbind/secrets/api.env}"]
+    environment:
+      SPLITBIND_DATABASE_HOST: ${NEON_DATABASE_HOST:?NEON_DATABASE_HOST is required}
     networks: [app]
   rabbitmq:
     image: ${RABBITMQ_IMAGE:?RABBITMQ_IMAGE must be an immutable digest}
@@ -23,6 +28,8 @@ services:
   worker:
     image: ${WORKER_IMAGE:?WORKER_IMAGE must be an immutable digest}
     env_file: ["${WORKER_ENV_FILE:-/run/splitbind/secrets/worker.env}"]
+    environment:
+      OBJECT_STORAGE_ENDPOINT: ${R2_ENDPOINT:?R2_ENDPOINT is required}
     secrets: [manifest_signing_key, fingerprint_key, integrity_key]
     networks: [app]
 

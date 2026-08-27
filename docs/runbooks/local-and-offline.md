@@ -16,9 +16,12 @@ Run commands from the repository root. The local topology publishes only Caddy o
 Validate a profile without creating containers or contacting the Docker daemon:
 
 ```powershell
+python infra/scripts/check_compose_capabilities.py
 docker compose --env-file infra/compose/config-test.env -f infra/compose/compose.local.yaml --profile core config --quiet
 docker compose --env-file infra/compose/config-test.env -f infra/compose/compose.local.yaml --profile full config --quiet
 ```
+
+The preflight probes `docker compose config --help` for the exact `--format`, `--no-env-resolution`, and `--no-path-resolution` capabilities used by platform tests. It does not contact the Docker daemon and reports an upgrade action when an option is unavailable; the project does not guess a historical minimum Compose version.
 
 After P3 has built the placeholder images and the application-specific environment is configured, operators may start the core profile with:
 
@@ -45,3 +48,13 @@ P7 owns the executable offline procedure. Its `infra/scripts/offline-demo.ps1` w
 ## Production separation
 
 Production is a separate topology with exactly Caddy, API, outbox, RabbitMQ, and worker. Neon PostgreSQL and Cloudflare R2 remain external. Host secret sources are under `/run/splitbind/secrets`; only the worker receives the manifest-signing, fingerprint, and integrity private files at `/run/secrets`. API and outbox receive their environment file but never those worker-private key mounts. Production publishes only ports 80 and 443 through Caddy.
+
+The rendered production environment exposes only non-secret routing hints: `SPLITBIND_DATABASE_HOST` identifies the external Neon hostname for API and outbox, while `OBJECT_STORAGE_ENDPOINT` identifies the HTTPS Cloudflare R2 endpoint for API and worker. Credential-bearing database and object-storage configuration remains in host-owned env files and never belongs in the Compose file. Future B1/B3 startup validation must fail closed unless each secret URL resolves to the same managed hostname/endpoint declared by its non-secret hint.
+
+Validate the bounded P2 Caddy structure without downloading Caddy:
+
+```powershell
+python infra/scripts/validate_caddyfile.py
+```
+
+The validator accepts only this task's exact global block, site label, security headers, API/health reverse proxies, and static fallback, and emits structured JSON. It is deliberately not a general Caddy parser. P3 must additionally run the official `caddy validate` command inside the built web image; only that runtime-owned check proves compatibility with the packaged Caddy version.

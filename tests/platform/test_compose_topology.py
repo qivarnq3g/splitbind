@@ -4,6 +4,7 @@ import pathlib
 import re
 import subprocess
 import unittest
+import urllib.parse
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -39,6 +40,8 @@ def render_compose(filename, *profiles, use_config_env=True):
                 "RABBITMQ_IMAGE": "rabbitmq:4.1.4-management-alpine",
                 "SPLITBIND_HOSTNAME": "http://localhost:8080",
                 "ACME_EMAIL": "compose-test@example.invalid",
+                "NEON_DATABASE_HOST": "ep-synthetic.neon.tech.invalid",
+                "R2_ENDPOINT": "https://synthetic-account.r2.cloudflarestorage.com.invalid",
             }
         )
     result = subprocess.run(
@@ -138,12 +141,25 @@ class ComposeTopologyTest(unittest.TestCase):
             set(production["services"]),
             {"caddy", "api", "outbox", "rabbitmq", "worker"},
         )
-        published = {
-            port
-            for service in production["services"].values()
-            for port in published_ports(service)
-        }
-        self.assertEqual(published, {80, 443})
+        self.assertEqual(
+            production["services"]["caddy"]["ports"],
+            [
+                {
+                    "mode": "ingress",
+                    "target": 8080,
+                    "published": "80",
+                    "protocol": "tcp",
+                },
+                {
+                    "mode": "ingress",
+                    "target": 8443,
+                    "published": "443",
+                    "protocol": "tcp",
+                },
+            ],
+        )
+        for name in ("api", "outbox", "rabbitmq", "worker"):
+            self.assertNotIn("ports", production["services"][name])
         self.assertEqual(
             secret_sources(production["services"]["worker"]),
             {"manifest_signing_key", "fingerprint_key", "integrity_key"},
@@ -161,13 +177,54 @@ class ComposeTopologyTest(unittest.TestCase):
         for item in production["services"]["worker"]["secrets"]:
             self.assertEqual(item["target"], f"/run/secrets/{item['source']}")
 
-    def test_caddy_is_same_origin_and_does_not_proxy_metrics(self):
-        caddy = (ROOT / "infra" / "caddy" / "Caddyfile").read_text(encoding="utf-8")
-        self.assertIn("{$SPLITBIND_HOSTNAME}", caddy)
-        self.assertIn("handle /api/*", caddy)
-        self.assertIn("handle /health/*", caddy)
-        self.assertEqual(caddy.count("reverse_proxy api:8000"), 2)
-        self.assertNotIn("/metrics", caddy)
+    def test_production_renders_non_secret_neon_and_r2_boundaries(self):
+        production = render_compose("compose.production.yaml")
+
+        database_host = production["services"]["api"].get("environment", {}).get(
+            "SPLITBIND_DATABASE_HOST"
+        )
+        self.assertIsNotNone(database_host)
+        self.assertEqual(
+            production["services"]["outbox"]["environment"][
+                "SPLITBIND_DATABASE_HOST"
+            ],
+            database_host,
+        )
+        self.assertNotIn("://", database_host)
+        self.assertTrue(database_host.endswith(".neon.tech.invalid"))
+        self.assertNotIn("localhost", database_host)
+        for name in ("api", "outbox"):
+            self.assertIn("env_file", production["services"][name])
+            self.assertNotIn(
+                "DATABASE_URL",
+                production["services"][name].get("environment", {}),
+            )
+
+        storage_endpoint = production["services"]["api"].get("environment", {}).get(
+            "OBJECT_STORAGE_ENDPOINT"
+        )
+        self.assertIsNotNone(storage_endpoint)
+        self.assertEqual(
+            production["services"]["worker"]["environment"][
+                "OBJECT_STORAGE_ENDPOINT"
+            ],
+            storage_endpoint,
+        )
+        parsed_storage = urllib.parse.urlsplit(storage_endpoint)
+        self.assertEqual(parsed_storage.scheme, "https")
+        self.assertIsNone(parsed_storage.username)
+        self.assertIsNone(parsed_storage.password)
+        self.assertTrue(
+            (parsed_storage.hostname or "").endswith(
+                ".r2.cloudflarestorage.com.invalid"
+            )
+        )
+        self.assertNotIn("minio", parsed_storage.hostname or "")
+        self.assertNotIn("localhost", parsed_storage.hostname or "")
+        self.assertNotIn(
+            "OBJECT_STORAGE_ENDPOINT",
+            production["services"]["outbox"].get("environment", {}),
+        )
 
 
 if __name__ == "__main__":
