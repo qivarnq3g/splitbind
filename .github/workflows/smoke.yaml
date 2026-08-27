@@ -1,0 +1,16 @@
+name: smoke
+on: [pull_request, push]
+permissions: { contents: read }
+jobs:
+  repository-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .nvmrc, cache: npm }
+      - run: npm ci --ignore-scripts
+      - run: python -m pip install -c research/python/constraints-py311.txt "./research/python[test]"
+      - run: python -m unittest discover -s tests/platform -p "test_repository_contract.py" -v
+      - run: python -m pytest research/python/tests -v

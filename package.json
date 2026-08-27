@@ -1,0 +1,13 @@
+{
+  "name": "splitbind",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "engines": { "node": ">=24.18.0 <25", "npm": ">=12 <13" },
+  "scripts": {
+    "format:check": "npm run format:check --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "generate:api": "npm run generate:api --workspace @splitbind/web"
+  }
+}
