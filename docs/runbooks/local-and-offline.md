@@ -51,6 +51,14 @@ Production is a separate topology with exactly Caddy, API, outbox, RabbitMQ, and
 
 The rendered production environment exposes only non-secret routing hints: `SPLITBIND_DATABASE_HOST` identifies the external Neon hostname for API and outbox, while `OBJECT_STORAGE_ENDPOINT` identifies the HTTPS Cloudflare R2 endpoint for API and worker. Credential-bearing database and object-storage configuration remains in host-owned env files and never belongs in the Compose file. Future B1/B3 startup validation must fail closed unless each secret URL resolves to the same managed hostname/endpoint declared by its non-secret hint.
 
+Validate a database host as a credential-free DNS authority before deployment:
+
+```powershell
+python infra/scripts/validate_database_host.py --database-host $env:NEON_DATABASE_HOST --required-suffix .neon.tech
+```
+
+The validator rejects user information, passwords, ports, schemes, paths, queries, fragments, whitespace, control characters, and names outside a lowercase ASCII DNS-host grammar. Static P2 tests use `.neon.tech.invalid`; a deployment preflight uses the real managed-service suffix `.neon.tech`. The validator never echoes a rejected host, so an accidentally supplied credential is not copied into diagnostics.
+
 Validate the bounded P2 Caddy structure without downloading Caddy:
 
 ```powershell

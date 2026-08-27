@@ -6,13 +6,23 @@ import subprocess
 import unittest
 import urllib.parse
 
+from infra.scripts.validate_database_host import (
+    DatabaseHostValidationError,
+    validate_database_host,
+)
+
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 COMPOSE_DIR = ROOT / "infra" / "compose"
 CONFIG_TEST_ENV = COMPOSE_DIR / "config-test.env"
 
 
-def render_compose(filename, *profiles, use_config_env=True):
+def render_compose(
+    filename,
+    *profiles,
+    use_config_env=True,
+    environment_overrides=None,
+):
     compose_file = COMPOSE_DIR / filename
     compose_file.read_text(encoding="utf-8")
     command = ["docker", "compose"]
@@ -44,6 +54,7 @@ def render_compose(filename, *profiles, use_config_env=True):
                 "R2_ENDPOINT": "https://synthetic-account.r2.cloudflarestorage.com.invalid",
             }
         )
+    environment.update(environment_overrides or {})
     result = subprocess.run(
         command,
         cwd=ROOT,
@@ -190,9 +201,10 @@ class ComposeTopologyTest(unittest.TestCase):
             ],
             database_host,
         )
-        self.assertNotIn("://", database_host)
-        self.assertTrue(database_host.endswith(".neon.tech.invalid"))
-        self.assertNotIn("localhost", database_host)
+        self.assertEqual(
+            validate_database_host(database_host, ".neon.tech.invalid"),
+            database_host,
+        )
         for name in ("api", "outbox"):
             self.assertIn("env_file", production["services"][name])
             self.assertNotIn(
@@ -225,6 +237,26 @@ class ComposeTopologyTest(unittest.TestCase):
             "OBJECT_STORAGE_ENDPOINT",
             production["services"]["outbox"].get("environment", {}),
         )
+
+    def test_rendered_production_rejects_a_credential_bearing_database_host(self):
+        production = render_compose(
+            "compose.production.yaml",
+            use_config_env=False,
+            environment_overrides={
+                "NEON_DATABASE_HOST": (
+                    "user:password@ep-synthetic.neon.tech.invalid"
+                )
+            },
+        )
+        database_host = production["services"]["api"]["environment"][
+            "SPLITBIND_DATABASE_HOST"
+        ]
+
+        with self.assertRaisesRegex(
+            DatabaseHostValidationError,
+            "must not contain credentials",
+        ):
+            validate_database_host(database_host, ".neon.tech.invalid")
 
 
 if __name__ == "__main__":
