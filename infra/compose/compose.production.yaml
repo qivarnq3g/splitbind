@@ -1,0 +1,38 @@
+name: splitbind-production
+
+services:
+  caddy:
+    image: ${WEB_IMAGE:?WEB_IMAGE must be an immutable digest}
+    ports: ["80:8080", "443:8443"]
+    environment:
+      SPLITBIND_HOSTNAME: ${SPLITBIND_HOSTNAME:?SPLITBIND_HOSTNAME is required}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL is required}
+    networks: [app]
+  api:
+    image: ${API_IMAGE:?API_IMAGE must be an immutable digest}
+    env_file: ["${API_ENV_FILE:-/run/splitbind/secrets/api.env}"]
+    networks: [app]
+  outbox:
+    image: ${API_IMAGE:?API_IMAGE must be an immutable digest}
+    command: ["python", "manage.py", "run_event_bridge"]
+    env_file: ["${API_ENV_FILE:-/run/splitbind/secrets/api.env}"]
+    networks: [app]
+  rabbitmq:
+    image: ${RABBITMQ_IMAGE:?RABBITMQ_IMAGE must be an immutable digest}
+    networks: [app]
+  worker:
+    image: ${WORKER_IMAGE:?WORKER_IMAGE must be an immutable digest}
+    env_file: ["${WORKER_ENV_FILE:-/run/splitbind/secrets/worker.env}"]
+    secrets: [manifest_signing_key, fingerprint_key, integrity_key]
+    networks: [app]
+
+networks:
+  app: {}
+
+secrets:
+  manifest_signing_key:
+    file: "${MANIFEST_SIGNING_KEY_FILE:-/run/splitbind/secrets/manifest-signing-key.pk8}"
+  fingerprint_key:
+    file: "${FINGERPRINT_KEY_FILE:-/run/splitbind/secrets/fingerprint-key.bin}"
+  integrity_key:
+    file: "${INTEGRITY_KEY_FILE:-/run/splitbind/secrets/integrity-key.bin}"

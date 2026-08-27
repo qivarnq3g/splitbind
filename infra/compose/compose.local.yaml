@@ -1,0 +1,59 @@
+name: splitbind-local
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    profiles: [core, full]
+    networks: [app]
+  minio:
+    image: minio/minio
+    command: server /data
+    profiles: [core, full]
+    networks: [app]
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    profiles: [core, full]
+    networks: [app]
+  api:
+    image: splitbind-api:local
+    profiles: [core, full]
+    networks: [app]
+    depends_on: [postgres, minio, rabbitmq]
+  outbox:
+    image: splitbind-api:local
+    command: ["python", "manage.py", "run_event_bridge"]
+    profiles: [core, full]
+    networks: [app]
+    depends_on: [postgres, rabbitmq]
+  worker:
+    image: splitbind-worker:local
+    profiles: [core, full]
+    networks: [app]
+    depends_on: [rabbitmq, minio]
+  caddy:
+    image: splitbind-web:local
+    profiles: [core, full]
+    ports: ["8080:8080"]
+    environment:
+      SPLITBIND_HOSTNAME: "http://:8080"
+      ACME_EMAIL: "local@example.invalid"
+    networks: [app]
+    depends_on: [api]
+  research:
+    profiles: [research, full]
+    image: splitbind-research:local
+  prometheus:
+    image: prom/prometheus
+    profiles: [observability, full]
+    networks: [app]
+  e2e:
+    image: splitbind-e2e:local
+    profiles: [full]
+    command: ["npm", "run", "e2e", "--workspace", "@splitbind/web"]
+    environment:
+      BASE_URL: "http://caddy:8080"
+    networks: [app]
+    depends_on: [caddy, outbox, worker]
+
+networks:
+  app: {}
