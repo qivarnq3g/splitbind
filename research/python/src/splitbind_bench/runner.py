@@ -27,6 +27,8 @@ from numpy.typing import NDArray
 from splitbind_attack.attacks import AttackCase, AttackedArtifact, apply_attack
 from splitbind_attack.ground_truth import (
     NormalizedRect,
+    Transform,
+    compose_transforms,
     merge_regions,
     transform_regions,
 )
@@ -64,6 +66,12 @@ class CorpusPage:
     source: CorpusSource
     page_index: int
     image: NDArray[np.uint8]
+
+
+@dataclass(frozen=True, slots=True)
+class FittedCanvas:
+    image: NDArray[np.uint8]
+    source_to_canvas: Transform
 
 
 @dataclass(frozen=True, slots=True)
@@ -197,7 +205,8 @@ def run_matrix(
         global_ordinal = 0
         stop = False
         for raw_page in _iter_sources(plan.sources):
-            page = _fit_canvas(raw_page.image, target_width, target_height)
+            fitted = _fit_canvas(raw_page.image, target_width, target_height)
+            page = fitted.image
             for candidate in plan.candidates:
                 scheduled: list[tuple[int, AttackCase, str]] = []
                 for attack in plan.attacks:
@@ -260,6 +269,7 @@ def run_matrix(
                         row_id=row_id,
                         original=page,
                         watermarked=watermarked,
+                        source_to_canvas=fitted.source_to_canvas,
                         runtime_profile=runtime_profile,
                         decode_profile=decode_profile,
                         expected_id=expected_id,
@@ -301,6 +311,7 @@ def _execute_row(
     row_id: str,
     original: NDArray[np.uint8],
     watermarked: NDArray[np.uint8],
+    source_to_canvas: Transform,
     runtime_profile: Mapping[str, object],
     decode_profile: Mapping[str, object],
     expected_id: UUID | None,
@@ -351,10 +362,15 @@ def _execute_row(
     if error_text is not None:
         limitations.append(error_text)
 
-    ground_truth = source.ground_truth
+    ground_truth_transform = source_to_canvas
+    if artifact is not None:
+        ground_truth_transform = compose_transforms(
+            artifact.source_to_output, source_to_canvas
+        )
+    ground_truth = transform_regions(source.ground_truth, ground_truth_transform)
     if artifact is not None:
         ground_truth = merge_regions(
-            transform_regions(source.ground_truth, artifact.source_to_output),
+            ground_truth,
             artifact.ground_truth,
         )
 
@@ -612,7 +628,7 @@ def _remaining_embedded_tiles(
     )
 
 
-def _fit_canvas(image: NDArray[np.uint8], width: int, height: int) -> NDArray[np.uint8]:
+def _fit_canvas(image: NDArray[np.uint8], width: int, height: int) -> FittedCanvas:
     source_height, source_width = image.shape[:2]
     scale = min(width / source_width, height / source_height)
     target_width = max(1, round(source_width * scale))
@@ -623,7 +639,20 @@ def _fit_canvas(image: NDArray[np.uint8], width: int, height: int) -> NDArray[np
     x0 = (width - target_width) // 2
     y0 = (height - target_height) // 2
     canvas[y0 : y0 + target_height, x0 : x0 + target_width] = resized
-    return canvas
+    return FittedCanvas(
+        image=canvas,
+        source_to_canvas=(
+            target_width / width,
+            0.0,
+            x0 / width,
+            0.0,
+            target_height / height,
+            y0 / height,
+            0.0,
+            0.0,
+            1.0,
+        ),
+    )
 
 
 def _benchmark_dimensions(candidates: Sequence[Candidate]) -> tuple[int, int]:

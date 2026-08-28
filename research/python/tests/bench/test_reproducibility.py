@@ -323,19 +323,44 @@ def test_result_rows_carry_required_provenance_metrics_and_explicit_limitations(
     assert row["localization_iou"] is None
 
 
-def test_rows_preserve_merge_and_transform_corpus_ground_truth(
+def test_rows_compose_source_fit_and_attack_ground_truth_transforms(
     bounded_contracts, tmp_path
 ):
     corpus, profiles, matrix = bounded_contracts
+    source = np.empty((480, 640, 3), dtype=np.uint8)
+    y, x = np.indices(source.shape[:2], dtype=np.uint16)
+    source[..., 0] = (x + 3 * y) % 256
+    source[..., 1] = (5 * x + y) % 256
+    source[..., 2] = (2 * x + 7 * y) % 256
     manifest = json.loads(corpus.read_text(encoding="utf-8"))
+    image_path = corpus.parent / manifest["entries"][0]["relative_path"]
+    assert cv2.imwrite(str(image_path), source)
+    manifest["entries"][0]["sha256"] = hashlib.sha256(
+        image_path.read_bytes()
+    ).hexdigest()
     manifest["entries"][0]["kind"] = "tamper_ground_truth"
     manifest["entries"][0]["ground_truth_regions"] = [
         {"x": 0.2, "y": 0.25, "width": 0.3, "height": 0.25}
     ]
     _write_json(corpus, manifest)
+    profile_document = json.loads(profiles.read_text(encoding="utf-8"))
+    profile_document["sweep"] = {
+        "qim_delta": [12.0],
+        "tile_size_px": [384],
+        "tiles_per_page": [24],
+        "payload_repetitions": [3],
+    }
+    _write_json(profiles, profile_document)
     matrix_document = json.loads(matrix.read_text(encoding="utf-8"))
     matrix_document["jpeg_quality"] = [95]
     matrix_document["crop_fraction"] = [0.25]
+    matrix_document["combined"] = [
+        {
+            "operations": ["jpeg", "crop"],
+            "jpeg_quality": 95,
+            "crop_fraction": 0.25,
+        }
+    ]
     matrix_document["tamper"] = [
         {
             "kind": "cover_region",
@@ -348,21 +373,33 @@ def test_rows_preserve_merge_and_transform_corpus_ground_truth(
     run_matrix(corpus, profiles, matrix, seed=20260827, output_dir=output)
     rows = {row["attack_kind"]: row for row in _read_jsonl(output / "results.jsonl")}
 
-    assert rows["jpeg"]["tamper_ground_truth"] == [
-        {"x": 0.2, "y": 0.25, "width": 0.3, "height": 0.25}
-    ]
-    assert rows["tamper"]["tamper_ground_truth"] == [
-        {"x": 0.2, "y": 0.25, "width": 0.3, "height": 0.25},
-        {"x": 0.6, "y": 0.6, "width": 0.1, "height": 0.1},
-    ]
-    crop_region = rows["crop"]["tamper_ground_truth"][0]
-    assert crop_region == pytest.approx(
-        {
-            "x": 0.15422773393461106,
-            "y": 0.21203007518796993,
-            "width": 0.3463359639233371,
-            "height": 0.28872180451127821,
-        }
+    fitted_region = {
+        "x": 0.23333333333333334,
+        "y": 0.25,
+        "width": 0.26666666666666666,
+        "height": 0.25,
+    }
+    assert len(rows["jpeg"]["tamper_ground_truth"]) == 1
+    assert rows["jpeg"]["tamper_ground_truth"][0] == pytest.approx(fitted_region)
+    assert len(rows["tamper"]["tamper_ground_truth"]) == 2
+    assert rows["tamper"]["tamper_ground_truth"][0] == pytest.approx(
+        fitted_region
+    )
+    assert rows["tamper"]["tamper_ground_truth"][1] == {
+        "x": 0.6,
+        "y": 0.6,
+        "width": 0.1,
+        "height": 0.1,
+    }
+    cropped_region = {
+        "x": 0.19228070175438597,
+        "y": 0.2112781954887218,
+        "width": 0.30796992481203006,
+        "height": 0.2887218045112782,
+    }
+    assert rows["crop"]["tamper_ground_truth"][0] == pytest.approx(cropped_region)
+    assert rows["combined"]["tamper_ground_truth"][0] == pytest.approx(
+        cropped_region
     )
 
 
