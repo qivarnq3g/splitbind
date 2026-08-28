@@ -1,5 +1,6 @@
 import itertools
 import math
+from copy import deepcopy
 from pathlib import Path
 from uuid import UUID
 
@@ -11,11 +12,13 @@ from splitbind_ref.contracts import fingerprint_candidates
 from splitbind_ref.fingerprint import (
     DecodeVote,
     FingerprintContext,
+    candidate_identifier,
     decode_fingerprint,
     embed_fingerprint,
     soft_vote,
 )
 from splitbind_ref.payload import encode_payload
+from splitbind_ref.synchronization import SyncTemplate
 
 
 ISSUANCE_ID = UUID("12345678-1234-5678-1234-567812345678")
@@ -24,6 +27,12 @@ KEY = bytes.fromhex("00112233445566778899aabbccddeeff" * 2)
 NONCE = bytes.fromhex("fedcba98765432100123456789abcdef")
 PAGE_INDEX = 2
 ROOT = Path(__file__).resolve().parents[4]
+CANDIDATE_A = bytes.fromhex(
+    "5342465001000000014028000000000000000001000000000c00000005"
+)
+CANDIDATE_B = bytes.fromhex(
+    "5342465001000000014024000000000000000001000000000c00000005"
+)
 
 
 def _candidate_profiles():
@@ -127,6 +136,112 @@ def test_wrong_key_nonce_and_page_binding_never_attribute(
     assert wrong_page.issuance_id is None
 
 
+def test_embedding_rejects_an_incompatible_fixed_algorithm_contract(
+    sample_page, embed_context, candidate_profile, monkeypatch
+):
+    incompatible = deepcopy(fingerprint_candidates())
+    incompatible["fixed"]["detail_band"] = "LH"
+    monkeypatch.setattr(
+        fingerprint_module, "fingerprint_candidates", lambda: incompatible
+    )
+
+    with pytest.raises(ValueError, match="detail_band"):
+        embed_fingerprint(sample_page, embed_context, candidate_profile)
+
+
+def test_profile_rejects_mutated_fixed_midband_pairs(candidate_profile, monkeypatch):
+    incompatible = deepcopy(fingerprint_candidates())
+    incompatible["fixed"]["midband_pairs"][0][0] = [1, 3]
+    monkeypatch.setattr(
+        fingerprint_module, "fingerprint_candidates", lambda: incompatible
+    )
+
+    with pytest.raises(ValueError, match="midband_pairs"):
+        candidate_identifier(candidate_profile)
+
+
+def test_profile_boundary_rejects_a_tampered_sync_template(candidate_profile):
+    template = SyncTemplate(
+        (512, 512),
+        np.zeros((4, 2), dtype=np.float32),
+        np.zeros((4, 32), dtype=np.uint8),
+    )
+    object.__setattr__(template, "keypoints", np.zeros((4, 2), dtype=np.float64))
+
+    with pytest.raises(ValueError, match="keypoints"):
+        candidate_identifier({**candidate_profile, "sync_template": template})
+
+
+def test_candidate_identifier_has_the_frozen_cross_language_binary_layout(
+    candidate_profile,
+):
+    # ASCII "SBFP" + identifier format v1, then schema u32 BE, QIM delta
+    # IEEE-754 f64 BE, tile size/count/repetitions u32 BE.
+    assert candidate_identifier(candidate_profile).hex() == (
+        "5342465001"
+        "00000001"
+        "4028000000000000"
+        "00000100"
+        "0000000c"
+        "00000005"
+    )
+
+
+def test_candidate_mask_binding_rejects_delta_and_repetition_mismatches(
+    sample_page, embed_context, candidate_profile
+):
+    embedded = embed_fingerprint(sample_page, embed_context, candidate_profile)
+
+    wrong_delta = decode_fingerprint(
+        embedded.image, KEY, ({**candidate_profile, "qim_delta": 10.0},)
+    )
+    wrong_repetitions = decode_fingerprint(
+        embedded.image, KEY, ({**candidate_profile, "payload_repetitions": 3},)
+    )
+
+    assert wrong_delta.issuance_id is None
+    assert wrong_repetitions.issuance_id is None
+
+
+def test_decode_rejects_duplicate_candidate_identifiers(candidate_profile, sample_page):
+    with pytest.raises(ValueError, match="duplicate candidate identifier"):
+        decode_fingerprint(sample_page, KEY, (candidate_profile, candidate_profile.copy()))
+
+
+def test_decode_accepts_exact_grid_limit_and_rejects_more_than_48_candidates():
+    too_short_for_any_tile = np.zeros((255, 1024, 3), dtype=np.uint8)
+
+    within_limit = decode_fingerprint(too_short_for_any_tile, KEY, CANDIDATE_PROFILES)
+    assert within_limit.reason == "not_detected"
+
+    with pytest.raises(ValueError, match="at most 48"):
+        decode_fingerprint(
+            too_short_for_any_tile,
+            KEY,
+            (*CANDIDATE_PROFILES, CANDIDATE_PROFILES[0]),
+        )
+
+
+def test_mixed_candidate_grid_cannot_reuse_votes_across_profiles(
+    sample_page, embed_context, candidate_profile
+):
+    embedded = embed_fingerprint(sample_page, embed_context, candidate_profile)
+    mixed = (
+        candidate_profile,
+        {**candidate_profile, "payload_repetitions": 3},
+        *(
+            {**candidate_profile, "qim_delta": delta}
+            for delta in (6.0, 8.0, 10.0)
+        ),
+    )
+
+    decoded = decode_fingerprint(embedded.image, KEY, mixed)
+
+    assert decoded.issuance_id == ISSUANCE_ID
+    assert decoded.reason == "decoded"
+    assert decoded.valid_votes == 5
+
+
 def test_roundtrip_consumes_the_versioned_a1_clean_image_corpus(
     embed_context, candidate_profile
 ):
@@ -206,7 +321,8 @@ def test_decode_uses_orb_ransac_alignment_before_extracting_tiles(
 ):
     import cv2
 
-    embedded = embed_fingerprint(sample_page, embed_context, candidate_profile)
+    alignment_profile = {**candidate_profile, "payload_repetitions": 3}
+    embedded = embed_fingerprint(sample_page, embed_context, alignment_profile)
     height, width = embedded.image.shape[:2]
     transform = cv2.getRotationMatrix2D(
         ((width - 1) / 2.0, (height - 1) / 2.0), 0.35, 1.0
@@ -225,7 +341,7 @@ def test_decode_uses_orb_ransac_alignment_before_extracting_tiles(
     decoded = decode_fingerprint(
         attacked,
         KEY,
-        ({**candidate_profile, "sync_template": embedded.sync_template},),
+        ({**alignment_profile, "sync_template": embedded.sync_template},),
     )
 
     assert decoded.issuance_id == ISSUANCE_ID
@@ -261,23 +377,85 @@ def test_embedding_clips_to_and_preserves_a_uint16_page_bit_depth(
     assert decoded.issuance_id == ISSUANCE_ID
 
 
-def test_soft_vote_requires_weighted_consensus_and_ignores_invalid_votes():
+def test_soft_vote_does_not_attribute_from_one_valid_repetition():
     votes = (
-        DecodeVote(ISSUANCE_ID, 0.9, 0.01, "decoded"),
-        DecodeVote(ISSUANCE_ID, 0.7, 0.03, "decoded"),
-        DecodeVote(OTHER_ISSUANCE_ID, 0.8, 0.02, "decoded"),
-        DecodeVote(None, 1.0, None, "invalid_crc"),
+        DecodeVote(CANDIDATE_A, 0, ISSUANCE_ID, 0.9, 0.01, "decoded"),
+        *(
+            DecodeVote(CANDIDATE_B, ordinal, None, 0.9, None, "invalid_crc")
+            for ordinal in range(12)
+        ),
     )
 
-    decoded = soft_vote(votes, threshold=0.65)
-    partial = soft_vote(votes, threshold=0.80)
+    decision = soft_vote(votes, threshold=0.60)
 
-    assert decoded.issuance_id == ISSUANCE_ID
-    assert decoded.reason == "decoded"
-    assert decoded.valid_votes == 2
-    assert decoded.confidence == pytest.approx(2.0 / 3.0)
-    assert partial.issuance_id is None
-    assert partial.reason == "partial"
+    assert decision.issuance_id is None
+    assert decision.reason == "partial"
+    assert decision.valid_votes == 1
+
+
+def test_soft_vote_deduplicates_repeated_provenance_before_counting_support():
+    repeated = DecodeVote(CANDIDATE_A, 0, ISSUANCE_ID, 0.9, 0.01, "decoded")
+
+    decision = soft_vote((repeated, repeated, repeated), threshold=0.60)
+
+    assert decision.issuance_id is None
+    assert decision.reason == "partial"
+    assert decision.valid_votes == 1
+
+
+def test_soft_vote_accepts_two_of_three_distinct_valid_repetitions():
+    votes = (
+        DecodeVote(CANDIDATE_A, 0, ISSUANCE_ID, 0.9, 0.01, "decoded"),
+        DecodeVote(CANDIDATE_A, 1, ISSUANCE_ID, 0.7, 0.03, "decoded"),
+        DecodeVote(CANDIDATE_A, 2, None, 0.8, None, "invalid_crc"),
+    )
+
+    decision = soft_vote(votes, threshold=0.60)
+
+    assert decision.issuance_id == ISSUANCE_ID
+    assert decision.reason == "decoded"
+    assert decision.valid_votes == 2
+    assert decision.confidence == pytest.approx(2.0 / 3.0)
+    assert decision.bit_error_rate == pytest.approx(0.02)
+
+
+def test_unrelated_invalid_candidate_does_not_suppress_supported_candidate():
+    votes = (
+        DecodeVote(CANDIDATE_A, 0, ISSUANCE_ID, 0.9, 0.01, "decoded"),
+        DecodeVote(CANDIDATE_A, 1, ISSUANCE_ID, 0.8, 0.02, "decoded"),
+        DecodeVote(CANDIDATE_A, 2, None, 0.7, None, "invalid_crc"),
+        *(
+            DecodeVote(CANDIDATE_B, ordinal, None, 1.0, None, "invalid_crc")
+            for ordinal in range(12)
+        ),
+    )
+
+    decision = soft_vote(votes, threshold=0.60)
+
+    assert decision.issuance_id == ISSUANCE_ID
+    assert decision.reason == "decoded"
+    assert decision.valid_votes == 2
+
+
+def test_soft_vote_fails_closed_when_eligible_candidates_conflict():
+    votes = (
+        DecodeVote(CANDIDATE_A, 0, ISSUANCE_ID, 0.9, 0.01, "decoded"),
+        DecodeVote(CANDIDATE_A, 1, ISSUANCE_ID, 0.8, 0.02, "decoded"),
+        DecodeVote(CANDIDATE_B, 0, OTHER_ISSUANCE_ID, 0.9, 0.01, "decoded"),
+        DecodeVote(CANDIDATE_B, 1, OTHER_ISSUANCE_ID, 0.8, 0.02, "decoded"),
+    )
+
+    decision = soft_vote(votes, threshold=0.60)
+
+    assert decision.issuance_id is None
+    assert decision.reason == "partial"
+
+
+def test_soft_vote_validates_confidence_for_invalid_as_well_as_valid_evidence():
+    invalid = DecodeVote(CANDIDATE_A, 0, None, math.nan, None, "invalid_crc")
+
+    with pytest.raises(ValueError, match="confidence"):
+        soft_vote((invalid,), threshold=0.60)
 
 
 @pytest.mark.parametrize(
