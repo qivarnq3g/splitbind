@@ -60,7 +60,7 @@ def bounded_contracts(tmp_path):
         profiles,
         {
             "schema_version": 1,
-            "fixed": {},
+            "fixed": json.loads(PROFILES.read_text(encoding="utf-8"))["fixed"],
             "sweep": {
                 "qim_delta": [12.0],
                 "tile_size_px": [256],
@@ -141,6 +141,63 @@ def test_smoke_plan_uses_feature_rich_positive_and_negative_control():
     assert plan.plan_sha256 != full.plan_sha256
 
 
+@pytest.mark.parametrize("fixed_variant", ["empty", "mutated"])
+def test_selected_profile_fixed_contract_must_exactly_match_a3(
+    bounded_contracts, fixed_variant
+):
+    corpus, profiles, matrix = bounded_contracts
+    document = json.loads(PROFILES.read_text(encoding="utf-8"))
+    if fixed_variant == "empty":
+        document["fixed"] = {}
+    else:
+        document["fixed"]["luminance"]["coefficients"][0] = 0.115
+    document["sweep"] = {
+        "qim_delta": [12.0],
+        "tile_size_px": [256],
+        "tiles_per_page": [12],
+        "payload_repetitions": [3],
+    }
+    _write_json(profiles, document)
+
+    with pytest.raises(ValueError, match="fixed contract"):
+        build_execution_plan(corpus, profiles, matrix, seed=20260827)
+
+
+def test_candidate_provenance_hash_binds_executed_fixed_and_sweep_values(
+    bounded_contracts,
+):
+    corpus, profiles, matrix = bounded_contracts
+    document = json.loads(PROFILES.read_text(encoding="utf-8"))
+    document["sweep"] = {
+        "qim_delta": [12.0],
+        "tile_size_px": [256],
+        "tiles_per_page": [12],
+        "payload_repetitions": [3],
+    }
+    _write_json(profiles, document)
+
+    candidate = build_execution_plan(
+        corpus, profiles, matrix, seed=20260827
+    ).candidates[0]
+    expected_document = {
+        "schema_version": 1,
+        "fixed": document["fixed"],
+        "candidate": {
+            "qim_delta": 12.0,
+            "tile_size_px": 256,
+            "tiles_per_page": 12,
+            "payload_repetitions": 3,
+        },
+    }
+    expected = hashlib.sha256(
+        json.dumps(
+            expected_document, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+        ).encode("utf-8")
+    ).hexdigest()
+
+    assert candidate.profile_sha256 == expected
+
+
 def test_checkpoint_resume_is_idempotent_and_reports_partial_state(
     bounded_contracts, tmp_path
 ):
@@ -185,6 +242,14 @@ def test_completed_plan_with_execution_errors_is_not_reported_as_success(
     assert summary.complete is True
     assert summary.status == "complete_with_errors"
     assert summary.failed_rows == 2
+    summary_document = json.loads(
+        (tmp_path / "errors" / "summary.json").read_text(encoding="utf-8")
+    )
+    assert summary_document["detection_metrics"]["eligible_positive_cases"] == 2
+    assert summary_document["detection_metrics"]["decode_denominator_positive_cases"] == 2
+    assert summary_document["detection_metrics"]["missed_detection"] == 2
+    assert summary_document["detection_metrics"]["execution_errors"] == 2
+    assert summary_document["detection_metrics"]["decode_rate"] == 0.0
 
 
 def test_separate_runs_have_identical_normalized_rows_and_stable_csv_order(
@@ -256,6 +321,49 @@ def test_result_rows_carry_required_provenance_metrics_and_explicit_limitations(
         for limitation in row["limitations"]
     )
     assert row["localization_iou"] is None
+
+
+def test_rows_preserve_merge_and_transform_corpus_ground_truth(
+    bounded_contracts, tmp_path
+):
+    corpus, profiles, matrix = bounded_contracts
+    manifest = json.loads(corpus.read_text(encoding="utf-8"))
+    manifest["entries"][0]["kind"] = "tamper_ground_truth"
+    manifest["entries"][0]["ground_truth_regions"] = [
+        {"x": 0.2, "y": 0.25, "width": 0.3, "height": 0.25}
+    ]
+    _write_json(corpus, manifest)
+    matrix_document = json.loads(matrix.read_text(encoding="utf-8"))
+    matrix_document["jpeg_quality"] = [95]
+    matrix_document["crop_fraction"] = [0.25]
+    matrix_document["tamper"] = [
+        {
+            "kind": "cover_region",
+            "region": {"x": 0.6, "y": 0.6, "width": 0.1, "height": 0.1},
+        }
+    ]
+    _write_json(matrix, matrix_document)
+    output = tmp_path / "ground-truth"
+
+    run_matrix(corpus, profiles, matrix, seed=20260827, output_dir=output)
+    rows = {row["attack_kind"]: row for row in _read_jsonl(output / "results.jsonl")}
+
+    assert rows["jpeg"]["tamper_ground_truth"] == [
+        {"x": 0.2, "y": 0.25, "width": 0.3, "height": 0.25}
+    ]
+    assert rows["tamper"]["tamper_ground_truth"] == [
+        {"x": 0.2, "y": 0.25, "width": 0.3, "height": 0.25},
+        {"x": 0.6, "y": 0.6, "width": 0.1, "height": 0.1},
+    ]
+    crop_region = rows["crop"]["tamper_ground_truth"][0]
+    assert crop_region == pytest.approx(
+        {
+            "x": 0.15422773393461106,
+            "y": 0.21203007518796993,
+            "width": 0.3463359639233371,
+            "height": 0.28872180451127821,
+        }
+    )
 
 
 def test_committed_pdf_is_renderable_and_page_count_is_not_silently_reduced():

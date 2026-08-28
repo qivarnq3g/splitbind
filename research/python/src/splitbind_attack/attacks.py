@@ -10,7 +10,14 @@ import cv2
 import numpy as np
 from numpy.typing import NDArray
 
-from .ground_truth import NormalizedRect
+from .ground_truth import (
+    IDENTITY_TRANSFORM,
+    NormalizedRect,
+    Transform,
+    compose_transforms,
+    merge_regions,
+    transform_regions,
+)
 
 
 Image = NDArray[np.uint8]
@@ -31,6 +38,7 @@ class AttackedArtifact:
     operations: tuple[str, ...] = ()
     retained_region: NormalizedRect | None = None
     removed_area_fraction: float = 0.0
+    source_to_output: Transform = IDENTITY_TRANSFORM
 
 
 def apply_attack(
@@ -49,12 +57,19 @@ def apply_attack(
         current = AttackedArtifact(image=source.copy())
         ordered: list[str] = []
         ground_truth: tuple[NormalizedRect, ...] = ()
+        source_to_output = IDENTITY_TRANSFORM
         retained_region: NormalizedRect | None = None
         removed_fraction = 0.0
         for operation in case.operations:
             current = apply_attack(current.image, operation, rng)
             ordered.extend(current.operations)
-            ground_truth += current.ground_truth
+            ground_truth = merge_regions(
+                transform_regions(ground_truth, current.source_to_output),
+                current.ground_truth,
+            )
+            source_to_output = compose_transforms(
+                current.source_to_output, source_to_output
+            )
             if current.retained_region is not None:
                 retained_region = current.retained_region
                 removed_fraction = 1.0 - (1.0 - removed_fraction) * (
@@ -66,6 +81,7 @@ def apply_attack(
             operations=tuple(ordered),
             retained_region=retained_region,
             removed_area_fraction=removed_fraction,
+            source_to_output=source_to_output,
         )
 
     handlers = {
@@ -90,6 +106,7 @@ def apply_attack(
         operations=(case.kind,),
         retained_region=artifact.retained_region,
         removed_area_fraction=artifact.removed_area_fraction,
+        source_to_output=artifact.source_to_output,
     )
 
 
@@ -127,6 +144,17 @@ def _crop_fraction(
         image=image[y0 : y0 + retained_height, x0 : x0 + retained_width].copy(),
         retained_region=retained,
         removed_area_fraction=actual_fraction,
+        source_to_output=(
+            1.0 / retained.width,
+            0.0,
+            -retained.x / retained.width,
+            0.0,
+            1.0 / retained.height,
+            -retained.y / retained.height,
+            0.0,
+            0.0,
+            1.0,
+        ),
     )
 
 
@@ -153,7 +181,12 @@ def _rotate_degrees(
         flags=cv2.INTER_CUBIC,
         borderMode=cv2.BORDER_REFLECT_101,
     )
-    return AttackedArtifact(rotated)
+    return AttackedArtifact(
+        rotated,
+        source_to_output=_pixel_transform_to_normalized(
+            np.vstack((transform, (0.0, 0.0, 1.0))), width, height, width, height
+        ),
+    )
 
 
 def _adjust_brightness_contrast(
@@ -195,9 +228,39 @@ def _simulate_screenshot(
     screen[y0 : y0 + content_height, x0 : x0 + content_width] = content
     kind = parameters.get("kind")
     if kind == "raster":
-        return AttackedArtifact(screen)
+        return AttackedArtifact(
+            screen,
+            source_to_output=(
+                content_width / width,
+                0.0,
+                x0 / width,
+                0.0,
+                content_height / height,
+                y0 / height,
+                0.0,
+                0.0,
+                1.0,
+            ),
+        )
     if kind == "perspective":
-        return _perspective_warp(screen, parameters, rng)
+        perspective = _perspective_warp(screen, parameters, rng)
+        letterbox = (
+            content_width / width,
+            0.0,
+            x0 / width,
+            0.0,
+            content_height / height,
+            y0 / height,
+            0.0,
+            0.0,
+            1.0,
+        )
+        return AttackedArtifact(
+            perspective.image,
+            source_to_output=compose_transforms(
+                perspective.source_to_output, letterbox
+            ),
+        )
     raise ValueError("screenshot kind must be raster or perspective")
 
 
@@ -223,7 +286,12 @@ def _perspective_warp(
         borderMode=cv2.BORDER_CONSTANT,
         borderValue=(24, 24, 24),
     )
-    return AttackedArtifact(warped)
+    return AttackedArtifact(
+        warped,
+        source_to_output=_pixel_transform_to_normalized(
+            transform, width, height, width, height
+        ),
+    )
 
 
 def _apply_tamper_with_ground_truth(
@@ -280,6 +348,23 @@ def _validate_image(image: Image) -> Image:
     if image.shape[0] == 0 or image.shape[1] == 0:
         raise ValueError("image must have non-empty uint8 BGR shape")
     return np.ascontiguousarray(image)
+
+
+def _pixel_transform_to_normalized(
+    pixel_transform: NDArray[np.floating],
+    source_width: int,
+    source_height: int,
+    output_width: int,
+    output_height: int,
+) -> Transform:
+    source_scale = np.diag((source_width, source_height, 1.0))
+    output_scale_inverse = np.diag((1.0 / output_width, 1.0 / output_height, 1.0))
+    normalized = (
+        output_scale_inverse
+        @ np.asarray(pixel_transform, dtype=np.float64)
+        @ source_scale
+    )
+    return tuple(float(value) for value in normalized.ravel())  # type: ignore[return-value]
 
 
 def _finite_float(parameters: Mapping[str, object], name: str) -> float:

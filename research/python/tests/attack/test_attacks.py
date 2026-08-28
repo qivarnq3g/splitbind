@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from splitbind_attack.attacks import AttackCase, apply_attack
-from splitbind_attack.ground_truth import NormalizedRect
+from splitbind_attack.ground_truth import NormalizedRect, transform_regions
 
 
 @pytest.fixture
@@ -164,3 +164,46 @@ def test_unknown_attack_is_rejected_instead_of_becoming_a_noop(sample_image):
             AttackCase("unknown", "not-real", {}),
             np.random.default_rng(1),
         )
+
+
+def test_screenshot_maps_source_ground_truth_into_letterboxed_output(sample_image):
+    artifact = apply_attack(
+        sample_image,
+        AttackCase(
+            "screen",
+            "screenshot",
+            {"kind": "raster", "width_px": 320, "height_px": 180},
+        ),
+        np.random.default_rng(1),
+    )
+
+    transformed = transform_regions(
+        (NormalizedRect(0.2, 0.25, 0.3, 0.25),), artifact.source_to_output
+    )
+
+    assert transformed[0].as_dict() == pytest.approx(
+        {"x": 0.275, "y": 0.25, "width": 0.225, "height": 0.25}
+    )
+
+
+def test_rotation_maps_source_ground_truth_to_axis_aligned_output_envelope(
+    sample_image,
+):
+    artifact = apply_attack(
+        sample_image,
+        AttackCase("rotate-90", "rotation", {"degrees": 90}),
+        np.random.default_rng(1),
+    )
+
+    transformed = transform_regions(
+        (NormalizedRect(0.2, 0.25, 0.3, 0.25),), artifact.source_to_output
+    )
+
+    assert transformed[0].as_dict() == pytest.approx(
+        {
+            "x": 0.3125,
+            "y": 59.0 / 120.0,
+            "width": 0.1875,
+            "height": 0.4,
+        }
+    )

@@ -25,7 +25,13 @@ import pypdfium2 as pdfium
 from numpy.typing import NDArray
 
 from splitbind_attack.attacks import AttackCase, AttackedArtifact, apply_attack
+from splitbind_attack.ground_truth import (
+    NormalizedRect,
+    merge_regions,
+    transform_regions,
+)
 from splitbind_bench.metrics import Result, compute_detection_metrics, compute_quality_metrics
+from splitbind_ref.contracts import fingerprint_candidates
 from splitbind_ref.fingerprint import (
     DecodeDecision,
     FingerprintContext,
@@ -50,6 +56,7 @@ class CorpusSource:
     resolved_path: Path
     sha256: str
     pages: int
+    ground_truth: tuple[NormalizedRect, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -342,9 +349,14 @@ def _execute_row(
             else "fewer_than_two_complete_embedded_tiles_remain"
         )
     if error_text is not None:
-        eligible = False
-        eligibility_reason = "execution_error"
         limitations.append(error_text)
+
+    ground_truth = source.ground_truth
+    if artifact is not None:
+        ground_truth = merge_regions(
+            transform_regions(source.ground_truth, artifact.source_to_output),
+            artifact.ground_truth,
+        )
 
     decoded_id = str(decision.issuance_id) if decision.issuance_id is not None else None
     expected_text = str(expected_id) if expected_id is not None else None
@@ -387,9 +399,8 @@ def _execute_row(
         if expected_id is not None
         else "negative_control_original_vs_unmodified",
         "localization_iou": None,
-        "tamper_ground_truth": [rect.as_dict() for rect in artifact.ground_truth]
-        if artifact is not None
-        else [],
+        "tamper_ground_truth": [rect.as_dict() for rect in ground_truth],
+        "ground_truth_coordinate_system": "normalized_attack_output_axis_aligned_envelope",
         "elapsed_ms": elapsed_ms,
         "timing_scope": "attack_and_decode",
         "peak_rss_bytes": peak_rss,
@@ -455,6 +466,12 @@ def _attack_cases(document: Mapping[str, object]) -> tuple[AttackCase, ...]:
 def _candidate_grid(document: Mapping[str, object]) -> tuple[Candidate, ...]:
     if document.get("schema_version") != 1:
         raise ValueError("candidate schema_version must be 1")
+    fixed = document.get("fixed")
+    canonical_fixed = fingerprint_candidates().get("fixed")
+    if not isinstance(fixed, Mapping) or fixed != canonical_fixed:
+        raise ValueError(
+            "selected candidate fixed contract must exactly match the canonical A3 fixed contract"
+        )
     sweep = document.get("sweep")
     if not isinstance(sweep, Mapping):
         raise ValueError("candidate sweep must be a mapping")
@@ -463,7 +480,11 @@ def _candidate_grid(document: Mapping[str, object]) -> tuple[Candidate, ...]:
     candidates = []
     for combination in itertools.product(*values):
         profile = dict(zip(keys, combination, strict=True))
-        digest = hashlib.sha256(_canonical_json({"schema_version": 1, **profile}).encode()).hexdigest()
+        digest = hashlib.sha256(
+            _canonical_json(
+                {"schema_version": 1, "fixed": fixed, "candidate": profile}
+            ).encode()
+        ).hexdigest()
         candidates.append(Candidate(profile, digest))
     return tuple(candidates)
 
@@ -484,6 +505,7 @@ def _corpus_sources(
         relative = entry.get("relative_path")
         sha256 = entry.get("sha256")
         pages = entry.get("pages")
+        raw_ground_truth = entry.get("ground_truth_regions", [])
         if not isinstance(fixture_id, str) or not fixture_id or fixture_id in seen:
             raise ValueError("corpus fixture_id must be unique and non-empty")
         if kind not in {"clean_pdf", "clean_image", "negative_external", "tamper_ground_truth"}:
@@ -494,10 +516,33 @@ def _corpus_sources(
             raise ValueError("corpus sha256 must be a hexadecimal SHA-256")
         if isinstance(pages, bool) or not isinstance(pages, int) or pages < 1:
             raise ValueError("corpus pages must be a positive integer")
+        if not isinstance(raw_ground_truth, list):
+            raise ValueError("corpus ground_truth_regions must be a list")
+        ground_truth: list[NormalizedRect] = []
+        for raw_region in raw_ground_truth:
+            if not isinstance(raw_region, Mapping):
+                raise ValueError("corpus ground-truth regions must be mappings")
+            try:
+                ground_truth.append(
+                    NormalizedRect(
+                        raw_region["x"],
+                        raw_region["y"],
+                        raw_region["width"],
+                        raw_region["height"],
+                    )
+                )
+            except (KeyError, TypeError, ValueError) as error:
+                raise ValueError("corpus ground-truth region is invalid") from error
+        if kind == "tamper_ground_truth" and not ground_truth:
+            raise ValueError(
+                "tamper_ground_truth corpus entries require ground-truth regions"
+            )
         resolved = (corpus_path.parent / relative).resolve()
         if not resolved.is_relative_to(corpus_path.parent.resolve()):
             raise ValueError("corpus relative_path escapes the manifest directory")
-        sources.append(CorpusSource(fixture_id, kind, resolved, sha256, pages))
+        sources.append(
+            CorpusSource(fixture_id, kind, resolved, sha256, pages, tuple(ground_truth))
+        )
         seen.add(fixture_id)
     return tuple(sources)
 
@@ -719,7 +764,7 @@ def _export_artifacts(
         Result(
             expected=row["expected_id"],
             decoded=row["decoded_id"],
-            reason=row["reason"] if row["reason"] != "execution_error" else "not_detected",
+            reason=row["reason"],
             eligible=row["eligible"],
         )
         for row in payloads

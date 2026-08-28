@@ -13,7 +13,9 @@ from numpy.typing import NDArray
 from splitbind_attack.ground_truth import NormalizedRect
 
 
-DecisionReason = Literal["decoded", "partial", "not_detected", "invalid_crc"]
+DecisionReason = Literal[
+    "decoded", "partial", "not_detected", "invalid_crc", "execution_error"
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,8 +34,11 @@ class DetectionMetrics:
     not_detected: int
     partial: int
     invalid_crc: int
+    execution_errors: int
     eligible_positive_cases: int
+    decode_denominator_positive_cases: int
     eligible_evaluated_cases: int
+    scheduled_evaluated_cases: int
     decode_rate: float | None
     false_attribution_rate: float | None
 
@@ -48,25 +53,36 @@ class QualityMetrics:
 def compute_detection_metrics(rows: Iterable[Result]) -> DetectionMetrics:
     """Count outcomes without treating a non-decision as a wrong attribution.
 
-    Decode rate is true attributions divided by every eligible positive case,
-    including partial, invalid-CRC, missed, and wrong-ID outcomes.  False
-    attribution rate uses every eligible evaluated positive and negative case.
+    Decode rate is true attributions divided by every geometry-eligible positive
+    case plus every scheduled positive execution error.  False attribution is
+    counted over every scheduled row, regardless of crop decode eligibility.
     """
 
-    evaluated = tuple(row for row in rows if row.eligible)
-    if any(not isinstance(row, Result) for row in evaluated):
+    scheduled = tuple(rows)
+    if any(not isinstance(row, Result) for row in scheduled):
         raise TypeError("rows must contain Result values")
-    positive = tuple(row for row in evaluated if row.expected is not None)
+    evaluated = tuple(row for row in scheduled if row.eligible)
+    positive = tuple(
+        row
+        for row in scheduled
+        if row.expected is not None
+        and (row.eligible or row.reason == "execution_error")
+    )
     true_attribution = sum(row.decoded == row.expected for row in positive)
     missed_detection = sum(row.decoded is None for row in positive)
     false_attribution = sum(
-        row.decoded is not None and row.decoded != row.expected for row in evaluated
+        row.decoded is not None and row.decoded != row.expected for row in scheduled
     )
-    not_detected = sum(row.decoded is None and row.reason == "not_detected" for row in evaluated)
-    partial = sum(row.decoded is None and row.reason == "partial" for row in evaluated)
-    invalid_crc = sum(row.decoded is None and row.reason == "invalid_crc" for row in evaluated)
+    not_detected = sum(
+        row.decoded is None and row.reason == "not_detected" for row in scheduled
+    )
+    partial = sum(row.decoded is None and row.reason == "partial" for row in scheduled)
+    invalid_crc = sum(
+        row.decoded is None and row.reason == "invalid_crc" for row in scheduled
+    )
+    execution_errors = sum(row.reason == "execution_error" for row in scheduled)
     decode_rate = true_attribution / len(positive) if positive else None
-    false_rate = false_attribution / len(evaluated) if evaluated else None
+    false_rate = false_attribution / len(scheduled) if scheduled else None
     return DetectionMetrics(
         true_attribution=true_attribution,
         missed_detection=missed_detection,
@@ -74,8 +90,13 @@ def compute_detection_metrics(rows: Iterable[Result]) -> DetectionMetrics:
         not_detected=not_detected,
         partial=partial,
         invalid_crc=invalid_crc,
-        eligible_positive_cases=len(positive),
+        execution_errors=execution_errors,
+        eligible_positive_cases=sum(
+            row.expected is not None and row.eligible for row in scheduled
+        ),
+        decode_denominator_positive_cases=len(positive),
         eligible_evaluated_cases=len(evaluated),
+        scheduled_evaluated_cases=len(scheduled),
         decode_rate=decode_rate,
         false_attribution_rate=false_rate,
     )

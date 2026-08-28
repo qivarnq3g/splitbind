@@ -48,7 +48,38 @@ def test_decode_rate_denominator_includes_every_eligible_positive_case():
     assert metrics.eligible_positive_cases == 4
     assert metrics.decode_rate == pytest.approx(0.25)
     assert metrics.eligible_evaluated_cases == 5
-    assert metrics.false_attribution_rate == pytest.approx(0.2)
+    assert metrics.scheduled_evaluated_cases == 6
+    assert metrics.false_attribution_rate == pytest.approx(1.0 / 6.0)
+
+
+def test_positive_execution_error_is_a_missed_detection_in_the_denominator():
+    metrics = compute_detection_metrics(
+        [
+            Result(
+                expected="a",
+                decoded=None,
+                reason="execution_error",
+                eligible=False,
+            )
+        ]
+    )
+
+    assert metrics.eligible_positive_cases == 0
+    assert metrics.decode_denominator_positive_cases == 1
+    assert metrics.missed_detection == 1
+    assert metrics.execution_errors == 1
+    assert metrics.decode_rate == 0.0
+
+
+def test_wrong_non_null_id_is_false_attribution_even_when_crop_is_ineligible():
+    metrics = compute_detection_metrics(
+        [Result(expected="a", decoded="b", reason="decoded", eligible=False)]
+    )
+
+    assert metrics.eligible_positive_cases == 0
+    assert metrics.false_attribution == 1
+    assert metrics.scheduled_evaluated_cases == 1
+    assert metrics.false_attribution_rate == 1.0
 
 
 def test_identical_uint8_images_have_perfect_quality():
