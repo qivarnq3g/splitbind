@@ -10,6 +10,7 @@ numpy==2.4.6
 opencv-python-headless==4.13.0.92
 packaging==26.3
 pluggy==1.6.0
+pypdfium2==5.13.0
 Pygments==2.21.0
 pytest==9.1.1
 reedsolo==1.7.0
