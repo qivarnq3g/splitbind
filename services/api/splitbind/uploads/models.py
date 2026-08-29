@@ -5,7 +5,7 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q
 
-from splitbind.access.models import OrganizationOwnedModel
+from splitbind.access.models import ValidatedOrganizationOwnedModel
 from splitbind.validators import SHA256_PATTERN, validate_sha256
 
 
@@ -14,7 +14,7 @@ class UploadPurpose(models.TextChoices):
     VERIFICATION = "verification", "Verification"
 
 
-class UploadRequest(OrganizationOwnedModel):
+class UploadRequest(ValidatedOrganizationOwnedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     requested_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

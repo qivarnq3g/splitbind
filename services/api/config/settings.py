@@ -1,6 +1,6 @@
 import os
-from urllib.parse import unquote, urlparse
 
+from .database import parse_postgresql_url
 from .settings_common import *  # noqa: F403
 
 
@@ -13,20 +13,23 @@ def _required_environment(name: str) -> str:
 
 SECRET_KEY = _required_environment("DJANGO_SECRET_KEY")
 
-_database_url = urlparse(_required_environment("DATABASE_URL"))
-if _database_url.scheme not in {"postgres", "postgresql"}:
-    raise RuntimeError("DATABASE_URL must use the postgresql scheme")
-if not all([_database_url.hostname, _database_url.path.lstrip("/"), _database_url.username]):
-    raise RuntimeError("DATABASE_URL must include PostgreSQL host, database, and user")
+if os.environ.get("SPLITBIND_DATABASE_HOST") is not None:
+    raise RuntimeError("SPLITBIND_DATABASE_HOST is unsupported; use NEON_DATABASE_HOST only as a matching host hint")
+
+_database = parse_postgresql_url(
+    _required_environment("DATABASE_URL"),
+    os.environ.get("NEON_DATABASE_HOST"),
+)
 
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": _database_url.path.lstrip("/"),
-        "USER": unquote(_database_url.username),
-        "PASSWORD": unquote(_database_url.password or ""),
-        "HOST": os.environ.get("SPLITBIND_DATABASE_HOST", _database_url.hostname),
-        "PORT": str(_database_url.port or 5432),
+        "NAME": _database.name,
+        "USER": _database.user,
+        "PASSWORD": _database.password,
+        "HOST": _database.host,
+        "PORT": _database.port,
+        "OPTIONS": _database.options,
         "CONN_MAX_AGE": 60,
         "CONN_HEALTH_CHECKS": True,
     }

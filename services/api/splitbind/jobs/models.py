@@ -5,7 +5,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Q
 
-from splitbind.access.models import OrganizationOwnedModel
+from splitbind.access.models import ValidatedOrganizationOwnedModel
 
 
 class JobKind(models.TextChoices):
@@ -24,7 +24,7 @@ class JobStatus(models.TextChoices):
     CANCELLED = "cancelled", "Cancelled"
 
 
-class Job(OrganizationOwnedModel):
+class Job(ValidatedOrganizationOwnedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     kind = models.CharField(max_length=24, choices=JobKind.choices)
     status = models.CharField(
@@ -90,7 +90,7 @@ class Job(OrganizationOwnedModel):
         self.validate_organization_relations(self.issuance, self.verification)
 
 
-class JobResultReceipt(OrganizationOwnedModel):
+class JobResultReceipt(ValidatedOrganizationOwnedModel):
     message_id = models.UUIDField(primary_key=True, editable=False)
     job = models.ForeignKey(
         Job,

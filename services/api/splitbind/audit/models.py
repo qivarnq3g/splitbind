@@ -3,7 +3,7 @@ import uuid
 from django.conf import settings
 from django.db import models
 
-from splitbind.access.models import OrganizationOwnedModel
+from splitbind.access.models import ValidatedOrganizationOwnedModel
 
 
 class AuditOutcome(models.TextChoices):
@@ -12,7 +12,7 @@ class AuditOutcome(models.TextChoices):
     FAILED = "failed", "Failed"
 
 
-class AuditEvent(OrganizationOwnedModel):
+class AuditEvent(ValidatedOrganizationOwnedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,

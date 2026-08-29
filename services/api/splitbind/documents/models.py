@@ -5,12 +5,12 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q
 
-from splitbind.access.models import OrganizationOwnedModel, SigningKey
+from splitbind.access.models import SigningKey, ValidatedOrganizationOwnedModel
 from splitbind.uploads.models import UploadRequest
 from splitbind.validators import SHA256_PATTERN, validate_sha256
 
 
-class Document(OrganizationOwnedModel):
+class Document(ValidatedOrganizationOwnedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -43,7 +43,7 @@ class Document(OrganizationOwnedModel):
         self.validate_organization_relations(self.created_by, self.upload_request)
 
 
-class Issuance(OrganizationOwnedModel):
+class Issuance(ValidatedOrganizationOwnedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     document = models.ForeignKey(
         Document,
@@ -93,7 +93,7 @@ class Issuance(OrganizationOwnedModel):
         }
 
 
-class Manifest(OrganizationOwnedModel):
+class Manifest(ValidatedOrganizationOwnedModel):
     issuance = models.OneToOneField(
         Issuance,
         on_delete=models.PROTECT,
@@ -129,7 +129,7 @@ class VerificationStatus(models.TextChoices):
     PROCESSING_FAILED = "PROCESSING_FAILED", "Processing failed"
 
 
-class Verification(OrganizationOwnedModel):
+class Verification(ValidatedOrganizationOwnedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     upload_request = models.OneToOneField(
         UploadRequest,

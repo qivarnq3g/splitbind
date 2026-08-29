@@ -4,10 +4,10 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Q
 
-from splitbind.access.models import OrganizationOwnedModel
+from splitbind.access.models import ValidatedOrganizationOwnedModel
 
 
-class OutboxEvent(OrganizationOwnedModel):
+class OutboxEvent(ValidatedOrganizationOwnedModel):
     id = models.BigAutoField(primary_key=True)
     message_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     job = models.ForeignKey(

@@ -1,6 +1,6 @@
 import uuid
 
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, UserManager as DjangoUserManager
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
@@ -43,7 +43,111 @@ class OrganizationOwnedModel(models.Model):
             raise ValidationError("Related records must belong to the same organization.")
 
 
-class User(AbstractUser):
+class ValidatedOrganizationQuerySet(models.QuerySet):
+    """Allow scalar state updates, but reject unchecked tenant/relation rewrites."""
+
+    def _protected_bulk_fields(self) -> set[str]:
+        protected = {"organization", "organization_id"}
+        for field in self.model._meta.fields:
+            if not isinstance(field, (models.ForeignKey, models.OneToOneField)):
+                continue
+            related_model = field.remote_field.model
+            if hasattr(related_model, "organization_id"):
+                protected.update({field.name, field.attname})
+        return protected
+
+    def update(self, **kwargs):
+        protected = self._protected_bulk_fields() & kwargs.keys()
+        if protected:
+            names = ", ".join(sorted(protected))
+            raise ValidationError(
+                f"Unsafe bulk update of tenant or relation fields ({names}) is forbidden; "
+                "load instances and save() them instead."
+            )
+        return super().update(**kwargs)
+
+    def bulk_create(self, objs, **kwargs):
+        for obj in objs:
+            obj.validate_organization_persistence()
+        return super().bulk_create(objs, **kwargs)
+
+    def bulk_update(self, objs, fields, **kwargs):
+        for obj in objs:
+            obj.validate_organization_persistence()
+        return super().bulk_update(objs, fields, **kwargs)
+
+
+class ValidatedOrganizationManager(models.Manager.from_queryset(ValidatedOrganizationQuerySet)):
+    """Default manager for organization-owned records with explicit bulk policy."""
+
+
+class ValidatedOrganizationOwnedModel(OrganizationOwnedModel):
+    objects = ValidatedOrganizationManager()
+
+    class Meta:
+        abstract = True
+
+    def validate_organization_persistence(self) -> None:
+        self.clean()
+
+    def save(self, *args, **kwargs) -> None:
+        self.validate_organization_persistence()
+        super().save(*args, **kwargs)
+
+
+class UserManager(DjangoUserManager.from_queryset(ValidatedOrganizationQuerySet)):
+    use_in_migrations = True
+
+    def _organization(self, organization):
+        if organization is None:
+            raise ValueError("organization is required")
+        if isinstance(organization, Organization):
+            return organization
+        try:
+            return Organization.objects.get(pk=organization)
+        except (Organization.DoesNotExist, ValidationError, ValueError) as error:
+            raise ValueError("organization must identify an existing organization") from error
+
+    def create_user(self, username, email=None, password=None, **extra_fields):
+        organization = self._organization(extra_fields.pop("organization", None))
+        role = extra_fields.pop("role", None)
+        if role not in Role.values:
+            raise ValueError("role must be a stable non-superuser role")
+        if extra_fields.get("is_superuser", False):
+            raise ValueError("create_user cannot set is_superuser")
+        extra_fields.setdefault("is_staff", False)
+        extra_fields["is_superuser"] = False
+        return self._create_user(
+            username,
+            email,
+            password,
+            organization=organization,
+            role=role,
+            **extra_fields,
+        )
+
+    def create_superuser(self, username, email=None, password=None, **extra_fields):
+        organization = self._organization(extra_fields.pop("organization", None))
+        role = extra_fields.pop("role", Role.ADMINISTRATOR)
+        if role != Role.ADMINISTRATOR:
+            raise ValueError("superusers must have the administrator role")
+        if extra_fields.get("is_staff") is False:
+            raise ValueError("superuser must have is_staff=True")
+        if extra_fields.get("is_superuser") is False:
+            raise ValueError("superuser must have is_superuser=True")
+        extra_fields["is_staff"] = True
+        extra_fields["is_superuser"] = True
+        return self._create_user(
+            username,
+            email,
+            password,
+            organization=organization,
+            role=role,
+            **extra_fields,
+        )
+
+
+class User(ValidatedOrganizationOwnedModel, AbstractUser):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     organization = models.ForeignKey(
         Organization,
@@ -51,6 +155,9 @@ class User(AbstractUser):
         related_name="users",
     )
     role = models.CharField(max_length=16, choices=Role.choices)
+    objects = UserManager()
+
+    REQUIRED_FIELDS = ["organization"]
 
     class Meta:
         indexes = [models.Index(fields=["organization", "role"], name="user_org_role_idx")]
@@ -62,7 +169,7 @@ class User(AbstractUser):
         ]
 
 
-class Recipient(OrganizationOwnedModel):
+class Recipient(ValidatedOrganizationOwnedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     external_reference = models.CharField(max_length=120)
     display_name = models.CharField(max_length=200)
@@ -86,7 +193,7 @@ class SigningKeyStatus(models.TextChoices):
     REVOKED = "revoked", "Revoked"
 
 
-class SigningKey(OrganizationOwnedModel):
+class SigningKey(ValidatedOrganizationOwnedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     key_id = models.CharField(max_length=120, unique=True)
     algorithm = models.CharField(max_length=20, default="Ed25519", editable=False)
