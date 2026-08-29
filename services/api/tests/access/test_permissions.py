@@ -30,7 +30,7 @@ def create_issuance(organization, actor, suffix):
         requested_by=actor,
         purpose=UploadPurpose.ISSUANCE,
         object_key=f"{organization.slug}/{suffix}/source.pdf",
-        sha256=SHA256,
+        expected_sha256=SHA256,
         size_bytes=1,
         expires_at="2030-01-01T00:00:00Z",
     )
@@ -61,7 +61,7 @@ def create_verification(organization, actor, suffix):
         requested_by=actor,
         purpose=UploadPurpose.VERIFICATION,
         object_key=f"{organization.slug}/{suffix}/suspect.png",
-        sha256=SHA256,
+        expected_sha256=SHA256,
         size_bytes=1,
         expires_at="2030-01-01T00:00:00Z",
     )

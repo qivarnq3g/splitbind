@@ -1,6 +1,7 @@
 import os
 import uuid
 from datetime import timedelta
+from urllib.parse import urlparse
 
 import pytest
 
@@ -38,6 +39,10 @@ def valid_key(kind="issuance_input"):
     return f"uploads/orphan/{kind}/{uuid.uuid4()}/{uuid.uuid4().hex}.bin"
 
 
+def promoted_key(source, kind="issuance"):
+    return f"inputs/{kind}/{source.split('/')[3]}/{uuid.uuid4()}.bin"
+
+
 def test_s3_adapter_uses_exact_operation_key_checksum_and_never_lists():
     client = StubS3Client()
     storage = S3ObjectStorage(bucket="test-bucket", client=client)
@@ -64,7 +69,8 @@ def test_s3_adapter_uses_exact_operation_key_checksum_and_never_lists():
 def test_s3_adapter_heads_copies_and_deletes_only_controlled_keys():
     client = StubS3Client()
     storage = S3ObjectStorage(bucket="test-bucket", client=client)
-    source, destination = valid_key(), valid_key("verification_input")
+    source = valid_key()
+    destination = promoted_key(source)
     client.objects[source] = {"ContentLength": 7, "ContentType": "application/pdf", "Metadata": {"sha256": SHA256}}
 
     assert storage.head(key=source) == ObjectMetadata(source, 7, "application/pdf", SHA256)
@@ -85,4 +91,61 @@ def test_minio_runtime_contract_is_opt_in(request):
     endpoint = request.config.getoption("--storage-endpoint")
     if not endpoint:
         pytest.fail("--storage-endpoint is required when SPLITBIND_RUN_MINIO_INTEGRATION=1")
-    pytest.fail("MinIO runtime probe requires separately supplied disposable endpoint credentials")
+    parsed = urlparse(endpoint)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
+        pytest.fail("--storage-endpoint must be a safe HTTP(S) MinIO endpoint without credentials, query, or fragment")
+
+    access_key = os.environ.get("SPLITBIND_MINIO_ACCESS_KEY", "splitbind-integration-test")
+    secret_key = os.environ.get("SPLITBIND_MINIO_SECRET_KEY", "splitbind-integration-test-not-a-secret")
+    bucket = os.environ.get("SPLITBIND_MINIO_BUCKET", "splitbind-integration")
+    prefix = f"uploads/orphan/issuance_input/{uuid.uuid4()}/"
+    source = f"{prefix}{uuid.uuid4().hex}.bin"
+    destination = f"inputs/issuance/{source.split('/')[3]}/{uuid.uuid4()}.bin"
+    body = b"splitbind-minio-integration"
+    import hashlib
+    import boto3
+
+    checksum = hashlib.sha256(body).hexdigest()
+    client = boto3.client(
+        "s3",
+        endpoint_url=endpoint,
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        region_name="us-east-1",
+    )
+    storage = S3ObjectStorage(bucket=bucket, client=client)
+    created_bucket = False
+    owned_keys = [source, destination]
+    try:
+        try:
+            client.head_bucket(Bucket=bucket)
+        except Exception:
+            if os.environ.get("SPLITBIND_MINIO_ALLOW_CREATE_BUCKET") != "1":
+                pytest.fail("MinIO bucket is absent; explicitly set SPLITBIND_MINIO_ALLOW_CREATE_BUCKET=1 to create the test bucket")
+            client.create_bucket(Bucket=bucket)
+            created_bucket = True
+        client.put_object(
+            Bucket=bucket,
+            Key=source,
+            Body=body,
+            ContentType="application/pdf",
+            Metadata={"sha256": checksum},
+        )
+        observed = storage.head(key=source)
+        assert observed is not None
+        assert observed.size_bytes == len(body)
+        assert observed.client_sha256_metadata == checksum
+        copied = storage.copy_verified(source=source, destination=destination, sha256=checksum)
+        assert copied.key == destination
+    finally:
+        cleanup_errors = []
+        for key in reversed(owned_keys):
+            try:
+                storage.delete(key=key)
+            except Exception as error:
+                cleanup_errors.append(f"{key}: {type(error).__name__}")
+        remaining = [key for key in owned_keys if storage.head(key=key) is not None]
+        if created_bucket and not remaining:
+            client.delete_bucket(Bucket=bucket)
+        if cleanup_errors or remaining:
+            pytest.fail(f"MinIO cleanup failed for controlled task keys: errors={cleanup_errors}, remaining={remaining}")

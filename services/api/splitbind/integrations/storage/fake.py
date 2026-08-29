@@ -7,6 +7,7 @@ from .base import (
     PresignedPut,
     StorageUnavailable,
     UploadRejected,
+    validate_copy_boundary,
     validate_checksum,
     validate_controlled_key,
     validate_expiry,
@@ -88,15 +89,19 @@ class FakeObjectStorage:
         return f"https://fake-storage.invalid/{quote(key)}?signed=opaque"
 
     def copy_verified(self, *, source, destination, sha256):
-        validate_controlled_key(source)
-        validate_controlled_key(destination)
+        validate_copy_boundary(source, destination)
         validate_checksum(sha256)
         self._maybe_fail("copy_verified")
         original = self.objects.get(source)
-        if original is None or original.sha256 != sha256:
+        if original is None or original.client_sha256_metadata != sha256:
             self.objects.pop(destination, None)
             raise UploadRejected("STORAGE_COPY_MISMATCH")
-        copied = ObjectMetadata(destination, original.size_bytes, original.content_type, original.sha256)
+        copied = ObjectMetadata(
+            destination,
+            original.size_bytes,
+            original.content_type,
+            original.client_sha256_metadata,
+        )
         self.objects[destination] = copied
         return copied
 

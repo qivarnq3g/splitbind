@@ -46,7 +46,7 @@ def tenant_pair(db):
         requested_by=first_user,
         purpose=UploadPurpose.ISSUANCE,
         object_key="first/source.pdf",
-        sha256=SHA256,
+        expected_sha256=SHA256,
         size_bytes=1,
         expires_at=timezone.now(),
     )
@@ -63,7 +63,7 @@ def tenant_pair(db):
         requested_by=second_user,
         purpose=UploadPurpose.ISSUANCE,
         object_key="second/source.pdf",
-        sha256=SHA256,
+        expected_sha256=SHA256,
         size_bytes=1,
         expires_at=timezone.now(),
     )
@@ -147,6 +147,8 @@ def test_objects_create_and_save_reject_cross_tenant_relations(tenant_pair):
             requested_by=second_user,
             purpose=UploadPurpose.ISSUANCE,
             object_key="first/cross-upload.pdf",
+            expected_sha256=SHA256,
+            size_bytes=1,
             expires_at=timezone.now(),
         )
 
@@ -385,6 +387,8 @@ def test_invalid_bulk_generator_fails_before_any_write(tenant_pair):
             requested_by=tenant_pair["first_user"],
             purpose=UploadPurpose.ISSUANCE,
             object_key="first/valid-generator.pdf",
+            expected_sha256=SHA256,
+            size_bytes=1,
             expires_at=timezone.now(),
         ),
         UploadRequest(
@@ -392,6 +396,8 @@ def test_invalid_bulk_generator_fails_before_any_write(tenant_pair):
             requested_by=second_user,
             purpose=UploadPurpose.ISSUANCE,
             object_key="first/invalid-generator.pdf",
+            expected_sha256=SHA256,
+            size_bytes=1,
             expires_at=timezone.now(),
         ),
     )

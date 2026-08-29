@@ -14,6 +14,7 @@ services:
     environment:
       SPLITBIND_DATABASE_HOST: ${NEON_DATABASE_HOST:?NEON_DATABASE_HOST is required}
       OBJECT_STORAGE_ENDPOINT: ${R2_ENDPOINT:?R2_ENDPOINT is required}
+      OBJECT_STORAGE_ENDPOINT_HINT: ${R2_ENDPOINT:?R2_ENDPOINT is required}
     networks: [app]
   outbox:
     image: ${API_IMAGE:?API_IMAGE must be an immutable digest}
@@ -30,6 +31,7 @@ services:
     env_file: ["${WORKER_ENV_FILE:-/run/splitbind/secrets/worker.env}"]
     environment:
       OBJECT_STORAGE_ENDPOINT: ${R2_ENDPOINT:?R2_ENDPOINT is required}
+      OBJECT_STORAGE_ENDPOINT_HINT: ${R2_ENDPOINT:?R2_ENDPOINT is required}
     secrets: [manifest_signing_key, fingerprint_key, integrity_key]
     networks: [app]
 

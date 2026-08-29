@@ -59,7 +59,7 @@ def upload_request(organization, user):
         requested_by=user,
         purpose=UploadPurpose.ISSUANCE,
         object_key="org/example/uploads/source.pdf",
-        sha256=SHA256_A,
+        expected_sha256=SHA256_A,
         size_bytes=1024,
         expires_at=timezone.now() + timezone.timedelta(minutes=15),
     )
@@ -106,7 +106,7 @@ def verification_upload(organization, user):
         requested_by=user,
         purpose=UploadPurpose.VERIFICATION,
         object_key="org/example/uploads/suspect.png",
-        sha256=SHA256_B,
+        expected_sha256=SHA256_B,
         size_bytes=2048,
         expires_at=timezone.now() + timezone.timedelta(minutes=15),
     )
@@ -307,7 +307,7 @@ def test_model_boundaries_reject_cross_organization_relations(
         requested_by=other_user,
         purpose=UploadPurpose.ISSUANCE,
         object_key="org/other/uploads/source.pdf",
-        sha256=SHA256_A,
+        expected_sha256=SHA256_A,
         size_bytes=1024,
         expires_at=timezone.now() + timezone.timedelta(minutes=15),
     )
@@ -349,6 +349,8 @@ def test_model_boundaries_reject_cross_organization_relations(
             requested_by=other_user,
             purpose=UploadPurpose.ISSUANCE,
             object_key="org/example/uploads/cross-user.pdf",
+            expected_sha256=SHA256_A,
+            size_bytes=1,
             expires_at=timezone.now(),
         ),
         Document(

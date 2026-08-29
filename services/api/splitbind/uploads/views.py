@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 
 from splitbind.integrations.storage.base import UploadRejected
 from splitbind.uploads.serializers import UploadCompleteSerializer, UploadIntentSerializer, serialize_upload
-from splitbind.uploads.services import complete_upload, create_upload
+from splitbind.uploads.services import complete_upload, create_upload, record_serializer_denial
 
 
 @method_decorator(csrf_protect, name="dispatch")
@@ -16,7 +16,9 @@ class UploadIntentView(APIView):
 
     def post(self, request):
         serializer = UploadIntentSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            record_serializer_denial(request.user, action="upload.intent.denied", errors=serializer.errors)
+            return Response(serializer.errors, status=400)
         try:
             intent = create_upload(request.user, **serializer.validated_data)
         except UploadRejected as error:
@@ -34,7 +36,9 @@ class UploadCompleteView(APIView):
 
     def post(self, request, upload_id):
         serializer = UploadCompleteSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            record_serializer_denial(request.user, action="upload.complete.denied", errors=serializer.errors)
+            return Response(serializer.errors, status=400)
         try:
             upload = complete_upload(request.user, upload_id=upload_id, **serializer.validated_data)
         except UploadRejected as error:

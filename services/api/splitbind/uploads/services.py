@@ -41,9 +41,12 @@ def get_storage():
 
 
 def _record_denial(actor, action: str, code: str, *, kind: str = "") -> None:
+    metadata = {"safe_error_code": code}
+    if kind:
+        metadata["kind"] = kind
     record_event(
         actor, action, actor, AuditOutcome.DENIED, uuid.uuid4(),
-        {"kind": kind, "safe_error_code": code},
+        metadata,
     )
 
 
@@ -92,7 +95,7 @@ def create_upload(actor, *, kind: str, filename: str, content_type: str, size_by
             requested_by=actor,
             purpose=_KIND_TO_PURPOSE[kind],
             object_key=key,
-            sha256=sha256,
+            expected_sha256=sha256,
             size_bytes=size_bytes,
             expires_at=now + UPLOAD_TTL,
         )
@@ -107,8 +110,11 @@ def _kind_for(record: UploadRequest) -> str:
     return "issuance_input" if record.purpose == UploadPurpose.ISSUANCE else "verification_input"
 
 
-def _scoped_upload(actor, upload_id):
-    queryset = UploadRequest.objects.filter(organization_id=actor.organization_id, id=upload_id)
+def _scoped_upload(actor, upload_id, *, for_update: bool = False):
+    queryset = UploadRequest.objects
+    if for_update:
+        queryset = queryset.select_for_update()
+    queryset = queryset.filter(organization_id=actor.organization_id, id=upload_id)
     if actor.role != Role.ADMINISTRATOR:
         queryset = queryset.filter(requested_by_id=actor.id)
     try:
@@ -119,26 +125,54 @@ def _scoped_upload(actor, upload_id):
 
 
 def complete_upload(actor, *, upload_id, sha256: str) -> UploadRequest:
-    upload = _scoped_upload(actor, upload_id)
-    kind = _kind_for(upload)
-    _authorize(actor, kind, action="upload.complete.denied")
-    if sha256 != upload.sha256:
-        _reject(actor, "UPLOAD_METADATA_MISMATCH", action="upload.complete.denied", kind=kind)
-    if upload.finalized_at is not None:
-        return upload
-    if timezone.now() >= upload.expires_at:
-        _reject(actor, "UPLOAD_EXPIRED", action="upload.complete.denied", kind=kind)
+    kind = ""
     try:
-        observed = get_storage().head(key=upload.object_key)
-    except StorageUnavailable:
-        _reject(actor, "STORAGE_UNAVAILABLE", action="upload.complete.denied", kind=kind)
-    if observed is None or observed.size_bytes != upload.size_bytes or observed.sha256 != upload.sha256:
-        _reject(actor, "UPLOAD_METADATA_MISMATCH", action="upload.complete.denied", kind=kind)
-    with transaction.atomic():
-        upload.finalized_at = timezone.now()
-        upload.save(update_fields=["finalized_at"])
-        record_event(
-            actor, "upload.completed", upload, AuditOutcome.SUCCEEDED, uuid.uuid4(),
-            {"kind": kind, "object_size": upload.size_bytes, "status": "ready"},
-        )
-    return upload
+        with transaction.atomic():
+            upload = _scoped_upload(actor, upload_id, for_update=True)
+            kind = _kind_for(upload)
+            _authorize(actor, kind, action="upload.complete.denied")
+            if sha256 != upload.expected_sha256:
+                _reject(actor, "UPLOAD_METADATA_MISMATCH", action="upload.complete.denied", kind=kind)
+            if upload.finalized_at is not None:
+                return upload
+            if timezone.now() >= upload.expires_at:
+                _reject(actor, "UPLOAD_EXPIRED", action="upload.complete.denied", kind=kind)
+            try:
+                observed = get_storage().head(key=upload.object_key)
+            except StorageUnavailable:
+                _reject(actor, "STORAGE_UNAVAILABLE", action="upload.complete.denied", kind=kind)
+            if timezone.now() >= upload.expires_at:
+                _reject(actor, "UPLOAD_EXPIRED", action="upload.complete.denied", kind=kind)
+            # The metadata digest is the immutable client expectation bound into
+            # the signed PUT. It is not proof that provider bytes hash to it.
+            if (
+                observed is None
+                or observed.size_bytes != upload.size_bytes
+                or observed.client_sha256_metadata != upload.expected_sha256
+            ):
+                _reject(actor, "UPLOAD_METADATA_MISMATCH", action="upload.complete.denied", kind=kind)
+            upload.finalized_at = timezone.now()
+            upload.save(update_fields=["finalized_at"])
+            record_event(
+                actor, "upload.completed", upload, AuditOutcome.SUCCEEDED, uuid.uuid4(),
+                {"kind": kind, "object_size": upload.size_bytes, "status": "ready"},
+            )
+        return upload
+    except UploadRejected as error:
+        # Any denial written inside the failed atomic block is rolled back.
+        # Persist exactly one safe denial after rollback.
+        _record_denial(actor, "upload.complete.denied", str(error), kind=kind)
+        raise
+
+
+def record_serializer_denial(actor, *, action: str, errors) -> None:
+    """Audit serializer rejection with one allow-listed code and no input data."""
+    field = next(iter(errors), "") if isinstance(errors, dict) else ""
+    code_by_field = {
+        "kind": "UPLOAD_KIND",
+        "content_type": "UPLOAD_CONTENT_TYPE",
+        "size_bytes": "UPLOAD_SIZE",
+        "sha256": "UPLOAD_SHA256",
+        "filename": "UPLOAD_FILENAME",
+    }
+    _record_denial(actor, action, code_by_field.get(field, "UPLOAD_REQUEST"))

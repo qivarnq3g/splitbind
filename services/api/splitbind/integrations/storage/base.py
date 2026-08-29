@@ -2,15 +2,19 @@ import re
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Mapping, Protocol
-from uuid import UUID
 
 from splitbind.validators import SHA256_PATTERN
 
 
-_CONTROLLED_KEY = re.compile(
+_ORPHAN_KEY = re.compile(
     r"^uploads/orphan/(issuance_input|verification_input)/"
-    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/"
-    r"[0-9a-f]{32}\.bin$"
+    r"(?P<organization>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/"
+    r"(?P<object>[0-9a-f]{32})\.bin$"
+)
+_PROMOTED_KEY = re.compile(
+    r"^inputs/(?P<kind>issuance|verification)/"
+    r"(?P<organization>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/"
+    r"(?P<upload>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.bin$"
 )
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 _CONTENT_TYPES = {
@@ -38,7 +42,9 @@ class ObjectMetadata:
     key: str
     size_bytes: int
     content_type: str | None
-    sha256: str | None
+    # This is untrusted client-supplied object metadata, not a provider-verified
+    # digest of the stored bytes. Workers must stream and hash content.
+    client_sha256_metadata: str | None
 
 
 class ObjectStorage(Protocol):
@@ -56,11 +62,34 @@ class ObjectStorage(Protocol):
 
 
 def validate_controlled_key(key: str) -> None:
-    """Reject all but application-generated orphan upload keys at adapter boundaries."""
-    if not isinstance(key, str) or not _CONTROLLED_KEY.fullmatch(key):
-        raise ValueError("storage key must use the controlled orphan-upload shape")
+    """Accept only application-generated orphan or promoted input keys."""
+    if not isinstance(key, str) or not (_ORPHAN_KEY.fullmatch(key) or _PROMOTED_KEY.fullmatch(key)):
+        raise ValueError("storage key must use a controlled application shape")
     if any(character in key for character in ("\\", "\x00", "\r", "\n")) or ".." in key:
-        raise ValueError("storage key must use the controlled orphan-upload shape")
+        raise ValueError("storage key must use a controlled application shape")
+
+
+def validate_orphan_key(key: str):
+    if not isinstance(key, str) or not (match := _ORPHAN_KEY.fullmatch(key)):
+        raise ValueError("storage source key must use the controlled orphan-upload shape")
+    return match
+
+
+def validate_promoted_key(key: str):
+    if not isinstance(key, str) or not (match := _PROMOTED_KEY.fullmatch(key)):
+        raise ValueError("storage destination key must use the controlled promoted-input shape")
+    return match
+
+
+def validate_copy_boundary(source: str, destination: str) -> None:
+    source_match = validate_orphan_key(source)
+    destination_match = validate_promoted_key(destination)
+    source_kind = source_match.group(1).removesuffix("_input")
+    if (
+        source_kind != destination_match.group("kind")
+        or source_match.group("organization") != destination_match.group("organization")
+    ):
+        raise ValueError("storage copy must preserve the same organization and kind")
 
 
 def validate_checksum(sha256: str) -> None:
@@ -74,7 +103,7 @@ def validate_expiry(expires: timedelta) -> None:
 
 
 def validate_put_constraints(key: str, content_type: str, size_bytes: int, sha256: str, expires: timedelta) -> None:
-    validate_controlled_key(key)
+    validate_orphan_key(key)
     kind = key.split("/", 3)[2]
     if content_type not in _CONTENT_TYPES[kind]:
         raise ValueError("storage content type is not allowed for this upload kind")

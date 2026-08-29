@@ -81,7 +81,25 @@ def secret_sources(service):
     }
 
 
+def read_env_keys(filename):
+    return {
+        line.split("=", 1)[0]
+        for line in (COMPOSE_DIR / filename).read_text(encoding="utf-8").splitlines()
+        if line and not line.startswith("#") and "=" in line
+    }
+
+
 class ComposeTopologyTest(unittest.TestCase):
+    def test_api_and_worker_env_files_supply_the_storage_adapter_contract(self):
+        required = {
+            "OBJECT_STORAGE_ENDPOINT",
+            "OBJECT_STORAGE_BUCKET",
+            "OBJECT_STORAGE_ACCESS_KEY",
+            "OBJECT_STORAGE_SECRET_KEY",
+        }
+        self.assertTrue(required <= read_env_keys("config-test-api.env"))
+        self.assertTrue(required <= read_env_keys("config-test-worker.env"))
+
     def test_local_profiles_render_the_intended_service_boundaries(self):
         core = render_compose("compose.local.yaml", "core")
         research = render_compose("compose.local.yaml", "research")
