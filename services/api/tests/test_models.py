@@ -10,7 +10,8 @@ from django.db.models.deletion import ProtectedError
 from django.utils import timezone
 
 from splitbind.access.models import Organization, Recipient, Role, SigningKey
-from splitbind.audit.models import AuditEvent
+from splitbind.audit.models import AuditEvent, AuditOutcome
+from splitbind.audit.services import record_event
 from splitbind.documents.models import (
     Document,
     Issuance,
@@ -201,14 +202,13 @@ def test_user_and_business_records_are_owned_by_one_organization(
         topic="issuance.requested",
         payload={"schema_version": 1},
     )
-    audit = AuditEvent.objects.create(
-        organization=organization,
-        actor=user,
-        action="issuance.created",
-        target_type="issuance",
-        target_id=str(issuance.id),
-        correlation_id=job.correlation_id,
-        outcome="succeeded",
+    audit = record_event(
+        user,
+        "issuance.created",
+        issuance,
+        AuditOutcome.SUCCEEDED,
+        job.correlation_id,
+        {"status": "created"},
     )
 
     records = [

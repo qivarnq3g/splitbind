@@ -28,8 +28,12 @@ def record_event(
     """
     if actor is None or actor.organization_id is None:
         raise ValidationError("audit actor must belong to an organization")
+    if actor.pk is None or actor._state.adding:
+        raise ValidationError("audit actor must be persisted")
     if target is None or not hasattr(target, "organization_id"):
         raise ValidationError("audit target must be organization-owned")
+    if target.pk is None or target._state.adding:
+        raise ValidationError("audit target must be persisted")
     if target.organization_id != actor.organization_id:
         raise ValidationError("audit actor and target must belong to the same organization")
     if not isinstance(action, str) or not action or len(action) > 120:
@@ -42,7 +46,7 @@ def record_event(
     if len(target_type) > 80 or len(target_id) > 120:
         raise ValidationError("audit target identifier is too long")
 
-    return AuditEvent.objects.create(
+    return AuditEvent._create_from_record_event(
         organization_id=actor.organization_id,
         actor_id=actor.id,
         action=action,

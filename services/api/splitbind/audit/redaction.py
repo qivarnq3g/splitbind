@@ -15,7 +15,7 @@ MAX_AUDIT_METADATA_VALUE_LENGTH = 256
 
 def _is_full_url(value: str) -> bool:
     parsed = urlparse(value)
-    return bool(parsed.scheme and parsed.netloc)
+    return bool(parsed.netloc and (parsed.scheme or value.startswith("//")))
 
 
 def redact_metadata(metadata: Mapping[str, object] | None) -> dict[str, str]:

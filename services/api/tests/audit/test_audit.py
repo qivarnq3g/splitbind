@@ -4,8 +4,9 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 
-from splitbind.access.models import Organization, Role
+from splitbind.access.models import Organization, Recipient, Role
 from splitbind.audit.models import AuditEvent, AuditOutcome
+from splitbind.audit.redaction import redact_metadata
 from splitbind.audit.services import record_event
 
 
@@ -96,3 +97,76 @@ def test_audit_events_have_no_application_update_or_delete_path(audit_actor):
         AuditEvent.objects.filter(pk=event.pk).delete()
     with pytest.raises(ValidationError, match="append-only"):
         AuditEvent.objects.bulk_update([event], ["action"])
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("operation", ["update", "delete"])
+def test_audit_base_manager_cannot_bypass_append_only_policy(audit_actor, operation):
+    event = record_event(
+        audit_actor,
+        "auth.login",
+        audit_actor,
+        AuditOutcome.SUCCEEDED,
+        uuid.uuid4(),
+        {"kind": "login"},
+    )
+    queryset = AuditEvent._base_manager.filter(pk=event.pk)
+
+    with pytest.raises(ValidationError, match="append-only"):
+        if operation == "update":
+            queryset.update(action="altered")
+        else:
+            queryset.delete()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("operation", ["create", "bulk_create", "save"])
+def test_normal_orm_paths_cannot_create_audit_events(audit_actor, operation):
+    attributes = {
+        "organization": audit_actor.organization,
+        "actor": audit_actor,
+        "action": "auth.login",
+        "target_type": "access.user",
+        "target_id": str(audit_actor.id),
+        "correlation_id": uuid.uuid4(),
+        "outcome": AuditOutcome.SUCCEEDED,
+        "metadata": {"status": "https://storage.example.test/signed?credential=secret"},
+    }
+
+    with pytest.raises(ValidationError, match="record_event"):
+        if operation == "create":
+            AuditEvent.objects.create(**attributes)
+        elif operation == "bulk_create":
+            AuditEvent.objects.bulk_create([AuditEvent(**attributes)])
+        else:
+            AuditEvent(**attributes).save()
+
+
+def test_redaction_drops_scheme_relative_urls():
+    assert redact_metadata(
+        {"status": "//storage.example.test/signed?credential=secret"}
+    ) == {}
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("without_primary_key", [False, True])
+def test_record_event_rejects_unsaved_targets_even_when_uuid_is_present(
+    audit_actor, without_primary_key
+):
+    target = Recipient(
+        organization=audit_actor.organization,
+        external_reference="unsaved-target",
+        display_name="Unsaved target",
+    )
+    if without_primary_key:
+        target.pk = None
+
+    with pytest.raises(ValidationError, match="persisted"):
+        record_event(
+            audit_actor,
+            "audit.targeted",
+            target,
+            AuditOutcome.SUCCEEDED,
+            uuid.uuid4(),
+            {"kind": "target"},
+        )

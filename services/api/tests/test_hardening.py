@@ -14,7 +14,8 @@ from splitbind.access.models import (
     SigningKey,
     ValidatedOrganizationOwnedModel,
 )
-from splitbind.audit.models import AuditEvent
+from splitbind.audit.models import AuditEvent, AuditOutcome
+from splitbind.audit.services import record_event
 from splitbind.documents.models import Document, Issuance, Manifest, Verification
 from splitbind.jobs.models import Job, JobKind, JobResultReceipt
 from splitbind.outbox.models import OutboxEvent
@@ -190,14 +191,13 @@ def test_objects_create_and_save_reject_cross_tenant_relations(tenant_pair):
         )
 
     with pytest.raises(ValidationError, match="same organization"):
-        AuditEvent.objects.create(
-            organization=first,
-            actor=second_user,
-            action="test.cross_tenant",
-            target_type="document",
-            target_id=str(first_document.id),
-            correlation_id=uuid.uuid4(),
-            outcome="denied",
+        record_event(
+            second_user,
+            "test.cross_tenant",
+            first_document,
+            AuditOutcome.DENIED,
+            uuid.uuid4(),
+            {},
         )
 
 
