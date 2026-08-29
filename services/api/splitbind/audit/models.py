@@ -1,15 +1,31 @@
 import uuid
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 
-from splitbind.access.models import ValidatedOrganizationOwnedModel
+from splitbind.access.models import (
+    ValidatedOrganizationOwnedModel,
+    ValidatedOrganizationQuerySet,
+)
 
 
 class AuditOutcome(models.TextChoices):
     SUCCEEDED = "succeeded", "Succeeded"
     DENIED = "denied", "Denied"
     FAILED = "failed", "Failed"
+
+
+class AppendOnlyAuditQuerySet(ValidatedOrganizationQuerySet):
+    def update(self, **kwargs):
+        raise ValidationError("Audit events are append-only.")
+
+    def delete(self):
+        raise ValidationError("Audit events are append-only.")
+
+
+class AppendOnlyAuditManager(models.Manager.from_queryset(AppendOnlyAuditQuerySet)):
+    """Expose creation and reads while refusing application mutation paths."""
 
 
 class AuditEvent(ValidatedOrganizationOwnedModel):
@@ -28,6 +44,7 @@ class AuditEvent(ValidatedOrganizationOwnedModel):
     outcome = models.CharField(max_length=16, choices=AuditOutcome.choices)
     metadata = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    objects = AppendOnlyAuditManager()
 
     class Meta:
         indexes = [
@@ -39,3 +56,11 @@ class AuditEvent(ValidatedOrganizationOwnedModel):
     def clean(self) -> None:
         super().clean()
         self.validate_organization_relations(self.actor)
+
+    def save(self, *args, **kwargs) -> None:
+        if not self._state.adding:
+            raise ValidationError("Audit events are append-only.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Audit events are append-only.")

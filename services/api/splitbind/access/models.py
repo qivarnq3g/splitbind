@@ -132,7 +132,7 @@ class UserManager(DjangoUserManager.from_queryset(ValidatedOrganizationQuerySet)
             raise ValueError("role must be a stable non-superuser role")
         if extra_fields.get("is_superuser", False):
             raise ValueError("create_user cannot set is_superuser")
-        extra_fields.setdefault("is_staff", False)
+        extra_fields["is_staff"] = role == Role.ADMINISTRATOR
         extra_fields["is_superuser"] = False
         return self._create_user(
             username,
