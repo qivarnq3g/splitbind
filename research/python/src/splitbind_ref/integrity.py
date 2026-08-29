@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import math
 import struct
 from dataclasses import dataclass
@@ -17,6 +18,10 @@ from splitbind_attack.ground_truth import NormalizedRect
 
 
 Image = NDArray[np.uint8]
+# SHA-256 over sorted, compact semantic JSON; the benchmark reports the file hash.
+_PROFILE_V1_CANONICAL_SHA256 = (
+    "76917b030dfe508532dbc2603953dcba1491ef7fa5d538217bec93076014188d"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,14 +129,13 @@ def verify_integrity(
     )
     partners = _partner_regions(len(regions), key, nonce, parsed)
     suspicious_indexes: list[int] = []
-    evaluated = 0
     matches = 0
     confidences: list[float] = []
     mismatch_count = 0
     indeterminate_count = 0
     for source_index, expected_tag in enumerate(expected):
-        replica_mismatches = 0
-        usable_replicas = 0
+        match_votes = 0
+        mismatch_votes = 0
         for replica, destinations in enumerate(partners):
             destination = destinations[source_index]
             x, y = regions[destination]
@@ -141,22 +145,22 @@ def verify_integrity(
             )
             confidences.append(confidence)
             if confidence >= parsed.minimum_bit_confidence:
-                usable_replicas += 1
-                replica_mismatches += actual != expected_tag
-        if usable_replicas < parsed.minimum_replica_votes:
-            indeterminate_count += 1
-            continue
-        evaluated += 1
-        if replica_mismatches >= parsed.minimum_replica_votes:
+                if actual == expected_tag:
+                    match_votes += 1
+                else:
+                    mismatch_votes += 1
+        if match_votes >= parsed.minimum_replica_votes:
+            matches += 1
+        elif mismatch_votes >= parsed.minimum_replica_votes:
             suspicious_indexes.append(source_index)
             mismatch_count += 1
         else:
-            matches += 1
+            indeterminate_count += 1
 
     mean_confidence = sum(confidences) / len(confidences) if confidences else 0.0
-    mismatch_ratio = mismatch_count / evaluated if evaluated else 1.0
+    mismatch_ratio = mismatch_count / len(regions)
     limitations: tuple[str, ...] = ()
-    if evaluated == 0 or indeterminate_count > len(regions) // 2:
+    if indeterminate_count * 2 >= len(regions):
         limitations = (parsed.limitation_ids["indeterminate"],)
     elif mismatch_ratio >= parsed.geometry_ratio and mean_confidence >= parsed.high_confidence:
         limitations = (parsed.limitation_ids["geometry_failure"],)
@@ -177,9 +181,9 @@ def verify_integrity(
             for index in suspicious_indexes
         )
     return IntegrityDecision(
-        score=matches / evaluated if evaluated else 0.0,
+        score=matches / len(regions),
         suspicious_regions=suspicious,
-        evaluated_regions=evaluated,
+        evaluated_regions=len(regions),
         limitations=limitations,
     )
 
@@ -249,11 +253,11 @@ def _partner_regions(
         )
     )
     rank = {source: position for position, source in enumerate(order)}
+    effective_shifts = tuple(shift % count for shift in profile.replica_shifts)
+    if 0 in effective_shifts or len(set(effective_shifts)) != len(effective_shifts):
+        raise ValueError("integrity profile replica mappings must be independent")
     mappings = []
-    for shift in profile.replica_shifts:
-        effective = shift % count
-        if effective == 0:
-            raise ValueError("integrity profile replica shift maps a region to itself")
+    for effective in effective_shifts:
         mappings.append(
             tuple(order[(rank[source] + effective) % count] for source in range(count))
         )
@@ -321,8 +325,22 @@ def _validate_secret(name: str, value: bytes, minimum: int, maximum: int) -> Non
 
 def _validate_profile(profile: Mapping[str, object]) -> _Profile:
     prefix = "integrity profile"
-    if not isinstance(profile, Mapping):
-        raise TypeError(f"{prefix} must be a mapping")
+    normalized = _normalize_profile_json(profile, prefix)
+    if not isinstance(normalized, dict):
+        raise TypeError(f"{prefix} must be a JSON object")
+    profile = normalized
+    try:
+        canonical = json.dumps(
+            profile,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError, UnicodeError) as error:
+        raise ValueError(f"{prefix} is not canonical JSON") from error
+    if hashlib.sha256(canonical).hexdigest() != _PROFILE_V1_CANONICAL_SHA256:
+        raise ValueError(f"{prefix} material choices do not match frozen v1")
     expected_root = {
         "schema_version", "profile_id", "status", "region_size_px",
         "content_feature", "authentication", "partner_mapping", "embedding",
@@ -375,8 +393,11 @@ def _validate_profile(profile: Mapping[str, object]) -> _Profile:
     coefficient_sets = tuple(_coefficient_box(box, prefix) for box in boxes)
     if any(len(values) != 32 for values in coefficient_sets):
         raise ValueError(f"{prefix} each tag coefficient set must contain 32 positions")
-    if set(feature_positions) & set().union(*(set(values) for values in coefficient_sets)):
+    destination_sets = tuple(set(values) for values in coefficient_sets)
+    if set(feature_positions) & set().union(*destination_sets):
         raise ValueError(f"{prefix} feature and destination coefficients must be disjoint")
+    if sum(map(len, destination_sets)) != len(set().union(*destination_sets)):
+        raise ValueError(f"{prefix} destination coefficient sets must be pairwise disjoint")
     limitation_ids = _mapping(decision_policy, "limitation_ids", prefix)
     _exact_keys(limitation_ids, {"strong_compression", "geometry_failure", "insufficient_complete_regions", "indeterminate"}, prefix)
     if any(not isinstance(value, str) or not value.startswith("integrity.") for value in limitation_ids.values()):
@@ -410,9 +431,38 @@ def _validate_profile(profile: Mapping[str, object]) -> _Profile:
         raise ValueError(f"{prefix} safety bounds are invalid")
     if parsed.minimum_replica_votes > len(parsed.replica_shifts):
         raise ValueError(f"{prefix} vote threshold exceeds replicas")
+    effective_shifts = tuple(
+        shift % parsed.minimum_regions for shift in parsed.replica_shifts
+    )
+    if 0 in effective_shifts or len(set(effective_shifts)) != len(effective_shifts):
+        raise ValueError(f"{prefix} partner mappings must be independent")
     if parsed.key_min > parsed.key_max or parsed.nonce_min > parsed.nonce_max:
         raise ValueError(f"{prefix} secret bounds are invalid")
     return parsed
+
+
+def _normalize_profile_json(
+    value: object, prefix: str, path: str = "$"
+) -> object:
+    if value is None or type(value) in (bool, str, int):
+        return value
+    if type(value) is float:
+        if not math.isfinite(value):
+            raise ValueError(f"{prefix} number at {path} must be finite")
+        return value
+    if type(value) is list:
+        return [
+            _normalize_profile_json(item, prefix, f"{path}[{index}]")
+            for index, item in enumerate(value)
+        ]
+    if isinstance(value, Mapping):
+        result: dict[str, object] = {}
+        for key, item in value.items():
+            if type(key) is not str:
+                raise TypeError(f"{prefix} member name at {path} must be a string")
+            result[key] = _normalize_profile_json(item, prefix, f"{path}.{key}")
+        return result
+    raise TypeError(f"{prefix} value at {path} is not a strict JSON value")
 
 
 def _mapping(parent: Mapping[str, object], key: str, prefix: str) -> Mapping[str, object]:

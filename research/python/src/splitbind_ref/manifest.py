@@ -6,6 +6,7 @@ import json
 import math
 import re
 from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from typing import Any, Mapping
 from uuid import UUID
 
@@ -276,6 +277,12 @@ def _validate_common(value: Mapping[str, object]) -> None:
         r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z", issued_at
     ):
         raise ValueError("manifest issued_at must be an RFC 3339 UTC timestamp")
+    try:
+        datetime.fromisoformat(issued_at[:-1] + "+00:00")
+    except ValueError as error:
+        raise ValueError(
+            "manifest issued_at must be an RFC 3339 UTC timestamp"
+        ) from error
     _validate_hash("output_sha256", value["output_sha256"])
     for name in ("fingerprint_algorithm", "integrity_algorithm"):
         algorithm = value[name]

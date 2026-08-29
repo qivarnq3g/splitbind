@@ -1,6 +1,8 @@
 import copy
+import hashlib
 import json
 from pathlib import Path
+from types import MappingProxyType
 
 import cv2
 import numpy as np
@@ -8,6 +10,7 @@ import pytest
 
 from splitbind_attack.attacks import AttackCase, apply_attack
 from splitbind_bench.metrics import compute_localization_iou
+from splitbind_ref import integrity as integrity_module
 from splitbind_ref.integrity import embed_integrity, verify_integrity
 
 
@@ -33,6 +36,45 @@ def page():
 @pytest.fixture
 def integrity_context(profile):
     return {"key": b"integrity-test-key-material-32b!", "nonce": b"document-nonce-v1", "profile": profile}
+
+
+def _verify_with_replica_overrides(image, integrity_context, monkeypatch, overrides):
+    real_extract = integrity_module._extract_bits
+    parsed = integrity_module._validate_profile(integrity_context["profile"])
+    regions = integrity_module._regions(image.shape, parsed.region_size)
+    luminance = integrity_module._luminance(image)
+    destination_by_digest = {
+        hashlib.sha256(
+            luminance[y : y + parsed.region_size, x : x + parsed.region_size].tobytes()
+        ).digest(): index
+        for index, (x, y) in enumerate(regions)
+    }
+    assert len(destination_by_digest) == len(regions)
+    partners = integrity_module._partner_regions(
+        len(regions), integrity_context["key"], integrity_context["nonce"], parsed
+    )
+    source_by_replica_destination = tuple(
+        {destination: source for source, destination in enumerate(mapping)}
+        for mapping in partners
+    )
+    replica_by_positions = {
+        positions: replica for replica, positions in enumerate(parsed.coefficient_sets)
+    }
+
+    def controlled_extract(region, positions, delta):
+        actual, confidence = real_extract(region, positions, delta)
+        replica = replica_by_positions[positions]
+        destination = destination_by_digest[hashlib.sha256(region.tobytes()).digest()]
+        source_index = source_by_replica_destination[replica][destination]
+        mode = overrides.get((source_index, replica))
+        if mode == "mismatch":
+            actual = bytes([actual[0] ^ 0x80]) + actual[1:]
+        elif mode == "indeterminate":
+            confidence = 0.0
+        return actual, confidence
+
+    monkeypatch.setattr(integrity_module, "_extract_bits", controlled_extract)
+    return verify_integrity(image, **integrity_context)
 
 
 def test_clean_roundtrip_is_deterministic_and_does_not_mutate_input(
@@ -127,14 +169,84 @@ def test_strong_compression_reports_a_stable_limitation(page, integrity_context)
     assert "integrity.strong_compression" in decision.limitations
 
 
+def test_split_replica_vote_is_indeterminate_instead_of_intact(
+    page, integrity_context, monkeypatch
+):
+    embedded = embed_integrity(page, **integrity_context)
+
+    decision = _verify_with_replica_overrides(
+        embedded.image,
+        integrity_context,
+        monkeypatch,
+        {(0, 0): "mismatch", (0, 1): "indeterminate"},
+    )
+
+    assert decision.suspicious_regions == ()
+    assert decision.evaluated_regions == 16
+    assert decision.score == pytest.approx(15 / 16)
+    assert decision.limitations == ()
+
+
+def test_lost_replica_confidence_remains_in_score_denominator(
+    page, integrity_context, monkeypatch
+):
+    embedded = embed_integrity(page, **integrity_context)
+
+    decision = _verify_with_replica_overrides(
+        embedded.image,
+        integrity_context,
+        monkeypatch,
+        {(0, 0): "indeterminate", (0, 1): "indeterminate"},
+    )
+
+    assert decision.evaluated_regions == 16
+    assert decision.score == pytest.approx(15 / 16)
+    assert decision.limitations == ()
+
+
+def test_exactly_half_indeterminate_regions_report_stable_limitation(
+    page, integrity_context, monkeypatch
+):
+    embedded = embed_integrity(page, **integrity_context)
+    overrides = {
+        (source_index, replica): "indeterminate"
+        for source_index in range(8)
+        for replica in (0, 1)
+    }
+
+    decision = _verify_with_replica_overrides(
+        embedded.image, integrity_context, monkeypatch, overrides
+    )
+
+    assert decision.suspicious_regions == ()
+    assert decision.evaluated_regions == 16
+    assert decision.score == pytest.approx(0.5)
+    assert decision.limitations == ("integrity.indeterminate",)
+
+
 @pytest.mark.parametrize(
     "mutate",
     [
+        lambda value: value.update(schema_version=True),
         lambda value: value.update(status="released-without-measurement"),
         lambda value: value.update(region_size_px=64),
         lambda value: value["content_feature"].update(transform="fft"),
+        lambda value: value["content_feature"].update(quantization_step=512),
+        lambda value: value["content_feature"].update(quantization_step=513.0),
         lambda value: value["content_feature"].update(quantization_step=float("nan")),
+        lambda value: value["content_feature"]["coefficient_positions"][0].__setitem__(1, 4),
+        lambda value: value["partner_mapping"].update(domain="splitbind-integrity-partners-v2"),
+        lambda value: value["partner_mapping"].update(replica_ring_shifts=[1, 2, 5]),
+        lambda value: value["embedding"].update(qim_delta=49.0),
+        lambda value: value["embedding"].update(minimum_replica_votes=1),
+        lambda value: value["embedding"].update(minimum_bit_confidence=0.25),
         lambda value: value["embedding"].update(tag_coefficient_sets=[[1, 1]]),
+        lambda value: value["embedding"]["tag_coefficient_sets"].__setitem__(
+            1, copy.deepcopy(value["embedding"]["tag_coefficient_sets"][0])
+        ),
+        lambda value: value["decision_policy"].update(
+            strong_compression_mismatch_ratio=0.11
+        ),
         lambda value: value.update(unrecognized_material_choice=True),
     ],
 )
@@ -144,6 +256,17 @@ def test_profile_validation_fails_closed(page, profile, mutate):
 
     with pytest.raises((TypeError, ValueError), match="integrity profile"):
         embed_integrity(page, b"integrity-test-key", b"document-nonce", invalid)
+
+
+def test_profile_validation_accepts_a_read_only_mapping(page, profile):
+    embedded = embed_integrity(
+        page,
+        b"integrity-test-key",
+        b"document-nonce",
+        MappingProxyType(profile),
+    )
+
+    assert embedded.embedded_regions == 16
 
 
 @pytest.mark.parametrize(

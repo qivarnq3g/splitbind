@@ -1,5 +1,6 @@
 import json
 import math
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -132,6 +133,22 @@ def test_signing_key_id_must_match_manifest_metadata(internal_manifest):
 
     with pytest.raises(ValueError, match="signing_key_id"):
         signed_manifest_pair(internal_manifest, mismatched)
+
+
+@pytest.mark.parametrize(
+    "issued_at",
+    [
+        "2026-99-99T99:99:99Z",
+        "2026-02-30T12:00:00Z",
+        "2026-08-29T24:00:00Z",
+        "2026-08-29T06:30:60Z",
+    ],
+)
+def test_manifest_rejects_impossible_rfc3339_utc_timestamp(
+    internal_manifest, issued_at
+):
+    with pytest.raises(ValueError, match="issued_at"):
+        replace(internal_manifest, issued_at=issued_at)
 
 
 @pytest.mark.parametrize(
