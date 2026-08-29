@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://splitbind.qivarn.id.vn/contracts/jsonschema/internal-manifest-v1.schema.json",
   "title": "InternalManifestV1",
+  "description": "The exact protected internal payload canonicalized independently with RFC 8785 and signed with a detached Ed25519 signature.",
   "type": "object",
   "additionalProperties": false,
   "x-signature": {
