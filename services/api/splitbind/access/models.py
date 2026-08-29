@@ -104,6 +104,10 @@ class ValidatedOrganizationOwnedModel(OrganizationOwnedModel):
         self.clean()
 
     def save(self, *args, **kwargs) -> None:
+        if self._state.adding:
+            if args or kwargs.get("force_update") or kwargs.get("update_fields") is not None:
+                raise ValueError("adding instance cannot use update-only save flags")
+            kwargs["force_insert"] = True
         self.validate_organization_persistence()
         super().save(*args, **kwargs)
 

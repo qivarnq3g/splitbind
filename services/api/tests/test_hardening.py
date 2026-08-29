@@ -4,6 +4,7 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from splitbind.access.models import (
@@ -265,6 +266,74 @@ def test_deferred_scalar_save_preserves_persisted_organization(tenant_pair):
 
     assert first_upload.organization_id == first.id
     assert first_upload.finalized_at is not None
+
+
+def test_new_instance_with_colliding_primary_key_cannot_overwrite_tenant(tenant_pair):
+    first = tenant_pair["first"]
+    second = tenant_pair["second"]
+    first_recipient = Recipient.objects.create(
+        organization=first,
+        external_reference="first-collision-recipient",
+        display_name="First Collision Recipient",
+    )
+    first_issuance = Issuance.objects.create(
+        organization=first,
+        created_by=tenant_pair["first_user"],
+        document=tenant_pair["first_document"],
+        recipient=first_recipient,
+    )
+    first_job = Job.objects.create(
+        organization=first,
+        kind=JobKind.ISSUANCE,
+        issuance=first_issuance,
+        deadline_at=timezone.now(),
+        correlation_id=uuid.uuid4(),
+    )
+    original = JobResultReceipt.objects.create(
+        message_id=uuid.uuid4(),
+        organization=first,
+        job=first_job,
+    )
+    collision = JobResultReceipt(
+        message_id=original.message_id,
+        organization=second,
+        job=tenant_pair["second_job"],
+        received_at=original.received_at,
+    )
+
+    with transaction.atomic(), pytest.raises(IntegrityError):
+        collision.save()
+
+    original.refresh_from_db()
+    assert original.organization_id == first.id
+    assert original.job_id == first_job.id
+
+
+def test_ordinary_new_instance_save_uses_insert(tenant_pair):
+    recipient = Recipient(
+        organization=tenant_pair["first"],
+        external_reference="ordinary-save-recipient",
+        display_name="Ordinary Save Recipient",
+    )
+
+    recipient.save()
+
+    assert Recipient.objects.get(pk=recipient.pk).organization_id == tenant_pair["first"].id
+
+
+def test_adding_instance_rejects_update_only_save_flags(tenant_pair):
+    recipient = Recipient(
+        organization=tenant_pair["first"],
+        external_reference="forced-update-recipient",
+        display_name="Forced Update Recipient",
+    )
+
+    with pytest.raises(ValueError, match="adding instance"):
+        recipient.save(force_update=True)
+    with pytest.raises(ValueError, match="adding instance"):
+        recipient.save(update_fields=["display_name"])
+
+    assert not Recipient.objects.filter(pk=recipient.pk).exists()
 
 
 def test_bulk_create_materializes_a_generator_once(tenant_pair):
