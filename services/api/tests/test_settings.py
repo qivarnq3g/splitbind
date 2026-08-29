@@ -39,7 +39,9 @@ def test_production_settings_require_tls_and_preserve_allowed_connection_options
         "postgresql://user:password@db.example.test/splitbind?sslmode=disable",
         "postgresql://user:password@db.example.test/splitbind?sslmode=require&sslmode=verify-full",
         "postgresql://user:password@db.example.test/splitbind?sslmode=require&application_name=splitbind",
+        "postgresql://user:password@db.example.test:0/splitbind?sslmode=require",
         "postgresql://user:password@db.example.test:invalid/splitbind?sslmode=require",
+        "postgresql://user:password@db.example.test:65536/splitbind?sslmode=require",
         "postgresql://user:password@db.example.test/splitbind?sslmode=require#fragment",
     ],
 )
@@ -71,3 +73,13 @@ def test_production_settings_reject_host_mismatch_and_legacy_redirect(monkeypatc
             url,
             SPLITBIND_DATABASE_HOST="other.example.test",
         )
+
+
+@pytest.mark.parametrize("port", [1, 65535])
+def test_production_settings_accept_database_port_boundaries(monkeypatch, port):
+    settings = load_production_settings(
+        monkeypatch,
+        f"postgresql://user:password@db.example.test:{port}/splitbind?sslmode=require",
+    )
+
+    assert settings.DATABASES["default"]["PORT"] == str(port)

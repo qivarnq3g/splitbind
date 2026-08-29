@@ -67,14 +67,16 @@ class ValidatedOrganizationQuerySet(models.QuerySet):
         return super().update(**kwargs)
 
     def bulk_create(self, objs, **kwargs):
-        for obj in objs:
+        objects = tuple(objs)
+        for obj in objects:
             obj.validate_organization_persistence()
-        return super().bulk_create(objs, **kwargs)
+        return super().bulk_create(objects, **kwargs)
 
     def bulk_update(self, objs, fields, **kwargs):
-        for obj in objs:
+        objects = tuple(objs)
+        for obj in objects:
             obj.validate_organization_persistence()
-        return super().bulk_update(objs, fields, **kwargs)
+        return super().bulk_update(objects, fields, **kwargs)
 
 
 class ValidatedOrganizationManager(models.Manager.from_queryset(ValidatedOrganizationQuerySet)):
@@ -88,6 +90,17 @@ class ValidatedOrganizationOwnedModel(OrganizationOwnedModel):
         abstract = True
 
     def validate_organization_persistence(self) -> None:
+        if not self._state.adding:
+            try:
+                persisted_organization_id = type(self)._base_manager.only(
+                    "organization_id"
+                ).get(pk=self.pk).organization_id
+            except type(self).DoesNotExist as error:
+                raise ValidationError(
+                    "persisted organization record no longer exists"
+                ) from error
+            if self.organization_id != persisted_organization_id:
+                raise ValidationError("organization cannot be changed after creation")
         self.clean()
 
     def save(self, *args, **kwargs) -> None:

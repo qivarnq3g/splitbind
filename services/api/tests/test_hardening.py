@@ -103,8 +103,10 @@ def tenant_pair(db):
         "first_upload": first_upload,
         "first_user": first_user,
         "second": second,
+        "second_document": second_document,
         "second_job": second_job,
         "second_signing_key": second_signing_key,
+        "second_upload": second_upload,
         "second_user": second_user,
     }
 
@@ -215,6 +217,122 @@ def test_bulk_policy_rejects_tenant_or_relation_mutations_but_allows_state_updat
         UploadRequest.objects.filter(pk=first_upload.pk).update(requested_by=second_user)
 
     assert UploadRequest.objects.filter(pk=first_upload.pk).update(finalized_at=timezone.now()) == 1
+
+
+def test_persisted_organization_is_immutable_on_save(tenant_pair):
+    first = tenant_pair["first"]
+    first_document = tenant_pair["first_document"]
+    first_upload = tenant_pair["first_upload"]
+    first_user = tenant_pair["first_user"]
+    second = tenant_pair["second"]
+    second_document = tenant_pair["second_document"]
+    second_upload = tenant_pair["second_upload"]
+    second_user = tenant_pair["second_user"]
+
+    first_user.organization = second
+    with pytest.raises(ValidationError, match="organization cannot be changed"):
+        first_user.save()
+
+    first_upload.organization = second
+    first_upload.requested_by = second_user
+    with pytest.raises(ValidationError, match="organization cannot be changed"):
+        first_upload.save(update_fields=["organization", "requested_by"])
+
+    first_document.organization = second
+    first_document.created_by = second_user
+    first_document.upload_request = second_upload
+    with pytest.raises(ValidationError, match="organization cannot be changed"):
+        first_document.save(update_fields=["organization", "created_by", "upload_request"])
+
+    first_user.refresh_from_db()
+    first_upload.refresh_from_db()
+    first_document.refresh_from_db()
+    assert first_user.organization_id == first.id
+    assert first_upload.organization_id == first.id
+    assert first_document.organization_id == first.id
+    assert second_document.organization_id == second.id
+
+
+def test_deferred_scalar_save_preserves_persisted_organization(tenant_pair):
+    first = tenant_pair["first"]
+    first_upload = UploadRequest.objects.only("id", "finalized_at").get(
+        pk=tenant_pair["first_upload"].pk
+    )
+
+    first_upload.finalized_at = timezone.now()
+    first_upload.save(update_fields=["finalized_at"])
+    first_upload.refresh_from_db()
+
+    assert first_upload.organization_id == first.id
+    assert first_upload.finalized_at is not None
+
+
+def test_bulk_create_materializes_a_generator_once(tenant_pair):
+    first = tenant_pair["first"]
+    records = (
+        Recipient(
+            organization=first,
+            external_reference=f"bulk-recipient-{number}",
+            display_name=f"Bulk Recipient {number}",
+        )
+        for number in range(2)
+    )
+
+    created = Recipient.objects.bulk_create(records)
+
+    assert len(created) == 2
+    assert Recipient.objects.filter(organization=first, external_reference__startswith="bulk-recipient-").count() == 2
+
+
+def test_bulk_update_materializes_a_generator_once(tenant_pair):
+    first = tenant_pair["first"]
+    recipients = [
+        Recipient.objects.create(
+            organization=first,
+            external_reference=f"update-recipient-{number}",
+            display_name="Before update",
+        )
+        for number in range(2)
+    ]
+    for recipient in recipients:
+        recipient.display_name = "After update"
+
+    updated = Recipient.objects.bulk_update((recipient for recipient in recipients), ["display_name"])
+
+    assert updated == 2
+    assert list(
+        Recipient.objects.filter(pk__in=[recipient.pk for recipient in recipients]).values_list(
+            "display_name", flat=True
+        )
+    ) == ["After update", "After update"]
+
+
+def test_invalid_bulk_generator_fails_before_any_write(tenant_pair):
+    first = tenant_pair["first"]
+    second_user = tenant_pair["second_user"]
+    objects = (
+        UploadRequest(
+            organization=first,
+            requested_by=tenant_pair["first_user"],
+            purpose=UploadPurpose.ISSUANCE,
+            object_key="first/valid-generator.pdf",
+            expires_at=timezone.now(),
+        ),
+        UploadRequest(
+            organization=first,
+            requested_by=second_user,
+            purpose=UploadPurpose.ISSUANCE,
+            object_key="first/invalid-generator.pdf",
+            expires_at=timezone.now(),
+        ),
+    )
+
+    with pytest.raises(ValidationError, match="same organization"):
+        UploadRequest.objects.bulk_create(object_ for object_ in objects)
+
+    assert UploadRequest.objects.filter(
+        object_key__in=["first/valid-generator.pdf", "first/invalid-generator.pdf"]
+    ).count() == 0
 
 
 def test_user_manager_requires_tenant_and_prevents_privilege_conflicts(db):

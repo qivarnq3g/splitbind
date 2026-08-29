@@ -59,6 +59,8 @@ def parse_postgresql_url(database_url: str, neon_host_hint: str | None) -> Postg
         port = parsed.port
     except ValueError as error:
         raise RuntimeError("DATABASE_URL has an invalid PostgreSQL port") from error
+    if port is not None and not 1 <= port <= 65535:
+        raise RuntimeError("DATABASE_URL has an invalid PostgreSQL port")
     if parsed.scheme not in {"postgres", "postgresql"}:
         raise RuntimeError("DATABASE_URL must use the postgresql scheme")
     if parsed.fragment:
@@ -94,6 +96,6 @@ def parse_postgresql_url(database_url: str, neon_host_hint: str | None) -> Postg
         user=user,
         password=password,
         host=host,
-        port=str(port or 5432),
+        port=str(5432 if port is None else port),
         options=options,
     )
