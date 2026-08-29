@@ -12,6 +12,13 @@ def _required_environment(name: str) -> str:
 
 
 SECRET_KEY = _required_environment("DJANGO_SECRET_KEY")
+# Storage is environment-backed. The adapter validates this complete set when
+# direct-upload functionality is initialized, preserving independent database
+# configuration validation during settings import.
+SPLITBIND_STORAGE_ENDPOINT = os.environ.get("SPLITBIND_STORAGE_ENDPOINT", "")
+SPLITBIND_STORAGE_BUCKET = os.environ.get("SPLITBIND_STORAGE_BUCKET", "")
+SPLITBIND_STORAGE_ACCESS_KEY_ID = os.environ.get("SPLITBIND_STORAGE_ACCESS_KEY_ID", "")
+SPLITBIND_STORAGE_SECRET_ACCESS_KEY = os.environ.get("SPLITBIND_STORAGE_SECRET_ACCESS_KEY", "")
 
 if os.environ.get("SPLITBIND_DATABASE_HOST") is not None:
     raise RuntimeError("SPLITBIND_DATABASE_HOST is unsupported; use NEON_DATABASE_HOST only as a matching host hint")
