@@ -14,7 +14,16 @@ import tempfile
 from typing import Iterable, Mapping, Sequence
 from uuid import UUID
 
-from splitbind_bench.runner import Candidate, ExecutionPlan, build_execution_plan
+from splitbind_attack.attacks import AttackCase
+from splitbind_attack.ground_truth import NormalizedRect
+from splitbind_bench.runner import (
+    Candidate,
+    ExecutionPlan,
+    _benchmark_dimensions,
+    _case_context,
+    _remaining_embedded_tiles,
+    build_execution_plan,
+)
 
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -25,6 +34,13 @@ REQUIRED_CORPUS_PAGES = 22
 REQUIRED_CANDIDATES = 48
 REQUIRED_ATTACKS = 31
 REQUIRED_ROWS = 32736
+BASELINE_REQUIREMENTS_VERSION = 1
+REQUIRED_CONTRACT_HASHES = {
+    "corpus_sha256": "e5837cd446ab9c9959ba3fc4b85d205ec9d80e91efc6f801d139810b088a77ef",
+    "profiles_sha256": "d3a8c2ec271c76a2ed424dd52fc5f2760ddd3ef2773663168bbad68e54865e9f",
+    "attack_matrix_sha256": "fb3c485d45df15b5f16f76e888be0c2d443d2433ba35cdb1df06a85881a6d40e",
+}
+REQUIRED_PLAN_SHA256 = "9118eb9424e32400548d7feae4cb5d9c9c827359d9d8b74a6d9e3a9f0d7f71f3"
 _IDENTITY_DOMAIN = b"splitbind-benchmark-identity-v1\x00"
 
 
@@ -98,6 +114,7 @@ class NonPromotableBenchmark(ValueError):
 def eligible_profiles(summary: BenchmarkSummary) -> tuple[ProfileScore, ...]:
     """Return candidates satisfying exact Gate G1, in deterministic rank order."""
 
+    _require_complete_error_free_summary(summary)
     eligible = [
         score
         for score in summary.profiles
@@ -212,6 +229,7 @@ def promote_profile(
     """Release the highest-ranked eligible candidate with canonical JSON bytes."""
 
     output = Path(destination).absolute()
+    _validate_baseline_summary_identity(summary)
     ranked = eligible_profiles(summary)
     if not ranked:
         ensure_release_absent(output)
@@ -246,6 +264,7 @@ def promote_profile(
         },
         "source_contracts": dict(summary.contract_hashes),
         "benchmark": {
+            "baseline_requirements_version": BASELINE_REQUIREMENTS_VERSION,
             "seed": summary.seed,
             "corpus_pages": summary.corpus_pages,
             "candidate_count": summary.candidate_count,
@@ -322,6 +341,7 @@ def write_evaluation_report(
         "## Evidence identity",
         "",
         f"- Seed: `{summary.seed}`.",
+        f"- Baseline requirements version: `{BASELINE_REQUIREMENTS_VERSION}`.",
         f"- Plan: {summary.corpus_pages} corpus pages × {summary.candidate_count} candidates × {summary.attack_count} attacks = {summary.planned_rows:,} unique scheduled rows.",
         f"- Completed rows: {summary.completed_rows:,}; execution errors: {summary.execution_errors}.",
         f"- Run status: `{summary.status}` with {summary.execution_errors} execution errors.",
@@ -335,7 +355,9 @@ def write_evaluation_report(
         "",
         "A candidate passes only with zero false attributions across all 682 scheduled rows; JPEG quality 70 and resize 0.75 each decode at least 95% of their 12 scheduled positive pages; crop 0.25 decodes at least 90% of its geometry-eligible positive pages; and mean clean-watermarked quality across 12 clean watermarked positive pages is at least 38 dB PSNR and 0.95 SSIM.",
         "",
-        "Every positive execution error is a failed detection. Every wrong non-null issuance ID is a false attribution, including negative controls and crop-ineligible rows. PSNR and SSIM use the A4 unsigned dynamic range and one deduplicated pre-attack observation per candidate/page. Processing time is mean attack-and-decode milliseconds per scheduled page row.",
+        "Every positive execution error is a failed detection. Every wrong non-null issuance ID is a false attribution, including negative controls and crop-ineligible rows.",
+        "",
+        "Quality scope is exactly `original_vs_watermarked_before_attack`; the data range is exactly `255` uint8 unsigned intensity levels; and the denominator is exactly 12 unique positive candidate/page pairs. PSNR is measured in dB; SSIM is dimensionless. Processing time is mean attack-and-decode milliseconds per scheduled page row.",
         "",
         "## Candidate results",
         "",
@@ -418,6 +440,26 @@ def _gate_document(score: ProfileScore) -> dict[str, object]:
         "quality_observations": score.quality_observations,
         "mean_psnr_db": {"value": score.mean_psnr_db, "threshold_db": 38.0},
         "mean_ssim": {"value": score.mean_ssim, "threshold": 0.95},
+        "quality": {
+            "population_observations": score.quality_observations,
+            "required_population": 12,
+            "population_denominator": "unique_positive_candidate_page_pairs",
+            "scope": "original_vs_watermarked_before_attack",
+            "data_range": 255,
+            "data_range_units": "uint8_unsigned_intensity_levels",
+            "mean_psnr": {
+                "value": score.mean_psnr_db,
+                "threshold": 38.0,
+                "units": "dB",
+                "denominator_observations": score.quality_observations,
+            },
+            "mean_ssim": {
+                "value": score.mean_ssim,
+                "threshold": 0.95,
+                "units": "dimensionless",
+                "denominator_observations": score.quality_observations,
+            },
+        },
         "processing": {
             "observations": score.processing_observations,
             "mean_attack_and_decode_ms_per_page": score.processing_ms_per_page,
@@ -550,7 +592,8 @@ def _aggregate_one(profile_id: str, rows: Sequence[Mapping[str, object]]) -> Pro
 
 def _decode_counts(rows: Sequence[Mapping[str, object]]) -> tuple[int, int]:
     true = sum(
-        _optional_string(row, "decoded_id") == _required_string(row, "expected_id")
+        _required_string(row, "reason") != "execution_error"
+        and _optional_string(row, "decoded_id") == _required_string(row, "expected_id")
         for row in rows
     )
     return true, len(rows)
@@ -579,6 +622,52 @@ def _validate_required_plan(plan: ExecutionPlan) -> None:
     )
     if actual != required:
         raise ValueError("candidate, corpus, and matrix contracts do not form the exact A4 full plan")
+    hashes = {
+        "corpus_sha256": plan.corpus_contract_sha256,
+        "profiles_sha256": plan.profile_contract_sha256,
+        "attack_matrix_sha256": plan.attack_matrix_sha256,
+    }
+    if hashes != REQUIRED_CONTRACT_HASHES:
+        raise ValueError("runtime contract bytes do not match pinned A5 baseline v1 hashes")
+    if plan.plan_sha256 != REQUIRED_PLAN_SHA256:
+        raise ValueError("runtime plan does not match pinned A5 baseline v1 plan SHA-256")
+
+
+def _require_complete_error_free_summary(summary: BenchmarkSummary) -> None:
+    if summary.status != "complete":
+        if summary.execution_errors:
+            raise NonPromotableBenchmark(summary)
+        raise ValueError("promotion requires benchmark status exactly complete")
+    if summary.execution_errors != 0:
+        raise NonPromotableBenchmark(summary)
+
+
+def _validate_baseline_summary_identity(summary: BenchmarkSummary) -> None:
+    _require_complete_error_free_summary(summary)
+    actual = (
+        summary.schema_version,
+        summary.seed,
+        summary.corpus_pages,
+        summary.candidate_count,
+        summary.attack_count,
+        summary.planned_rows,
+        summary.completed_rows,
+    )
+    required = (
+        1,
+        REQUIRED_SEED,
+        REQUIRED_CORPUS_PAGES,
+        REQUIRED_CANDIDATES,
+        REQUIRED_ATTACKS,
+        REQUIRED_ROWS,
+        REQUIRED_ROWS,
+    )
+    if actual != required:
+        raise ValueError("benchmark summary is not the exact A5 baseline v1 population")
+    if dict(summary.contract_hashes) != REQUIRED_CONTRACT_HASHES:
+        raise ValueError("benchmark summary does not identify pinned A5 baseline v1 contracts")
+    if summary.plan_sha256 != REQUIRED_PLAN_SHA256:
+        raise ValueError("benchmark summary does not identify the pinned A5 baseline v1 plan")
 
 
 def _validate_summary_document(document: Mapping[str, object], plan: ExecutionPlan) -> None:
@@ -621,6 +710,7 @@ def _validate_rows(rows: Sequence[Mapping[str, object]], plan: ExecutionPlan) ->
     candidates = {candidate.profile_sha256: candidate for candidate in plan.candidates}
     sources = {source.fixture_id: source for source in plan.sources}
     attacks = {attack.case_id: attack for attack in plan.attacks}
+    canvas_width, canvas_height = _benchmark_dimensions(plan.candidates)
     expected_keys = {
         (source.fixture_id, page_index, candidate.profile_sha256, attack.case_id)
         for source in plan.sources
@@ -658,6 +748,14 @@ def _validate_rows(rows: Sequence[Mapping[str, object]], plan: ExecutionPlan) ->
             expected_issuance = None
         if _optional_string(row, "expected_id") != expected_issuance:
             raise ValueError(f"ground-truth issuance identity mismatch at row {ordinal}")
+        _validate_geometry_eligibility(
+            row,
+            plan,
+            candidate,
+            source.kind,
+            attack,
+            (canvas_height, canvas_width),
+        )
     if observed_keys != expected_keys:
         raise ValueError("benchmark results contain missing scheduled rows")
 
@@ -696,6 +794,83 @@ def _validate_row_provenance(
         raise ValueError("result row has invalid decode reason")
 
 
+def _validate_geometry_eligibility(
+    row: Mapping[str, object],
+    plan: ExecutionPlan,
+    candidate: Candidate,
+    fixture_kind: str,
+    attack: AttackCase,
+    page_shape: tuple[int, int],
+) -> None:
+    expected: tuple[bool, int | None, str] = (True, None, "eligible")
+    reason = _required_string(row, "reason")
+    crop = _crop_operation(attack)
+    if (
+        fixture_kind != "negative_external"
+        and reason != "execution_error"
+        and crop is not None
+    ):
+        fraction = float(crop.parameters["fraction"])
+        height, width = page_shape
+        side_scale = math.sqrt(1.0 - fraction)
+        retained_width = max(1, round(width * side_scale))
+        retained_height = max(1, round(height * side_scale))
+        x0 = (width - retained_width) // 2
+        y0 = (height - retained_height) // 2
+        retained = NormalizedRect(
+            x=x0 / width,
+            y=y0 / height,
+            width=retained_width / width,
+            height=retained_height / height,
+        )
+        page_index = _required_integer(row, "page_index")
+        _, key, nonce = _case_context(
+            plan.seed,
+            _required_string(row, "fixture_id"),
+            page_index,
+            candidate.profile_sha256,
+        )
+        profile = {
+            "schema_version": 1,
+            **candidate.values,
+            "document_nonce": nonce,
+            "page_index": page_index,
+        }
+        remaining = _remaining_embedded_tiles(page_shape, key, profile, retained)
+        eligible = remaining >= 2
+        expected = (
+            eligible,
+            remaining,
+            "at_least_two_complete_embedded_tiles_remain"
+            if eligible
+            else "fewer_than_two_complete_embedded_tiles_remain",
+        )
+    actual_remaining = row.get("remaining_embedded_tiles")
+    if actual_remaining is not None and (
+        isinstance(actual_remaining, bool)
+        or not isinstance(actual_remaining, int)
+        or actual_remaining < 0
+    ):
+        raise ValueError("remaining_embedded_tiles must be null or a non-negative integer")
+    actual = (
+        _required_bool(row, "eligible"),
+        actual_remaining,
+        _required_string(row, "eligibility_reason"),
+    )
+    if actual != expected:
+        raise ValueError("result row eligibility and remaining-tile geometry mismatch")
+
+
+def _crop_operation(attack: AttackCase) -> AttackCase | None:
+    if attack.kind == "crop":
+        return attack
+    for operation in attack.operations:
+        nested = _crop_operation(operation)
+        if nested is not None:
+            return nested
+    return None
+
+
 def _candidate_id(candidate: Candidate) -> str:
     values = candidate.values
     return (
@@ -727,11 +902,24 @@ def _expected_issuance(seed: int, fixture_id: str, page_index: int, profile_id: 
 
 def _decode_json_object(content: bytes, label: str) -> Mapping[str, object]:
     try:
-        value = json.loads(content, parse_constant=lambda token: (_ for _ in ()).throw(ValueError(token)))
+        value = json.loads(
+            content,
+            parse_constant=lambda token: (_ for _ in ()).throw(ValueError(token)),
+            object_pairs_hook=_unique_json_object,
+        )
     except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
         raise ValueError(f"{label} is not strict JSON") from error
     if not isinstance(value, Mapping):
         raise ValueError(f"{label} must be an object")
+    return value
+
+
+def _unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    value: dict[str, object] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError(f"duplicate JSON object key: {key}")
+        value[key] = item
     return value
 
 

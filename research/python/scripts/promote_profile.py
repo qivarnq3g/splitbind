@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import json
+import os
 from pathlib import Path
 import sys
+import tempfile
 
 
 PYTHON_PROJECT = Path(__file__).resolve().parents[1]
@@ -38,20 +41,39 @@ def main(argv: list[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
     try:
         summary = load_benchmark_summary(arguments.summary, arguments.candidates)
-        released = promote_profile(summary, arguments.candidates, arguments.output)
     except NonPromotableBenchmark as error:
-        ensure_release_absent(arguments.output)
-        write_evaluation_report(error.evidence, arguments.report, None)
+        if not _record_failed_promotion(error.evidence, arguments.output, arguments.report):
+            return 2
         print(str(error), file=sys.stderr)
         return 4
+    except (OSError, TypeError, ValueError) as error:
+        _remove_failed_release(arguments.output)
+        print(f"promotion rejected: {error}", file=sys.stderr)
+        return 2
+    output = arguments.output.absolute()
+    try:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=f".{output.name}.", dir=output.parent) as scope:
+            staged_path = Path(scope) / output.name
+            staged = promote_profile(summary, arguments.candidates, staged_path)
+            released = replace(staged, destination=output)
+            _preflight_release(staged_path, output)
+            write_evaluation_report(summary, arguments.report, released)
+            _publish_staged_release(staged_path, output)
     except NoEligibleProfile as error:
-        write_evaluation_report(summary, arguments.report, None)
+        _remove_failed_release(output)
+        try:
+            write_evaluation_report(summary, arguments.report, None)
+        except (OSError, TypeError, ValueError) as report_error:
+            print(f"promotion rejected: {report_error}", file=sys.stderr)
+            return 2
         print(str(error), file=sys.stderr)
         return 3
     except (OSError, TypeError, ValueError) as error:
+        _remove_failed_release(output)
+        _remove_failed_report(arguments.report)
         print(f"promotion rejected: {error}", file=sys.stderr)
         return 2
-    write_evaluation_report(summary, arguments.report, released)
     print(
         json.dumps(
             {
@@ -65,6 +87,51 @@ def main(argv: list[str] | None = None) -> int:
         )
     )
     return 0
+
+
+def _record_failed_promotion(summary, output: Path, report: Path) -> bool:
+    _remove_failed_release(output)
+    try:
+        write_evaluation_report(summary, report, None)
+    except (OSError, TypeError, ValueError) as error:
+        _remove_failed_release(output)
+        print(f"promotion rejected: {error}", file=sys.stderr)
+        return False
+    return True
+
+
+def _remove_failed_release(output: Path) -> None:
+    try:
+        ensure_release_absent(output)
+    except (OSError, TypeError, ValueError) as error:
+        print(f"unable to remove exact release destination: {error}", file=sys.stderr)
+
+
+def _remove_failed_report(report: Path) -> None:
+    destination = report.absolute()
+    if destination.exists() or destination.is_symlink():
+        if destination.is_file() or destination.is_symlink():
+            destination.unlink()
+
+
+def _preflight_release(staged: Path, output: Path) -> None:
+    if output.is_symlink():
+        raise FileExistsError("release destination is a symlink")
+    if output.exists():
+        if not output.is_file():
+            raise IsADirectoryError(f"release destination is not a file: {output}")
+        if output.read_bytes() != staged.read_bytes():
+            raise FileExistsError(
+                "release destination already exists with different bytes; use an explicit new version"
+            )
+
+
+def _publish_staged_release(staged: Path, output: Path) -> None:
+    _preflight_release(staged, output)
+    if output.exists():
+        staged.unlink()
+    else:
+        os.replace(staged, output)
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ This report reaggregates the complete row-level benchmark evidence. It does not 
 ## Evidence identity
 
 - Seed: `20260827`.
+- Baseline requirements version: `1`.
 - Plan: 22 corpus pages × 48 candidates × 31 attacks = 32,736 unique scheduled rows.
 - Completed rows: 32,736; execution errors: 1488.
 - Run status: `complete_with_errors` with 1488 execution errors.
@@ -20,7 +21,9 @@ This report reaggregates the complete row-level benchmark evidence. It does not 
 
 A candidate passes only with zero false attributions across all 682 scheduled rows; JPEG quality 70 and resize 0.75 each decode at least 95% of their 12 scheduled positive pages; crop 0.25 decodes at least 90% of its geometry-eligible positive pages; and mean clean-watermarked quality across 12 clean watermarked positive pages is at least 38 dB PSNR and 0.95 SSIM.
 
-Every positive execution error is a failed detection. Every wrong non-null issuance ID is a false attribution, including negative controls and crop-ineligible rows. PSNR and SSIM use the A4 unsigned dynamic range and one deduplicated pre-attack observation per candidate/page. Processing time is mean attack-and-decode milliseconds per scheduled page row.
+Every positive execution error is a failed detection. Every wrong non-null issuance ID is a false attribution, including negative controls and crop-ineligible rows.
+
+Quality scope is exactly `original_vs_watermarked_before_attack`; the data range is exactly `255` uint8 unsigned intensity levels; and the denominator is exactly 12 unique positive candidate/page pairs. PSNR is measured in dB; SSIM is dimensionless. Processing time is mean attack-and-decode milliseconds per scheduled page row.
 
 ## Candidate results
 
