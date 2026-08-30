@@ -5,7 +5,9 @@ import { JOB_LABELS, useJob } from "../features/jobs/useJob";
 export function JobDetailPage() {
   const { id } = useParams();
   const location = useLocation();
-  const issuanceId = (location.state as { issuanceId?: string } | null)?.issuanceId;
+  const workflowState = location.state as { issuanceId?: string; verificationId?: string } | null;
+  const issuanceId = workflowState?.issuanceId;
+  const verificationId = workflowState?.verificationId;
   const job = useJob(id ?? null);
 
   return (
@@ -35,6 +37,9 @@ export function JobDetailPage() {
           {job.data.safe_error_code ? <p className="form-error" role="alert">Mã lỗi an toàn: {job.data.safe_error_code}</p> : null}
           {(issuanceId ?? job.data.issuance_id) ? (
             <Link className="button button-secondary" to={`/issuances/${issuanceId ?? job.data.issuance_id}`}>Mở hồ sơ cấp phát</Link>
+          ) : null}
+          {(verificationId ?? job.data.verification_id) ? (
+            <Link className="button button-secondary" to={`/verifications/${verificationId ?? job.data.verification_id}`}>Mở hồ sơ kiểm chứng</Link>
           ) : null}
         </section>
       ) : null}

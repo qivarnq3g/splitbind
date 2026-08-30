@@ -1,10 +1,17 @@
 import { Navigate, NavLink, Outlet, RouteObject, createBrowserRouter, useLocation } from "react-router-dom";
 
-import { canCreateIssuance, useLogout, useSession } from "../features/auth/session";
+import { canCreateIssuance, canCreateVerification, useLogout, useSession } from "../features/auth/session";
 import { IssueDocumentPage } from "../pages/IssueDocumentPage";
 import { IssuanceDetailPage } from "../pages/IssuanceDetailPage";
 import { JobDetailPage } from "../pages/JobDetailPage";
 import { LoginPage } from "../pages/LoginPage";
+import { VerificationDetailPage } from "../pages/VerificationDetailPage";
+import { VerifyDocumentPage } from "../pages/VerifyDocumentPage";
+
+function RoleHome() {
+  const session = useSession();
+  return <Navigate to={canCreateVerification(session.data?.user?.role) ? "/verify" : "/issue"} replace />;
+}
 
 function SessionBoundary() {
   const session = useSession();
@@ -24,9 +31,11 @@ function AppShell() {
   return (
     <div className="app-shell">
       <nav className="side-rail" aria-label="Điều hướng chính">
-        <NavLink className="side-brand" to="/issue" aria-label="SplitBind — trang cấp phát">SplitBind</NavLink>
+        <NavLink className="side-brand" to={canCreateVerification(user?.role) ? "/verify" : "/issue"} aria-label="SplitBind — trang làm việc">SplitBind</NavLink>
         <div className="rail-links">
-          {canCreateIssuance(user?.role) ? <NavLink to="/issue">Cấp phát</NavLink> : <span>Chỉ đọc</span>}
+          {canCreateIssuance(user?.role) ? <NavLink to="/issue">Cấp phát</NavLink> : null}
+          {canCreateVerification(user?.role) ? <NavLink to="/verify">Xác minh</NavLink> : null}
+          {!canCreateIssuance(user?.role) && !canCreateVerification(user?.role) ? <span>Chỉ đọc</span> : null}
         </div>
         {user ? (
           <button className="rail-account" type="button" onClick={() => logout.mutate()} disabled={logout.isPending}>
@@ -52,10 +61,12 @@ export const appRoutes: RouteObject[] = [
       {
         element: <SessionBoundary />,
         children: [
-          { index: true, element: <Navigate to="/issue" replace /> },
+          { index: true, element: <RoleHome /> },
           { path: "/issue", element: <IssueDocumentPage /> },
+          { path: "/verify", element: <VerifyDocumentPage /> },
           { path: "/jobs/:id", element: <JobDetailPage /> },
           { path: "/issuances/:id", element: <IssuanceDetailPage /> },
+          { path: "/verifications/:id", element: <VerificationDetailPage /> },
         ],
       },
       { path: "*", element: <Navigate to="/" replace /> },

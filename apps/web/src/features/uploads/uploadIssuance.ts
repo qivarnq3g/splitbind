@@ -26,8 +26,9 @@ export async function sha256(file: File): Promise<string> {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export async function uploadIssuancePdf(
+export async function uploadPdf(
   file: File,
+  kind: "issuance_input" | "verification_input",
   onStage: (stage: UploadStage) => void,
   signal?: AbortSignal,
 ): Promise<UploadReady> {
@@ -38,7 +39,7 @@ export async function uploadIssuancePdf(
   onStage("intent");
   const intentResult = await api.POST("/api/v1/uploads", {
     body: {
-      kind: "issuance_input",
+      kind,
       filename: file.name,
       content_type: file.type || "application/pdf",
       size_bytes: file.size,
@@ -72,4 +73,20 @@ export async function uploadIssuancePdf(
     throw new SafeApiError(safeApiMessage(completeResult.response.status, completeResult.error));
   }
   return { uploadId: completeResult.data.id, sha256: checksum };
+}
+
+export function uploadIssuancePdf(
+  file: File,
+  onStage: (stage: UploadStage) => void,
+  signal?: AbortSignal,
+): Promise<UploadReady> {
+  return uploadPdf(file, "issuance_input", onStage, signal);
+}
+
+export function uploadVerificationPdf(
+  file: File,
+  onStage: (stage: UploadStage) => void,
+  signal?: AbortSignal,
+): Promise<UploadReady> {
+  return uploadPdf(file, "verification_input", onStage, signal);
 }

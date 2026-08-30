@@ -46,3 +46,11 @@ export function useLogout() {
 export function canCreateIssuance(role: string | undefined): boolean {
   return role === "administrator" || role === "issuer";
 }
+
+export function canCreateVerification(role: string | undefined): boolean {
+  return role === "verifier";
+}
+
+export function canViewVerification(role: string | undefined): boolean {
+  return role === "administrator" || role === "auditor" || role === "verifier";
+}
