@@ -13,6 +13,7 @@ from splitbind.access.permissions import IsAdministratorOrAuditor
 from splitbind.access.serializers import LoginSerializer, serialize_session_user
 from splitbind.audit.models import AuditEvent, AuditOutcome
 from splitbind.audit.services import record_event
+from splitbind.openapi import audit_list_schema, login_schema, logout_schema, session_schema
 
 
 def session_payload(request) -> dict[str, object]:
@@ -28,6 +29,7 @@ def session_payload(request) -> dict[str, object]:
 class SessionView(APIView):
     permission_classes = [AllowAny]
 
+    @session_schema
     def get(self, request):
         return Response(session_payload(request))
 
@@ -36,6 +38,7 @@ class SessionView(APIView):
 class LoginView(APIView):
     permission_classes = [AllowAny]
 
+    @login_schema
     def post(self, request):
         serializer = LoginSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
@@ -56,6 +59,7 @@ class LoginView(APIView):
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @logout_schema
     def post(self, request):
         user = request.user
         record_event(
@@ -73,6 +77,7 @@ class LogoutView(APIView):
 class AuditEventListView(APIView):
     permission_classes = [IsAuthenticated, IsAdministratorOrAuditor]
 
+    @audit_list_schema
     def get(self, request):
         events = AuditEvent.objects.filter(organization_id=request.user.organization_id).order_by(
             "-created_at", "-id"

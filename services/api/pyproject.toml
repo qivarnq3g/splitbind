@@ -12,6 +12,7 @@ dependencies = [
     "cryptography==50.0.1",
     "Django==5.2.17",
     "djangorestframework==3.18.0",
+    "drf-spectacular==0.29.0",
     "jsonschema==4.26.0",
     "rfc3339-validator==0.1.4",
     "rfc8785==0.1.4",

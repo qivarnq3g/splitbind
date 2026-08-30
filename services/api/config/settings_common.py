@@ -21,6 +21,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "drf_spectacular",
     "splitbind.access.apps.AccessConfig",
     "splitbind.uploads.apps.UploadsConfig",
     "splitbind.documents.apps.DocumentsConfig",
@@ -91,10 +92,35 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_THROTTLE_RATES": {
         "account": os.environ.get("ACCOUNT_THROTTLE_RATE", "60/min"),
         "source_ip": os.environ.get("SOURCE_IP_THROTTLE_RATE", "120/min"),
         "issuance_job": os.environ.get("ISSUANCE_THROTTLE_RATE", "10/hour"),
         "verification_job": os.environ.get("VERIFICATION_THROTTLE_RATE", "10/hour"),
+    },
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "SplitBind API",
+    "DESCRIPTION": "Browser-facing SplitBind control-plane contract.",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
+    "ENUM_ADD_EXPLICIT_BLANK_NULL_CHOICE": False,
+    "ENUM_NAME_OVERRIDES": {
+        "RoleEnum": ["administrator", "issuer", "verifier", "auditor"],
+        "JobStatusEnum": [
+            "created", "queued", "processing", "retryable_failed",
+            "succeeded", "failed", "dead_lettered", "cancelled",
+        ],
+        "VerificationStatusEnum": [
+            "VERIFIED_INTACT", "SOURCE_IDENTIFIED_MODIFIED", "PARTIAL_EVIDENCE",
+            "NO_WATERMARK", "INVALID_MANIFEST", "PROCESSING_FAILED",
+        ],
+        "JobKindEnum": ["issuance", "verification"],
+        "HealthStatusEnum": ["ok"],
+        "ReadinessStatusEnum": ["ready", "not_ready"],
+        "ComponentStatusEnum": ["up", "down"],
     },
 }

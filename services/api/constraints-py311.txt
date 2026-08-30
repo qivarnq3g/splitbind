@@ -8,6 +8,8 @@ cffi==2.1.1
 colorama==0.4.6
 cryptography==50.0.1
 djangorestframework==3.18.0
+drf-spectacular==0.29.0
+inflection==0.5.1
 iniconfig==2.3.0
 jmespath==1.1.0
 jsonschema==4.26.0
@@ -18,6 +20,7 @@ psycopg==3.3.4
 psycopg-binary==3.3.4
 pycparser==3.0
 Pygments==2.21.0
+PyYAML==6.0.3
 pytest==9.1.1
 pytest-django==4.14.0
 python-dateutil==2.9.0.post0
@@ -30,4 +33,5 @@ six==1.17.0
 sqlparse==0.6.0
 typing_extensions==4.16.0
 tzdata==2026.3
+uritemplate==4.2.0
 urllib3==2.7.0

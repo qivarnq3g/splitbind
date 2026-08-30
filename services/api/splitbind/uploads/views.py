@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 
 from splitbind.access.throttles import AccountRateThrottle, SourceIPRateThrottle
 from splitbind.integrations.storage.base import UploadRejected
+from splitbind.openapi import upload_complete_schema, upload_intent_schema
 from splitbind.uploads.serializers import UploadCompleteSerializer, UploadIntentSerializer, serialize_upload
 from splitbind.uploads.services import complete_upload, create_upload, record_serializer_denial
 
@@ -16,6 +17,7 @@ class UploadIntentView(APIView):
     permission_classes = [IsAuthenticated]
     throttle_classes = [AccountRateThrottle, SourceIPRateThrottle]
 
+    @upload_intent_schema
     def post(self, request):
         serializer = UploadIntentSerializer(data=request.data)
         if not serializer.is_valid():
@@ -37,13 +39,14 @@ class UploadCompleteView(APIView):
     permission_classes = [IsAuthenticated]
     throttle_classes = [AccountRateThrottle, SourceIPRateThrottle]
 
-    def post(self, request, upload_id):
+    @upload_complete_schema
+    def post(self, request, id):
         serializer = UploadCompleteSerializer(data=request.data)
         if not serializer.is_valid():
             record_serializer_denial(request.user, action="upload.complete.denied", errors=serializer.errors)
             return Response(serializer.errors, status=400)
         try:
-            upload = complete_upload(request.user, upload_id=upload_id, **serializer.validated_data)
+            upload = complete_upload(request.user, upload_id=id, **serializer.validated_data)
         except UploadRejected as error:
             if str(error) == "UPLOAD_NOT_FOUND":
                 raise Http404

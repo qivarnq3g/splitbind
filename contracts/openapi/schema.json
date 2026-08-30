@@ -1,0 +1,1711 @@
+{
+    "openapi": "3.0.3",
+    "info": {
+        "title": "SplitBind API",
+        "version": "1.0.0",
+        "description": "Browser-facing SplitBind control-plane contract."
+    },
+    "paths": {
+        "/api/v1/audit-events": {
+            "get": {
+                "operationId": "audit_event_list",
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AuditEventList"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Authentication, permission, or CSRF denied."
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/login": {
+            "post": {
+                "operationId": "auth_login",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "X-CSRFToken",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Decoded csrftoken cookie value required by Django on unsafe requests.",
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/LoginRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/LoginRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/LoginRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SessionResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "description": "Request validation failed."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Authentication, permission, or CSRF denied."
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/logout": {
+            "post": {
+                "operationId": "auth_logout",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "X-CSRFToken",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Decoded csrftoken cookie value required by Django on unsafe requests.",
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SessionResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Authentication, permission, or CSRF denied."
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/session": {
+            "get": {
+                "operationId": "auth_session",
+                "tags": [
+                    "api"
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SessionResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/issuances": {
+            "post": {
+                "operationId": "issuance_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "X-CSRFToken",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Decoded csrftoken cookie value required by Django on unsafe requests.",
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/IssuanceCreateRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/IssuanceCreateRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/IssuanceCreateRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Issuance"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "oneOf": [
+                                        {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "$ref": "#/components/schemas/CodeError"
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        "description": "Validation or safe workflow error."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Authentication, permission, or CSRF denied."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Resource not found in the caller's scope."
+                    },
+                    "409": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CodeError"
+                                }
+                            }
+                        },
+                        "description": "Workflow state or idempotency conflict."
+                    },
+                    "429": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Request throttled."
+                    }
+                }
+            }
+        },
+        "/api/v1/issuances/{id}": {
+            "get": {
+                "operationId": "issuance_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Issuance"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Authentication, permission, or CSRF denied."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Resource not found in the caller's scope."
+                    }
+                }
+            }
+        },
+        "/api/v1/jobs/{id}": {
+            "get": {
+                "operationId": "job_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Job"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Authentication, permission, or CSRF denied."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Resource not found in the caller's scope."
+                    }
+                }
+            }
+        },
+        "/api/v1/jobs/{id}/cancel": {
+            "post": {
+                "operationId": "job_cancel",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "X-CSRFToken",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Decoded csrftoken cookie value required by Django on unsafe requests.",
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CancelJobRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CancelJobRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CancelJobRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Job"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "description": "Request validation failed."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Authentication, permission, or CSRF denied."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Resource not found in the caller's scope."
+                    },
+                    "409": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CodeError"
+                                }
+                            }
+                        },
+                        "description": "Workflow state or idempotency conflict."
+                    },
+                    "429": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Request throttled."
+                    }
+                }
+            }
+        },
+        "/api/v1/uploads": {
+            "post": {
+                "operationId": "upload_intent_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "X-CSRFToken",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Decoded csrftoken cookie value required by Django on unsafe requests.",
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UploadIntentRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UploadIntentRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UploadIntentRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UploadIntent"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "oneOf": [
+                                        {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "$ref": "#/components/schemas/CodeError"
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        "description": "Validation or safe upload error."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "oneOf": [
+                                        {
+                                            "$ref": "#/components/schemas/DetailError"
+                                        },
+                                        {
+                                            "$ref": "#/components/schemas/CodeError"
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        "description": "Authentication, permission, CSRF, or upload policy denied."
+                    },
+                    "429": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Request throttled."
+                    },
+                    "503": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CodeError"
+                                }
+                            }
+                        },
+                        "description": "Object storage is unavailable."
+                    }
+                }
+            }
+        },
+        "/api/v1/uploads/{id}/complete": {
+            "post": {
+                "operationId": "upload_complete",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "X-CSRFToken",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Decoded csrftoken cookie value required by Django on unsafe requests.",
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UploadCompleteRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UploadCompleteRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UploadCompleteRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Upload"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "oneOf": [
+                                        {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "$ref": "#/components/schemas/CodeError"
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        "description": "Validation or safe upload error."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Authentication, permission, or CSRF denied."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Resource not found in the caller's scope."
+                    },
+                    "429": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Request throttled."
+                    },
+                    "503": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CodeError"
+                                }
+                            }
+                        },
+                        "description": "Object storage is unavailable."
+                    }
+                }
+            }
+        },
+        "/api/v1/verifications": {
+            "post": {
+                "operationId": "verification_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "X-CSRFToken",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Decoded csrftoken cookie value required by Django on unsafe requests.",
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VerificationCreateRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VerificationCreateRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VerificationCreateRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Verification"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "oneOf": [
+                                        {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "$ref": "#/components/schemas/CodeError"
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        "description": "Validation or safe workflow error."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Authentication, permission, or CSRF denied."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Resource not found in the caller's scope."
+                    },
+                    "409": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CodeError"
+                                }
+                            }
+                        },
+                        "description": "Workflow state or idempotency conflict."
+                    },
+                    "429": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Request throttled."
+                    }
+                }
+            }
+        },
+        "/api/v1/verifications/{id}": {
+            "get": {
+                "operationId": "verification_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Verification"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Authentication, permission, or CSRF denied."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Resource not found in the caller's scope."
+                    }
+                }
+            }
+        },
+        "/health/live": {
+            "get": {
+                "operationId": "health_live",
+                "tags": [
+                    "health"
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Live"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/health/ready": {
+            "get": {
+                "operationId": "health_ready",
+                "tags": [
+                    "health"
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Readiness"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "503": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Readiness"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "AuditEvent": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "actor_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "nullable": true
+                    },
+                    "action": {
+                        "type": "string"
+                    },
+                    "target_type": {
+                        "type": "string"
+                    },
+                    "target_id": {
+                        "type": "string"
+                    },
+                    "correlation_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "outcome": {
+                        "type": "string"
+                    },
+                    "metadata": {},
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                },
+                "required": [
+                    "action",
+                    "actor_id",
+                    "correlation_id",
+                    "created_at",
+                    "id",
+                    "metadata",
+                    "outcome",
+                    "target_id",
+                    "target_type"
+                ]
+            },
+            "AuditEventList": {
+                "type": "object",
+                "properties": {
+                    "results": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/AuditEvent"
+                        }
+                    }
+                },
+                "required": [
+                    "results"
+                ]
+            },
+            "CancelJobRequest": {
+                "type": "object",
+                "properties": {
+                    "correlation_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    }
+                },
+                "required": [
+                    "correlation_id"
+                ]
+            },
+            "CodeError": {
+                "type": "object",
+                "properties": {
+                    "code": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "code"
+                ]
+            },
+            "DetailError": {
+                "type": "object",
+                "properties": {
+                    "detail": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "detail"
+                ]
+            },
+            "HealthStatusEnum": {
+                "enum": [
+                    "ok"
+                ],
+                "type": "string",
+                "description": "* `ok` - ok"
+            },
+            "Issuance": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "job_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "nullable": true
+                    },
+                    "status": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/JobStatusEnum"
+                            }
+                        ],
+                        "nullable": true
+                    },
+                    "issued_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                },
+                "required": [
+                    "id",
+                    "issued_at",
+                    "job_id",
+                    "status"
+                ]
+            },
+            "IssuanceCreateRequest": {
+                "type": "object",
+                "properties": {
+                    "recipient_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "upload_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "correlation_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    }
+                },
+                "required": [
+                    "correlation_id",
+                    "recipient_id",
+                    "upload_id"
+                ]
+            },
+            "Job": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "kind": {
+                        "$ref": "#/components/schemas/JobKindEnum"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/JobStatusEnum"
+                    },
+                    "attempt": {
+                        "type": "integer",
+                        "maximum": 2,
+                        "minimum": 0
+                    },
+                    "issuance_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "nullable": true
+                    },
+                    "verification_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "nullable": true
+                    },
+                    "deadline_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "cancel_requested_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "safe_error_code": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                },
+                "required": [
+                    "attempt",
+                    "cancel_requested_at",
+                    "created_at",
+                    "deadline_at",
+                    "id",
+                    "issuance_id",
+                    "kind",
+                    "safe_error_code",
+                    "status",
+                    "updated_at",
+                    "verification_id"
+                ]
+            },
+            "JobKindEnum": {
+                "enum": [
+                    "issuance",
+                    "verification"
+                ],
+                "type": "string",
+                "description": "* `issuance` - issuance\n* `verification` - verification"
+            },
+            "JobStatusEnum": {
+                "enum": [
+                    "created",
+                    "queued",
+                    "processing",
+                    "retryable_failed",
+                    "succeeded",
+                    "failed",
+                    "dead_lettered",
+                    "cancelled"
+                ],
+                "type": "string",
+                "description": "* `created` - created\n* `queued` - queued\n* `processing` - processing\n* `retryable_failed` - retryable_failed\n* `succeeded` - succeeded\n* `failed` - failed\n* `dead_lettered` - dead_lettered\n* `cancelled` - cancelled"
+            },
+            "Live": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "$ref": "#/components/schemas/HealthStatusEnum"
+                    }
+                },
+                "required": [
+                    "status"
+                ]
+            },
+            "LoginRequest": {
+                "type": "object",
+                "properties": {
+                    "username": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 150
+                    },
+                    "password": {
+                        "type": "string",
+                        "writeOnly": true,
+                        "minLength": 1,
+                        "maxLength": 256
+                    }
+                },
+                "required": [
+                    "password",
+                    "username"
+                ]
+            },
+            "Readiness": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "$ref": "#/components/schemas/ReadinessStatusEnum"
+                    },
+                    "components": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "enum": [
+                                "up",
+                                "down"
+                            ],
+                            "type": "string",
+                            "description": "* `up` - up\n* `down` - down"
+                        }
+                    }
+                },
+                "required": [
+                    "components",
+                    "status"
+                ]
+            },
+            "ReadinessStatusEnum": {
+                "enum": [
+                    "ready",
+                    "not_ready"
+                ],
+                "type": "string",
+                "description": "* `ready` - ready\n* `not_ready` - not_ready"
+            },
+            "RoleEnum": {
+                "enum": [
+                    "administrator",
+                    "issuer",
+                    "verifier",
+                    "auditor"
+                ],
+                "type": "string",
+                "description": "* `administrator` - administrator\n* `issuer` - issuer\n* `verifier` - verifier\n* `auditor` - auditor"
+            },
+            "SessionResponse": {
+                "type": "object",
+                "properties": {
+                    "authenticated": {
+                        "type": "boolean"
+                    },
+                    "csrf_token": {
+                        "type": "string"
+                    },
+                    "user": {
+                        "$ref": "#/components/schemas/SessionUser"
+                    }
+                },
+                "required": [
+                    "authenticated",
+                    "csrf_token"
+                ]
+            },
+            "SessionUser": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "username": {
+                        "type": "string"
+                    },
+                    "role": {
+                        "$ref": "#/components/schemas/RoleEnum"
+                    },
+                    "organization_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    }
+                },
+                "required": [
+                    "id",
+                    "organization_id",
+                    "role",
+                    "username"
+                ]
+            },
+            "SuspiciousRegion": {
+                "type": "object",
+                "properties": {
+                    "x": {
+                        "type": "number",
+                        "format": "double",
+                        "maximum": 1,
+                        "minimum": 0
+                    },
+                    "y": {
+                        "type": "number",
+                        "format": "double",
+                        "maximum": 1,
+                        "minimum": 0
+                    },
+                    "width": {
+                        "type": "number",
+                        "format": "double",
+                        "maximum": 1,
+                        "minimum": 0
+                    },
+                    "height": {
+                        "type": "number",
+                        "format": "double",
+                        "maximum": 1,
+                        "minimum": 0
+                    }
+                },
+                "required": [
+                    "height",
+                    "width",
+                    "x",
+                    "y"
+                ]
+            },
+            "Upload": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "object_key": {
+                        "type": "string"
+                    },
+                    "expected_sha256": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "size_bytes": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "expires_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "finalized_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    }
+                },
+                "required": [
+                    "expected_sha256",
+                    "expires_at",
+                    "finalized_at",
+                    "id",
+                    "object_key",
+                    "size_bytes"
+                ]
+            },
+            "UploadCompleteRequest": {
+                "type": "object",
+                "properties": {
+                    "sha256": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Repeat the client-computed expected SHA-256 bound at intent creation.",
+                        "pattern": "^[0-9a-f]{64}$"
+                    }
+                },
+                "required": [
+                    "sha256"
+                ]
+            },
+            "UploadIntent": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "object_key": {
+                        "type": "string"
+                    },
+                    "expected_sha256": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "size_bytes": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "expires_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "finalized_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "upload_url": {
+                        "type": "string",
+                        "format": "uri"
+                    },
+                    "required_headers": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "required": [
+                    "expected_sha256",
+                    "expires_at",
+                    "finalized_at",
+                    "id",
+                    "object_key",
+                    "required_headers",
+                    "size_bytes",
+                    "upload_url"
+                ]
+            },
+            "UploadIntentKindEnum": {
+                "enum": [
+                    "issuance_input",
+                    "verification_input"
+                ],
+                "type": "string",
+                "description": "* `issuance_input` - issuance_input\n* `verification_input` - verification_input"
+            },
+            "UploadIntentRequest": {
+                "type": "object",
+                "properties": {
+                    "kind": {
+                        "$ref": "#/components/schemas/UploadIntentKindEnum"
+                    },
+                    "filename": {
+                        "type": "string",
+                        "writeOnly": true,
+                        "minLength": 1,
+                        "maxLength": 255
+                    },
+                    "content_type": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                    },
+                    "size_bytes": {
+                        "type": "integer",
+                        "maximum": 10485760,
+                        "minimum": 1
+                    },
+                    "sha256": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Client-computed expected SHA-256; the worker independently hashes stored bytes.",
+                        "pattern": "^[0-9a-f]{64}$"
+                    }
+                },
+                "required": [
+                    "content_type",
+                    "filename",
+                    "kind",
+                    "sha256",
+                    "size_bytes"
+                ]
+            },
+            "Verification": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "job_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "nullable": true
+                    },
+                    "job_status": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/JobStatusEnum"
+                            }
+                        ],
+                        "nullable": true
+                    },
+                    "status": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/VerificationStatusEnum"
+                            }
+                        ],
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "completed_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "evidence": {
+                        "$ref": "#/components/schemas/VerificationEvidence"
+                    },
+                    "metrics": {
+                        "$ref": "#/components/schemas/VerificationMetrics"
+                    }
+                },
+                "required": [
+                    "completed_at",
+                    "created_at",
+                    "evidence",
+                    "id",
+                    "job_id",
+                    "job_status",
+                    "metrics",
+                    "status"
+                ]
+            },
+            "VerificationCreateRequest": {
+                "type": "object",
+                "properties": {
+                    "upload_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "correlation_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    }
+                },
+                "required": [
+                    "correlation_id",
+                    "upload_id"
+                ]
+            },
+            "VerificationEvidence": {
+                "type": "object",
+                "properties": {
+                    "fingerprint_confidence": {
+                        "type": "number",
+                        "format": "double",
+                        "maximum": 1,
+                        "minimum": 0
+                    },
+                    "integrity_score": {
+                        "type": "number",
+                        "format": "double",
+                        "maximum": 1,
+                        "minimum": 0,
+                        "nullable": true
+                    },
+                    "valid_vote_count": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "analyzed_page_count": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "manifest_signature_valid": {
+                        "type": "boolean",
+                        "nullable": true
+                    },
+                    "exact_file_hash_match": {
+                        "type": "boolean",
+                        "nullable": true
+                    },
+                    "suspicious_regions": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/SuspiciousRegion"
+                        }
+                    },
+                    "limitations": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "VerificationMetrics": {
+                "type": "object",
+                "properties": {
+                    "processing_ms": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "pages_processed": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "peak_rss_bytes": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "temp_peak_bytes": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "cleanup_failures": {
+                        "type": "integer",
+                        "minimum": 0
+                    }
+                }
+            },
+            "VerificationStatusEnum": {
+                "enum": [
+                    "VERIFIED_INTACT",
+                    "SOURCE_IDENTIFIED_MODIFIED",
+                    "PARTIAL_EVIDENCE",
+                    "NO_WATERMARK",
+                    "INVALID_MANIFEST",
+                    "PROCESSING_FAILED"
+                ],
+                "type": "string",
+                "description": "* `VERIFIED_INTACT` - VERIFIED_INTACT\n* `SOURCE_IDENTIFIED_MODIFIED` - SOURCE_IDENTIFIED_MODIFIED\n* `PARTIAL_EVIDENCE` - PARTIAL_EVIDENCE\n* `NO_WATERMARK` - NO_WATERMARK\n* `INVALID_MANIFEST` - INVALID_MANIFEST\n* `PROCESSING_FAILED` - PROCESSING_FAILED"
+            }
+        },
+        "securitySchemes": {
+            "cookieAuth": {
+                "type": "apiKey",
+                "in": "cookie",
+                "name": "sessionid"
+            }
+        }
+    }
+}

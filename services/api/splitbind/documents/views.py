@@ -29,6 +29,12 @@ from splitbind.jobs.services import (
     create_issuance,
     create_verification,
 )
+from splitbind.openapi import (
+    issuance_create_schema,
+    issuance_detail_schema,
+    verification_create_schema,
+    verification_detail_schema,
+)
 
 
 def _serializer_denial(actor, action):
@@ -51,6 +57,7 @@ class IssuanceCreateView(APIView):
     permission_classes = [IsAuthenticated]
     throttle_classes = [AccountRateThrottle, SourceIPRateThrottle, IssuanceJobRateThrottle]
 
+    @issuance_create_schema
     def post(self, request):
         serializer = IssuanceCreateSerializer(data=request.data)
         if not serializer.is_valid():
@@ -66,9 +73,10 @@ class IssuanceCreateView(APIView):
 class IssuanceDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, record_id):
+    @issuance_detail_schema
+    def get(self, request, id):
         try:
-            record = get_issuance(request.user, record_id)
+            record = get_issuance(request.user, id)
         except WorkflowNotFound:
             raise Http404
         return Response(serialize_issuance(record))
@@ -79,6 +87,7 @@ class VerificationCreateView(APIView):
     permission_classes = [IsAuthenticated]
     throttle_classes = [AccountRateThrottle, SourceIPRateThrottle, VerificationJobRateThrottle]
 
+    @verification_create_schema
     def post(self, request):
         serializer = VerificationCreateSerializer(data=request.data)
         if not serializer.is_valid():
@@ -94,9 +103,10 @@ class VerificationCreateView(APIView):
 class VerificationDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, record_id):
+    @verification_detail_schema
+    def get(self, request, id):
         try:
-            record = get_verification(request.user, record_id)
+            record = get_verification(request.user, id)
         except WorkflowNotFound:
             raise Http404
         return Response(serialize_verification(record))

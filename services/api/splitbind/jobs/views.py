@@ -14,14 +14,16 @@ from splitbind.audit.services import record_event
 from splitbind.jobs.models import Job
 from splitbind.jobs.serializers import CancelJobSerializer, serialize_job
 from splitbind.jobs.services import JobConflict, WorkflowNotFound, request_cancel
+from splitbind.openapi import job_cancel_schema, job_detail_schema
 
 
 class JobDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, job_id):
+    @job_detail_schema
+    def get(self, request, id):
         try:
-            job = scope_jobs(request.user, Job.objects.all()).get(pk=job_id)
+            job = scope_jobs(request.user, Job.objects.all()).get(pk=id)
         except (Job.DoesNotExist, ValueError):
             raise Http404
         return Response(serialize_job(job))
@@ -32,7 +34,8 @@ class JobCancelView(APIView):
     permission_classes = [IsAuthenticated]
     throttle_classes = [AccountRateThrottle, SourceIPRateThrottle]
 
-    def post(self, request, job_id):
+    @job_cancel_schema
+    def post(self, request, id):
         serializer = CancelJobSerializer(data=request.data)
         if not serializer.is_valid():
             record_event(
@@ -41,7 +44,7 @@ class JobCancelView(APIView):
             )
             return Response(serializer.errors, status=400)
         try:
-            job = request_cancel(request.user, job_id, serializer.validated_data["correlation_id"])
+            job = request_cancel(request.user, id, serializer.validated_data["correlation_id"])
         except WorkflowNotFound:
             raise Http404
         except JobConflict as error:
