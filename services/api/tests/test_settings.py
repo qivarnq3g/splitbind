@@ -16,6 +16,7 @@ def load_production_settings(monkeypatch, database_url, **environment):
         "MAX_IMAGE_PIXELS": "40000000",
         "JOB_TIMEOUT_SECONDS": "600",
         "WORKER_CONCURRENCY": "1",
+        "RETENTION_RECONCILIATION_LEASE_SECONDS": "300",
     }
     for name, value in defaults.items():
         monkeypatch.setenv(name, value)
@@ -93,3 +94,13 @@ def test_production_settings_accept_database_port_boundaries(monkeypatch, port):
     )
 
     assert settings.DATABASES["default"]["PORT"] == str(port)
+
+
+def test_production_settings_loads_explicit_reconciliation_lease(monkeypatch):
+    settings = load_production_settings(
+        monkeypatch,
+        "postgresql://user:password@db.example.test/splitbind?sslmode=require",
+        RETENTION_RECONCILIATION_LEASE_SECONDS="120",
+    )
+
+    assert settings.RETENTION_RECONCILIATION_LEASE_SECONDS == 120

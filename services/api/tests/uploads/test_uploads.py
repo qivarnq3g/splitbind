@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ImproperlyConfigured, ValidationError
-from django.db import close_old_connections, connection
+from django.db import close_old_connections, connection, transaction
 from django.db.migrations.executor import MigrationExecutor
 from django.test import Client, TransactionTestCase, override_settings
 from django.utils import timezone
@@ -17,7 +17,13 @@ from splitbind.access.models import Organization, Role
 from splitbind.audit.models import AuditEvent, AuditOutcome
 from splitbind.integrations.storage.fake import FakeObjectStorage
 from splitbind.integrations.storage.s3 import S3ObjectStorage
-from splitbind.uploads.models import UploadPurpose, UploadRequest
+from splitbind.retention.capabilities import _allow_cleanup_schedule_write
+from splitbind.uploads.models import (
+    CleanupLane,
+    CleanupScheduleState,
+    UploadPurpose,
+    UploadRequest,
+)
 from splitbind.uploads.services import MAX_UPLOAD_BYTES, UploadRejected, complete_upload, create_upload
 
 
@@ -31,6 +37,114 @@ def create_user(organization, role, suffix):
         organization=organization,
         role=role,
     )
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("manager_name", ["objects", "_base_manager"])
+def test_cleanup_schedule_rejects_conflict_upsert_without_mutation(manager_name):
+    before = CleanupScheduleState.objects.get(pk=1)
+    forged = CleanupScheduleState(
+        pk=1,
+        next_lane=CleanupLane.RECONCILIATION,
+        has_run=True,
+    )
+
+    manager = getattr(CleanupScheduleState, manager_name)
+    with pytest.raises(ValidationError, match="retention-service state"):
+        manager.bulk_create(
+            [forged],
+            update_conflicts=True,
+            update_fields=["next_lane", "has_run"],
+            unique_fields=["id"],
+        )
+
+    after = CleanupScheduleState.objects.get(pk=1)
+    assert (after.next_lane, after.has_run) == (before.next_lane, before.has_run)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("manager_name", ["objects", "_base_manager"])
+def test_cleanup_schedule_rejects_bulk_mutation_without_mutation(manager_name):
+    schedule = CleanupScheduleState.objects.get(pk=1)
+    schedule.next_lane = CleanupLane.RECONCILIATION
+    manager = getattr(CleanupScheduleState, manager_name)
+
+    with transaction.atomic():
+        with pytest.raises(ValidationError, match="retention-service state"):
+            manager.bulk_update([schedule], ["next_lane"])
+    with transaction.atomic():
+        with pytest.raises(ValidationError, match="retention-service state"):
+            manager.bulk_create([CleanupScheduleState(pk=1)])
+
+    schedule.refresh_from_db()
+    assert schedule.next_lane == CleanupLane.ORDINARY
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("manager_name", ["objects", "_base_manager"])
+def test_cleanup_schedule_rejects_query_mutation_without_capability(manager_name):
+    schedule = CleanupScheduleState.objects.get(pk=1)
+    manager = getattr(CleanupScheduleState, manager_name)
+
+    with pytest.raises(ValidationError, match="retention-service state"):
+        manager.filter(pk=1).update(has_run=True)
+    with pytest.raises(ValidationError, match="must be preserved"):
+        manager.filter(pk=1).delete()
+
+    schedule.refresh_from_db()
+    assert schedule.has_run is False
+
+
+@pytest.mark.django_db
+def test_cleanup_schedule_rejects_instance_mutation_without_capability():
+    schedule = CleanupScheduleState.objects.get(pk=1)
+    schedule.has_run = True
+    with pytest.raises(ValidationError, match="retention service"):
+        schedule.save(update_fields=["has_run"])
+    with pytest.raises(ValidationError, match="must be preserved"):
+        schedule.delete()
+
+    schedule.refresh_from_db()
+    assert schedule.has_run is False
+
+
+@pytest.mark.django_db
+def test_cleanup_schedule_capability_allows_instance_save():
+    schedule = CleanupScheduleState.objects.get(pk=1)
+    schedule.has_run = True
+    schedule.reconciliation_claim_upload_id = uuid.uuid4()
+    schedule.reconciliation_claim_token = uuid.uuid4()
+    schedule.reconciliation_claim_expires_at = timezone.now() + timedelta(minutes=5)
+
+    with _allow_cleanup_schedule_write():
+        schedule.save(
+            update_fields=[
+                "has_run",
+                "reconciliation_claim_upload_id",
+                "reconciliation_claim_token",
+                "reconciliation_claim_expires_at",
+            ]
+        )
+
+    schedule.refresh_from_db()
+    assert schedule.has_run is True
+    assert schedule.reconciliation_claim_upload_id is not None
+    assert schedule.reconciliation_claim_token is not None
+    assert schedule.reconciliation_claim_expires_at is not None
+
+
+def test_cleanup_schedule_declares_complete_reconciliation_claim_contract():
+    field_names = {field.name for field in CleanupScheduleState._meta.fields}
+    constraint_names = {
+        constraint.name for constraint in CleanupScheduleState._meta.constraints
+    }
+
+    assert {
+        "reconciliation_claim_upload_id",
+        "reconciliation_claim_token",
+        "reconciliation_claim_expires_at",
+    } <= field_names
+    assert "cleanup_schedule_claim_complete" in constraint_names
 
 
 def csrf_headers(client):

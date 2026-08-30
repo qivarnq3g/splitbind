@@ -42,6 +42,12 @@ class CleanupScheduleQuerySet(models.QuerySet):
     def delete(self):
         raise ValidationError("cleanup schedule must be preserved")
 
+    def bulk_create(self, objs, **kwargs):
+        raise ValidationError("cleanup schedule is retention-service state")
+
+    def bulk_update(self, objs, fields, batch_size=None):
+        raise ValidationError("cleanup schedule is retention-service state")
+
 
 class CleanupScheduleState(models.Model):
     """Singleton database-backed lane scheduler for bounded cleanup scans."""
@@ -52,6 +58,9 @@ class CleanupScheduleState(models.Model):
     )
     reconciliation_cursor_at = models.DateTimeField(null=True, blank=True)
     reconciliation_cursor_id = models.UUIDField(null=True, blank=True)
+    reconciliation_claim_upload_id = models.UUIDField(null=True, blank=True)
+    reconciliation_claim_token = models.UUIDField(null=True, blank=True)
+    reconciliation_claim_expires_at = models.DateTimeField(null=True, blank=True)
     has_run = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
     objects = models.Manager.from_queryset(CleanupScheduleQuerySet)()
@@ -77,6 +86,21 @@ class CleanupScheduleState(models.Model):
                     )
                 ),
                 name="cleanup_schedule_cursor_complete",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(
+                        reconciliation_claim_upload_id__isnull=True,
+                        reconciliation_claim_token__isnull=True,
+                        reconciliation_claim_expires_at__isnull=True,
+                    )
+                    | Q(
+                        reconciliation_claim_upload_id__isnull=False,
+                        reconciliation_claim_token__isnull=False,
+                        reconciliation_claim_expires_at__isnull=False,
+                    )
+                ),
+                name="cleanup_schedule_claim_complete",
             ),
         ]
 

@@ -10,6 +10,15 @@ SAFETY_CEILINGS = {
     "MAX_IMAGE_PIXELS": 40_000_000,
     "JOB_TIMEOUT_SECONDS": 600,
     "WORKER_CONCURRENCY": 1,
+    "RETENTION_RECONCILIATION_LEASE_SECONDS": 600,
+}
+RUNTIME_DEFAULTS = {
+    "MAX_PDF_BYTES": 10 * 1024 * 1024,
+    "MAX_PDF_PAGES": 50,
+    "MAX_IMAGE_PIXELS": 40_000_000,
+    "JOB_TIMEOUT_SECONDS": 600,
+    "WORKER_CONCURRENCY": 1,
+    "RETENTION_RECONCILIATION_LEASE_SECONDS": 300,
 }
 _MAX_PARSED_INTEGER = 2_147_483_647
 
@@ -32,7 +41,7 @@ def load_runtime_limits(environment: str, values: Mapping[str, object]) -> dict[
         if supplied is None:
             if environment == "production":
                 raise ImproperlyConfigured(f"{name} is required in production")
-            result[name] = ceiling
+            result[name] = RUNTIME_DEFAULTS[name]
             continue
         parsed = parse_positive_decimal(name, supplied)
         if parsed > ceiling:

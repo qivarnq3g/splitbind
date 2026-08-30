@@ -28,6 +28,26 @@ def test_production_requires_every_limit_and_rejects_above_ceiling():
         load_runtime_limits("production", unsafe)
 
 
+def test_reconciliation_lease_is_positive_and_bounded():
+    values = {name: str(value) for name, value in SAFETY_CEILINGS.items()}
+    values["RETENTION_RECONCILIATION_LEASE_SECONDS"] = "0"
+    with pytest.raises(
+        ImproperlyConfigured,
+        match="RETENTION_RECONCILIATION_LEASE_SECONDS",
+    ):
+        load_runtime_limits("production", values)
+
+    values["RETENTION_RECONCILIATION_LEASE_SECONDS"] = "601"
+    with pytest.raises(ImproperlyConfigured, match="safety ceiling"):
+        load_runtime_limits("production", values)
+
+
+def test_nonproduction_reconciliation_lease_defaults_to_five_minutes():
+    assert load_runtime_limits("test", {})[
+        "RETENTION_RECONCILIATION_LEASE_SECONDS"
+    ] == 300
+
+
 def test_lower_runtime_job_timeout_reduces_deadline():
     now = timezone.now()
     with override_settings(JOB_TIMEOUT_SECONDS=30):

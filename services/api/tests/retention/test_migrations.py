@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 from django.apps import apps
-from django.db import connection
+from django.db import IntegrityError, connection, transaction
 from django.db.migrations.executor import MigrationExecutor
 from django.utils import timezone
 
@@ -13,9 +13,16 @@ from splitbind.access.models import Organization, Recipient, Role, User
 from splitbind.documents.models import Document, Issuance
 from splitbind.integrations.storage.fake import FakeObjectStorage
 from splitbind.retention.services import STALE_COPYING_AGE, cleanup_expired
+from splitbind.retention.capabilities import _allow_cleanup_schedule_write
 from splitbind.uploads.models import (
     CleanupScheduleState, PromotionStatus, UploadPurpose, UploadRequest,
 )
+
+
+def cleanup_schedule():
+    with _allow_cleanup_schedule_write():
+        schedule, _created = CleanupScheduleState.objects.get_or_create(pk=1)
+    return schedule
 
 
 @pytest.mark.django_db
@@ -112,7 +119,7 @@ def test_reconciliation_observation_reverse_guard_preserves_retry_evidence():
 
 @pytest.mark.django_db
 def test_cleanup_schedule_reverse_guard_preserves_used_fairness_position():
-    schedule = CleanupScheduleState.objects.get(pk=1)
+    schedule = cleanup_schedule()
     with connection.cursor() as cursor:
         cursor.execute(
             "UPDATE uploads_cleanupschedulestate SET has_run = %s WHERE id = %s",
@@ -126,6 +133,98 @@ def test_cleanup_schedule_reverse_guard_preserves_used_fairness_position():
         migration.refuse_used_schedule_rollback(
             apps, SimpleNamespace(connection=connection),
         )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_reconciliation_claim_migration_empty_round_trip_preserves_scheduler_position():
+    cursor_at = timezone.now()
+    cursor_id = uuid.uuid4()
+    schedule = cleanup_schedule()
+    schedule.next_lane = "reconciliation"
+    schedule.reconciliation_cursor_at = cursor_at
+    schedule.reconciliation_cursor_id = cursor_id
+    schedule.has_run = True
+    with _allow_cleanup_schedule_write():
+        schedule.save(
+            update_fields=[
+                "next_lane",
+                "reconciliation_cursor_at",
+                "reconciliation_cursor_id",
+                "has_run",
+            ]
+        )
+
+    old_target = [("uploads", "0009_cleanup_schedule_fairness")]
+    latest_targets = MigrationExecutor(connection).loader.graph.leaf_nodes()
+    try:
+        MigrationExecutor(connection).migrate(old_target)
+        old_apps = MigrationExecutor(connection).loader.project_state(old_target).apps
+        OldSchedule = old_apps.get_model("uploads", "CleanupScheduleState")
+        preserved = OldSchedule.objects.get(pk=1)
+        assert preserved.next_lane == "reconciliation"
+        assert preserved.reconciliation_cursor_at == cursor_at
+        assert preserved.reconciliation_cursor_id == cursor_id
+        assert preserved.has_run is True
+
+        MigrationExecutor(connection).migrate(latest_targets)
+        migrated = CleanupScheduleState.objects.get(pk=1)
+        assert migrated.reconciliation_claim_upload_id is None
+        assert migrated.reconciliation_claim_token is None
+        assert migrated.reconciliation_claim_expires_at is None
+    finally:
+        MigrationExecutor(connection).migrate(latest_targets)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_reconciliation_claim_migration_refuses_live_claim_reverse_and_preserves_evidence():
+    schedule = cleanup_schedule()
+    upload_id = uuid.uuid4()
+    token = uuid.uuid4()
+    expires_at = timezone.now() + timedelta(minutes=5)
+    schedule.reconciliation_claim_upload_id = upload_id
+    schedule.reconciliation_claim_token = token
+    schedule.reconciliation_claim_expires_at = expires_at
+    with _allow_cleanup_schedule_write():
+        schedule.save(
+            update_fields=[
+                "reconciliation_claim_upload_id",
+                "reconciliation_claim_token",
+                "reconciliation_claim_expires_at",
+            ]
+        )
+
+    with pytest.raises(RuntimeError, match="reconciliation claim is live"):
+        MigrationExecutor(connection).migrate(
+            [("uploads", "0009_cleanup_schedule_fairness")]
+        )
+
+    schedule.refresh_from_db()
+    assert schedule.reconciliation_claim_upload_id == upload_id
+    assert schedule.reconciliation_claim_token == token
+    assert schedule.reconciliation_claim_expires_at == expires_at
+
+
+@pytest.mark.django_db
+def test_reconciliation_claim_database_constraint_rejects_partial_state():
+    schedule = cleanup_schedule()
+
+    with pytest.raises(IntegrityError), transaction.atomic():
+        CleanupScheduleState.objects.filter(pk=schedule.pk)._update(
+            [
+                (
+                    CleanupScheduleState._meta.get_field(
+                        "reconciliation_claim_upload_id"
+                    ),
+                    None,
+                    uuid.uuid4(),
+                )
+            ]
+        )
+
+    schedule.refresh_from_db()
+    assert schedule.reconciliation_claim_upload_id is None
+    assert schedule.reconciliation_claim_token is None
+    assert schedule.reconciliation_claim_expires_at is None
 
 
 @pytest.mark.django_db(transaction=True)
