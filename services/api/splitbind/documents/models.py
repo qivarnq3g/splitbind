@@ -150,6 +150,11 @@ class ImmutableManifestQuerySet(ValidatedOrganizationQuerySet):
     def delete(self):
         raise ValidationError("manifest evidence must be preserved")
 
+    def bulk_create(self, objs, **kwargs):
+        if kwargs.get("update_conflicts"):
+            raise ValidationError("conflict updates cannot rewrite manifest evidence")
+        return super().bulk_create(objs, **kwargs)
+
 
 class ManifestManager(ValidatedOrganizationManager.from_queryset(ImmutableManifestQuerySet)):
     pass

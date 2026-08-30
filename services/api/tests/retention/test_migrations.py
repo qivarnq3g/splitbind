@@ -1,5 +1,6 @@
 import importlib
 import uuid
+from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -10,7 +11,9 @@ from django.utils import timezone
 
 from splitbind.access.models import Organization, Recipient, Role, User
 from splitbind.documents.models import Document, Issuance
-from splitbind.uploads.models import UploadPurpose, UploadRequest
+from splitbind.integrations.storage.fake import FakeObjectStorage
+from splitbind.retention.services import STALE_COPYING_AGE, cleanup_expired
+from splitbind.uploads.models import PromotionStatus, UploadPurpose, UploadRequest
 
 
 @pytest.mark.django_db
@@ -151,5 +154,64 @@ def test_promotion_transition_clock_migration_backfills_legacy_created_at():
         MigrationExecutor(connection).migrate(latest_targets)
         migrated = UploadRequest.objects.get(pk=legacy.pk)
         assert migrated.promotion_status_changed_at == legacy_created_at
+    finally:
+        MigrationExecutor(connection).migrate(latest_targets)
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("status", [PromotionStatus.COPYING, PromotionStatus.FAILED])
+def test_promotion_clock_migration_gives_active_legacy_work_a_fresh_stale_window(status):
+    old_target = [("uploads", "0006_alter_uploadrequest_options")]
+    latest_targets = MigrationExecutor(connection).loader.graph.leaf_nodes()
+    try:
+        MigrationExecutor(connection).migrate(old_target)
+        old_apps = MigrationExecutor(connection).loader.project_state(old_target).apps
+        LegacyOrganization = old_apps.get_model("access", "Organization")
+        LegacyUser = old_apps.get_model("access", "User")
+        LegacyUpload = old_apps.get_model("uploads", "UploadRequest")
+        org = LegacyOrganization.objects.create(
+            name="Active legacy promotion",
+            slug=f"active-legacy-{status}-{uuid.uuid4().hex[:6]}",
+        )
+        actor = LegacyUser.objects.create(
+            username=f"active-legacy-{status}-{uuid.uuid4().hex[:6]}",
+            password="unusable-test-value", organization_id=org.id,
+            role=Role.ISSUER, is_active=True, is_staff=False,
+            is_superuser=False, date_joined=timezone.now(),
+        )
+        upload_id = uuid.uuid4()
+        old_time = timezone.now() - timedelta(days=30)
+        target_key = f"inputs/issuance/{org.id}/{upload_id}.bin"
+        legacy = LegacyUpload.objects.create(
+            id=upload_id, organization_id=org.id, requested_by_id=actor.id,
+            purpose=UploadPurpose.ISSUANCE,
+            object_key=f"uploads/orphan/issuance_input/{org.id}/{upload_id.hex}.bin",
+            expected_sha256="a" * 64, size_bytes=1, expires_at=old_time,
+            finalized_at=old_time, orphan_deleted_at=old_time,
+            promotion_target_key=target_key, promotion_status=status,
+            safe_error_code="PROMOTION_COPY_FAILED" if status == PromotionStatus.FAILED else None,
+        )
+        LegacyUpload.objects.filter(pk=legacy.pk).update(created_at=old_time)
+
+        migration_started_at = timezone.now()
+        MigrationExecutor(connection).migrate(latest_targets)
+        migration_finished_at = timezone.now()
+        migrated = UploadRequest.objects.get(pk=legacy.pk)
+        assert migration_started_at <= migrated.promotion_status_changed_at <= migration_finished_at
+
+        storage = FakeObjectStorage()
+        storage.inject_object(
+            key=target_key, content_type="application/pdf", size_bytes=1,
+            sha256="a" * 64,
+        )
+        assert cleanup_expired(
+            now=migrated.promotion_status_changed_at + STALE_COPYING_AGE - timedelta(seconds=1),
+            storage=storage, batch_size=1,
+        ) == 0
+        assert target_key in storage.objects
+        assert cleanup_expired(
+            now=migrated.promotion_status_changed_at + STALE_COPYING_AGE + timedelta(seconds=1),
+            storage=storage, batch_size=1,
+        ) == 1
     finally:
         MigrationExecutor(connection).migrate(latest_targets)

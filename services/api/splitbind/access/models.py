@@ -234,6 +234,11 @@ class SigningKeyQuerySet(ValidatedOrganizationQuerySet):
             raise ValidationError("signing-key historical evidence is immutable")
         return super().bulk_update(objs, fields, **kwargs)
 
+    def bulk_create(self, objs, **kwargs):
+        if kwargs.get("update_conflicts"):
+            raise ValidationError("conflict updates cannot rewrite signing-key evidence")
+        return super().bulk_create(objs, **kwargs)
+
 
 class SigningKeyManager(ValidatedOrganizationManager.from_queryset(SigningKeyQuerySet)):
     pass

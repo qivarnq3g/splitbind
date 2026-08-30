@@ -109,6 +109,23 @@ def delete_attached_orphan_source(
         )
 
 
+def delete_fenced_promotion_target(*, upload_id, storage) -> bool:
+    """Remove a target recreated after its durable cleanup tombstone.
+
+    The tombstone is never cleared. Recovery requires a new upload/reservation;
+    this path only restores the exact physical deletion already evidenced.
+    """
+    with transaction.atomic():
+        record = UploadRequest.objects.select_for_update().get(pk=upload_id)
+        if record.promotion_target_deleted_at is None:
+            return False
+        key = record.promotion_target_key
+        if not key or not _key_is_owned(record, "stale_promotion", key):
+            return False
+        storage.delete(key=key)
+        return True
+
+
 def _key_is_owned(record, category, key):
     try:
         if category == "orphan":

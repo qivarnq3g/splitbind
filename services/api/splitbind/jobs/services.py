@@ -13,7 +13,10 @@ from splitbind.integrations.storage.base import UploadRejected
 from splitbind.jobs.models import Job, JobKind, JobStatus
 from splitbind.jobs.state import transition_job
 from splitbind.outbox.services import create_job_event
-from splitbind.retention.services import delete_attached_orphan_source
+from splitbind.retention.services import (
+    delete_attached_orphan_source,
+    delete_fenced_promotion_target,
+)
 from splitbind.uploads.models import PromotionStatus, UploadPurpose, UploadRequest
 from splitbind.uploads.services import get_storage
 
@@ -108,6 +111,7 @@ def _lock_unchanged_reservation(upload, actor, kind):
         and locked.expected_sha256 == upload.expected_sha256
         and locked.size_bytes == upload.size_bytes
         and locked.finalized_at == upload.finalized_at
+        and locked.promotion_target_deleted_at is None
     )
     if not unchanged:
         raise JobConflict("PROMOTION_STATE")
@@ -125,6 +129,10 @@ def _copy_then_finalize(actor, upload, kind: str, correlation_id, create_domain)
         )
         _verify_copy_observation(copied, upload)
     except Exception:
+        try:
+            delete_fenced_promotion_target(upload_id=upload.id, storage=storage)
+        except Exception:
+            pass
         try:
             _mark_failed(upload.id, target, "PROMOTION_COPY_FAILED")
         except Exception:
@@ -164,6 +172,13 @@ def _copy_then_finalize(actor, upload, kind: str, correlation_id, create_domain)
                 safe_error_code=None,
             )
     except Exception:
+        try:
+            # Cleanup may have permanently fenced this target while a stale
+            # object-store copy was still in flight. Re-delete only through
+            # the retention boundary; never clear the tombstone or attach it.
+            delete_fenced_promotion_target(upload_id=upload.id, storage=storage)
+        except Exception:
+            pass
         try:
             _mark_failed(upload.id, target, "PROMOTION_FINALIZE_FAILED")
         except Exception:

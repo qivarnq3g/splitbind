@@ -194,6 +194,104 @@ def test_promotion_transition_clock_is_immutable_outside_transition_service():
 
 
 @pytest.mark.django_db
+def test_promotion_transition_timestamp_is_captured_after_the_row_lock(monkeypatch):
+    now = timezone.now()
+    org = Organization.objects.create(name="Lock clock", slug=f"lock-clock-{uuid.uuid4().hex[:8]}")
+    actor = User.objects.create_user(
+        username="lock-clock", password="test", organization=org, role=Role.ISSUER,
+    )
+    record = upload(org, actor, created_at=now)
+    target = f"inputs/issuance/{org.id}/{record.id}.bin"
+    clock_was_read = False
+
+    def observed_now():
+        nonlocal clock_was_read
+        clock_was_read = True
+        return now + timedelta(minutes=1)
+
+    from django.db.models.query import QuerySet
+    original_get = QuerySet.get
+
+    def checked_get(queryset, *args, **kwargs):
+        if queryset.model is UploadRequest and queryset.query.select_for_update:
+            assert clock_was_read is False
+        return original_get(queryset, *args, **kwargs)
+
+    monkeypatch.setattr(QuerySet, "get", checked_get)
+    monkeypatch.setattr(
+        "splitbind.uploads.models.timezone",
+        SimpleNamespace(now=observed_now, is_naive=timezone.is_naive),
+    )
+
+    record.save_promotion(
+        status=PromotionStatus.COPYING, target_key=target, safe_error_code=None,
+    )
+    assert record.promotion_status_changed_at == now + timedelta(minutes=1)
+
+
+@pytest.mark.django_db
+def test_cleaned_promotion_target_is_a_permanent_transition_fence():
+    now = timezone.now()
+    org = Organization.objects.create(name="Cleanup fence", slug=f"cleanup-fence-{uuid.uuid4().hex[:8]}")
+    actor = User.objects.create_user(
+        username="cleanup-fence", password="test", organization=org, role=Role.ISSUER,
+    )
+    record = upload(
+        org, actor, created_at=now - STALE_COPYING_AGE - timedelta(minutes=1),
+        status=PromotionStatus.FAILED,
+    )
+    storage = FakeObjectStorage()
+    storage.inject_object(
+        key=record.promotion_target_key, content_type="application/pdf", size_bytes=1,
+        sha256=SHA256,
+    )
+    assert cleanup_expired(now=now, storage=storage, batch_size=1) == 1
+    record.refresh_from_db()
+
+    with pytest.raises(ValueError, match="deleted"):
+        record.save_promotion(
+            status=PromotionStatus.COPYING,
+            target_key=record.promotion_target_key,
+            safe_error_code=None,
+        )
+    record.refresh_from_db()
+    assert record.promotion_status == PromotionStatus.FAILED
+    assert record.promotion_target_deleted_at is not None
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("manager_name", ["objects", "_base_manager"])
+@pytest.mark.parametrize("as_generator", [False, True])
+def test_upload_conflict_upsert_cannot_rewrite_promotion_evidence(manager_name, as_generator):
+    now = timezone.now()
+    org = Organization.objects.create(name="Upload upsert", slug=f"upload-upsert-{uuid.uuid4().hex[:8]}")
+    actor = User.objects.create_user(
+        username="upload-upsert", password="test", organization=org, role=Role.ISSUER,
+    )
+    existing = upload(org, actor, created_at=now)
+    conflict = UploadRequest(
+        organization=org, requested_by=actor, purpose=existing.purpose,
+        object_key=existing.object_key, expected_sha256=SHA256, size_bytes=1,
+        expires_at=now + timedelta(minutes=15),
+        promotion_status=PromotionStatus.COPYING,
+        promotion_target_key=f"inputs/issuance/{org.id}/{uuid.uuid4()}.bin",
+    )
+
+    values = [conflict]
+    values = (item for item in values) if as_generator else values
+    manager = getattr(UploadRequest, manager_name)
+    with pytest.raises(ValidationError, match="conflict"):
+        manager.bulk_create(
+            values, update_conflicts=True,
+            update_fields=["promotion_status", "promotion_target_key"],
+            unique_fields=["object_key"],
+        )
+    existing.refresh_from_db()
+    assert existing.promotion_status == PromotionStatus.NONE
+    assert UploadRequest.objects.count() == 1
+
+
+@pytest.mark.django_db
 def test_transient_cleanup_failure_retains_timestamp_and_writes_only_safe_audit():
     now = timezone.now()
     org = Organization.objects.create(name="Retry", slug=f"retry-{uuid.uuid4().hex[:8]}")

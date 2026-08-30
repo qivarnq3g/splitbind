@@ -1,10 +1,22 @@
 from django.db import migrations, models
 from django.db.models import F, Q
+from django.utils import timezone
 
 
 def backfill_promotion_status_changed_at(apps, schema_editor):
     UploadRequest = apps.get_model("uploads", "UploadRequest")
-    UploadRequest.objects.using(schema_editor.connection.alias).filter(
+    uploads = UploadRequest.objects.using(schema_editor.connection.alias)
+    # A legacy COPYING/FAILED row may represent work that became active just
+    # before this migration. Its true transition time is unknowable, so an old
+    # creation time would fabricate staleness and permit immediate deletion.
+    # Give active, cleanup-eligible states a migration-time safety baseline.
+    uploads.filter(
+        promotion_status_changed_at__isnull=True,
+        promotion_status__in=["copying", "failed"],
+    ).update(promotion_status_changed_at=timezone.now())
+    # NONE has existed since creation. ATTACHED does not use this clock for
+    # retention eligibility, so preserve its legacy historical lower bound.
+    uploads.filter(
         promotion_status_changed_at__isnull=True,
     ).update(promotion_status_changed_at=F("created_at"))
 

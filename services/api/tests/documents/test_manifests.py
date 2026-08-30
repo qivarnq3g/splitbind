@@ -346,6 +346,75 @@ def test_manifest_history_cannot_be_updated_or_deleted(manifest_domain):
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize("as_generator", [False, True])
+@pytest.mark.parametrize("manager_name", ["objects", "_base_manager"])
+def test_signing_key_conflict_upsert_is_rejected_without_partial_writes(as_generator, manager_name):
+    _, pem = key_material()
+    now = timezone.now()
+    org = Organization.objects.create(name="Key upsert", slug=f"key-upsert-{uuid.uuid4().hex[:8]}")
+    existing = SigningKey.objects.create(
+        organization=org, key_id="upsert-key", public_key=pem,
+        valid_from=now, metadata={"label": "original"},
+    )
+    conflict = SigningKey(
+        organization=org, key_id=existing.key_id, public_key=pem,
+        valid_from=now, metadata={"label": "rewritten"},
+    )
+    fresh = SigningKey(
+        organization=org, key_id=f"fresh-{uuid.uuid4().hex[:8]}", public_key=pem,
+        valid_from=now,
+    )
+    values = [conflict, fresh]
+    values = (item for item in values) if as_generator else values
+
+    manager = getattr(SigningKey, manager_name)
+    with pytest.raises(ValidationError, match="conflict"):
+        manager.bulk_create(
+            values, update_conflicts=True, update_fields=["metadata"],
+            unique_fields=["key_id"],
+        )
+    existing.refresh_from_db()
+    assert existing.metadata == {"label": "original"}
+    assert SigningKey.objects.count() == 1
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("as_generator", [False, True])
+@pytest.mark.parametrize("manager_name", ["objects", "_base_manager"])
+def test_manifest_conflict_upsert_is_rejected_without_partial_writes(
+    manifest_domain, as_generator, manager_name,
+):
+    organization, issuance = manifest_domain
+    _, pem = key_material()
+    signing_key = SigningKey.objects.create(
+        organization=organization, key_id=f"manifest-upsert-{uuid.uuid4().hex[:8]}",
+        public_key=pem, valid_from=timezone.now(),
+    )
+    existing = Manifest.objects.create(
+        organization=organization, issuance=issuance, signing_key=signing_key,
+        internal_payload="{}", internal_signature_envelope={},
+        public_payload="{}", public_signature_envelope={},
+    )
+    conflict = Manifest(
+        organization=organization, issuance=issuance, signing_key=signing_key,
+        internal_payload='{"changed":true}', internal_signature_envelope={},
+        public_payload='{"changed":true}', public_signature_envelope={},
+    )
+    values = [conflict]
+    values = (item for item in values) if as_generator else values
+
+    manager = getattr(Manifest, manager_name)
+    with pytest.raises(ValidationError, match="conflict"):
+        manager.bulk_create(
+            values, update_conflicts=True, update_fields=["public_payload"],
+            unique_fields=["issuance"],
+        )
+    existing.refresh_from_db()
+    assert existing.public_payload == "{}"
+    assert Manifest.objects.count() == 1
+
+
+@pytest.mark.django_db
 def test_shareable_public_manifest_requires_trusted_public_projection(manifest_domain):
     organization, issuance = manifest_domain
     private, pem = key_material()

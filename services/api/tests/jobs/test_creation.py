@@ -288,6 +288,72 @@ def test_copy_metadata_mismatch_retains_exact_target_and_source_for_owned_cleanu
 
 
 @pytest.mark.django_db
+def test_inflight_copy_finishing_after_stale_cleanup_cannot_attach_or_leave_live_target(
+    workflow_context, monkeypatch,
+):
+    org, issuer, _, recipient, storage = workflow_context
+    upload = completed_upload(org, issuer, storage, UploadPurpose.ISSUANCE)
+    original_copy = storage.copy_verified
+    cleanup_at = timezone.now()
+
+    def copy_after_cleanup(**kwargs):
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE uploads_uploadrequest SET promotion_status_changed_at = %s WHERE id = %s",
+                [cleanup_at - timedelta(hours=2), upload.id.hex],
+            )
+        from splitbind.retention.services import cleanup_expired
+        assert cleanup_expired(now=cleanup_at, storage=storage, batch_size=1) == 1
+        return original_copy(**kwargs)
+
+    monkeypatch.setattr(storage, "copy_verified", copy_after_cleanup)
+    with override_settings(SPLITBIND_OBJECT_STORAGE=storage):
+        with pytest.raises(JobConflict, match="PROMOTION_STATE"):
+            create_issuance(issuer, recipient.id, upload.id, uuid.uuid4())
+
+    upload.refresh_from_db()
+    assert upload.promotion_target_deleted_at is not None
+    assert upload.promotion_status == PromotionStatus.COPYING
+    assert upload.promotion_target_key not in storage.objects
+    assert not Document.objects.filter(upload_request=upload).exists()
+    assert not Job.objects.exists() and not OutboxEvent.objects.exists()
+
+
+@pytest.mark.django_db
+def test_inflight_mismatched_copy_after_cleanup_is_also_removed(
+    workflow_context, monkeypatch,
+):
+    org, issuer, _, recipient, storage = workflow_context
+    upload = completed_upload(org, issuer, storage, UploadPurpose.ISSUANCE)
+    original_copy = storage.copy_verified
+    cleanup_at = timezone.now()
+
+    def mismatched_copy_after_cleanup(**kwargs):
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE uploads_uploadrequest SET promotion_status_changed_at = %s WHERE id = %s",
+                [cleanup_at - timedelta(hours=2), upload.id.hex],
+            )
+        from splitbind.retention.services import cleanup_expired
+        assert cleanup_expired(now=cleanup_at, storage=storage, batch_size=1) == 1
+        observed = original_copy(**kwargs)
+        return type(observed)(
+            observed.key, observed.size_bytes + 1, observed.content_type,
+            observed.client_sha256_metadata,
+        )
+
+    monkeypatch.setattr(storage, "copy_verified", mismatched_copy_after_cleanup)
+    with override_settings(SPLITBIND_OBJECT_STORAGE=storage):
+        with pytest.raises(UploadRejected, match="STORAGE_COPY_MISMATCH"):
+            create_issuance(issuer, recipient.id, upload.id, uuid.uuid4())
+
+    upload.refresh_from_db()
+    assert upload.promotion_target_deleted_at is not None
+    assert upload.promotion_target_key not in storage.objects
+    assert not Document.objects.filter(upload_request=upload).exists()
+
+
+@pytest.mark.django_db
 def test_orphan_delete_failure_keeps_attached_workflow_and_safe_audit(workflow_context):
     org, issuer, _, recipient, storage = workflow_context
     upload = completed_upload(org, issuer, storage, UploadPurpose.ISSUANCE)

@@ -48,6 +48,8 @@ class UploadRequestQuerySet(ValidatedOrganizationQuerySet):
         return super().update(**kwargs)
 
     def bulk_create(self, objs, **kwargs):
+        if kwargs.get("update_conflicts"):
+            raise ValidationError("conflict updates cannot rewrite upload evidence")
         objects = tuple(objs)
         if any(
             record.orphan_deleted_at is not None
@@ -185,9 +187,6 @@ class UploadRequest(ValidatedOrganizationOwnedModel):
         self, *, status: str, target_key: str | None, safe_error_code: str | None,
     ) -> None:
         """The sole application path allowed to mutate durable promotion ownership."""
-        at = timezone.now()
-        if timezone.is_naive(at):
-            raise ValueError("promotion transition time must be timezone-aware")
         if status not in PromotionStatus.values:
             raise ValueError("promotion status is invalid")
         if (status == PromotionStatus.NONE) != (target_key is None):
@@ -199,8 +198,12 @@ class UploadRequest(ValidatedOrganizationOwnedModel):
 
         persisted = type(self)._base_manager.select_for_update().only(
             "promotion_status", "promotion_status_changed_at", "promotion_target_key",
-            "safe_error_code",
+            "safe_error_code", "promotion_target_deleted_at",
         ).get(pk=self.pk)
+        if persisted.promotion_target_deleted_at is not None:
+            raise ValueError(
+                "deleted promotion target is permanently fenced; create a new upload reservation"
+            )
         if (
             status == persisted.promotion_status
             and target_key == persisted.promotion_target_key
@@ -231,6 +234,9 @@ class UploadRequest(ValidatedOrganizationOwnedModel):
                 or match.group("upload") != str(self.id)
             ):
                 raise ValueError("promotion target must identify this upload, organization, and purpose")
+        at = timezone.now()
+        if timezone.is_naive(at):
+            raise ValueError("promotion transition time must be timezone-aware")
         self.promotion_status = status
         self.promotion_status_changed_at = at
         self.promotion_target_key = target_key
