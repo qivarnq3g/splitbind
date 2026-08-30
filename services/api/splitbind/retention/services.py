@@ -398,10 +398,10 @@ def _claim_reconciliation(*, now):
     """Persist one leased claim without moving the acknowledged cursor."""
     with transaction.atomic():
         schedule = CleanupScheduleState.objects.select_for_update().get(pk=1)
-        locked_now = max(now, timezone.now())
+        lease_now = timezone.now()
         upload_id = schedule.reconciliation_claim_upload_id
         if upload_id is not None:
-            if schedule.reconciliation_claim_expires_at > locked_now:
+            if schedule.reconciliation_claim_expires_at > lease_now:
                 return None
         else:
             selected = _next_reconciliation_candidate(schedule, excluded_ids=set())
@@ -423,7 +423,7 @@ def _claim_reconciliation(*, now):
         token = uuid.uuid4()
         schedule.reconciliation_claim_upload_id = record.pk
         schedule.reconciliation_claim_token = token
-        schedule.reconciliation_claim_expires_at = locked_now + timedelta(
+        schedule.reconciliation_claim_expires_at = lease_now + timedelta(
             seconds=settings.RETENTION_RECONCILIATION_LEASE_SECONDS,
         )
         schedule.has_run = True

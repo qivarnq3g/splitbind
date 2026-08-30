@@ -299,7 +299,7 @@ def test_next_cleanup_scan_removes_a_late_copy_after_promotion_tombstone():
 
 
 @pytest.mark.django_db
-def test_failed_late_copy_reconciliation_remains_durably_retryable():
+def test_failed_late_copy_reconciliation_remains_durably_retryable(monkeypatch):
     now = timezone.now()
     org = Organization.objects.create(name="Late retry", slug=f"late-retry-{uuid.uuid4().hex[:8]}")
     actor = User.objects.create_user(
@@ -333,6 +333,7 @@ def test_failed_late_copy_reconciliation_remains_durably_retryable():
     assert record.promotion_target_reconciled_at == failed_at
 
     second_failed_at = schedule.reconciliation_claim_expires_at
+    monkeypatch.setattr(retention_services.timezone, "now", lambda: second_failed_at)
     assert cleanup_expired(now=second_failed_at, storage=storage, batch_size=1) == 0
     record.refresh_from_db()
     assert record.promotion_target_reconciled_at == second_failed_at
@@ -342,6 +343,7 @@ def test_failed_late_copy_reconciliation_remains_durably_retryable():
 
     schedule.refresh_from_db()
     retry_at = schedule.reconciliation_claim_expires_at
+    monkeypatch.setattr(retention_services.timezone, "now", lambda: retry_at)
     assert cleanup_expired(now=retry_at, storage=storage, batch_size=1) == 0
     record.refresh_from_db()
     assert record.promotion_target_key not in storage.objects
@@ -459,7 +461,7 @@ def test_crash_after_claim_keeps_candidate_pending_without_advancing_cursor():
 
 
 @pytest.mark.django_db
-def test_nonexpired_claim_is_not_stolen_and_expired_claim_gets_new_token():
+def test_nonexpired_claim_is_not_stolen_and_expired_claim_gets_new_token(monkeypatch):
     """Catches replacing live ownership or reusing a stale ownership token."""
     now = timezone.now()
     org = Organization.objects.create(
@@ -477,19 +479,101 @@ def test_nonexpired_claim_is_not_stolen_and_expired_claim_gets_new_token():
     first = retention_services._claim_reconciliation(now=now)
     schedule = CleanupScheduleState.objects.get(pk=1)
     assert first.upload_id == record.id
+    before_expiry = schedule.reconciliation_claim_expires_at - timedelta(microseconds=1)
+    monkeypatch.setattr(retention_services.timezone, "now", lambda: before_expiry)
     assert retention_services._claim_reconciliation(
-        now=schedule.reconciliation_claim_expires_at - timedelta(microseconds=1),
+        now=now + timedelta(days=1),
     ) is None
 
+    expires_at = schedule.reconciliation_claim_expires_at
+    monkeypatch.setattr(retention_services.timezone, "now", lambda: expires_at)
     reclaimed = retention_services._claim_reconciliation(
-        now=schedule.reconciliation_claim_expires_at,
+        now=now,
     )
     assert reclaimed.upload_id == record.id
     assert reclaimed.token != first.token
 
 
 @pytest.mark.django_db
-def test_stale_token_cannot_acknowledge_or_clear_reclaimed_candidate():
+def test_future_retention_cutoff_does_not_steal_wall_clock_live_claim(
+    monkeypatch, settings,
+):
+    """Catches caller evidence time being treated as lease-owner time."""
+    wall_now = timezone.now()
+    settings.RETENTION_RECONCILIATION_LEASE_SECONDS = 300
+    org = Organization.objects.create(
+        name="Lease clock separation",
+        slug=f"lease-clock-separation-{uuid.uuid4().hex[:8]}",
+    )
+    actor = User.objects.create_user(
+        username="lease-clock-separation", password="test",
+        organization=org, role=Role.ISSUER,
+    )
+    record = upload(
+        org, actor,
+        created_at=wall_now - STALE_COPYING_AGE - timedelta(minutes=1),
+        status=PromotionStatus.FAILED,
+    )
+    _set_promotion_tombstone(record, at=wall_now - timedelta(minutes=1))
+    monkeypatch.setattr(retention_services.timezone, "now", lambda: wall_now)
+
+    first = retention_services._claim_reconciliation(now=wall_now)
+
+    assert retention_services._claim_reconciliation(
+        now=wall_now + timedelta(days=1),
+    ) is None
+    schedule = CleanupScheduleState.objects.get(pk=1)
+    assert schedule.reconciliation_claim_token == first.token
+
+
+@pytest.mark.django_db
+def test_new_claim_lease_uses_wall_clock_sampled_after_scheduler_lock(
+    monkeypatch, settings,
+):
+    """Catches deriving a claim lease from the caller's retention cutoff."""
+    wall_now = timezone.now()
+    settings.RETENTION_RECONCILIATION_LEASE_SECONDS = 300
+    org = Organization.objects.create(
+        name="Lease lock clock", slug=f"lease-lock-clock-{uuid.uuid4().hex[:8]}",
+    )
+    actor = User.objects.create_user(
+        username="lease-lock-clock", password="test",
+        organization=org, role=Role.ISSUER,
+    )
+    record = upload(
+        org, actor,
+        created_at=wall_now - STALE_COPYING_AGE - timedelta(minutes=1),
+        status=PromotionStatus.FAILED,
+    )
+    _set_promotion_tombstone(record, at=wall_now - timedelta(minutes=1))
+    events = []
+    from django.db.models.query import QuerySet
+    original_get = QuerySet.get
+
+    def observed_get(queryset, *args, **kwargs):
+        if queryset.query.select_for_update:
+            events.append(queryset.model)
+        return original_get(queryset, *args, **kwargs)
+
+    def observed_now():
+        events.append("clock")
+        return wall_now
+
+    monkeypatch.setattr(QuerySet, "get", observed_get)
+    monkeypatch.setattr(retention_services.timezone, "now", observed_now)
+
+    claim = retention_services._claim_reconciliation(
+        now=wall_now + timedelta(days=1),
+    )
+
+    schedule = CleanupScheduleState.objects.get(pk=1)
+    assert claim.upload_id == record.id
+    assert events[:3] == [CleanupScheduleState, "clock", UploadRequest]
+    assert schedule.reconciliation_claim_expires_at == wall_now + timedelta(seconds=300)
+
+
+@pytest.mark.django_db
+def test_stale_token_cannot_acknowledge_or_clear_reclaimed_candidate(monkeypatch):
     """Catches an old worker mutating state after another worker reclaims the lease."""
     now = timezone.now()
     org = Organization.objects.create(
@@ -505,8 +589,10 @@ def test_stale_token_cannot_acknowledge_or_clear_reclaimed_candidate():
     _set_promotion_tombstone(record, at=now - timedelta(minutes=1))
     stale = retention_services._claim_reconciliation(now=now)
     schedule = CleanupScheduleState.objects.get(pk=1)
+    expires_at = schedule.reconciliation_claim_expires_at
+    monkeypatch.setattr(retention_services.timezone, "now", lambda: expires_at)
     current = retention_services._claim_reconciliation(
-        now=schedule.reconciliation_claim_expires_at,
+        now=now,
     )
 
     assert retention_services._ack_reconciliation(
@@ -520,7 +606,7 @@ def test_stale_token_cannot_acknowledge_or_clear_reclaimed_candidate():
 
 
 @pytest.mark.django_db
-def test_pending_claim_precedes_newer_tombstone_after_restart_and_expiry():
+def test_pending_claim_precedes_newer_tombstone_after_restart_and_expiry(monkeypatch):
     """Catches selecting fresh tombstones ahead of durable pending ownership."""
     now = timezone.now()
     org = Organization.objects.create(
@@ -546,8 +632,10 @@ def test_pending_claim_precedes_newer_tombstone_after_restart_and_expiry():
     restarted_services = importlib.reload(restarted_services)
     assert restarted_services._claim_reconciliation(now=now + timedelta(seconds=1)) is None
     schedule = CleanupScheduleState.objects.get(pk=1)
+    expires_at = schedule.reconciliation_claim_expires_at
+    monkeypatch.setattr(restarted_services.timezone, "now", lambda: expires_at)
     reclaimed = restarted_services._claim_reconciliation(
-        now=schedule.reconciliation_claim_expires_at,
+        now=now,
     )
     assert claim.upload_id == first.id
     assert reclaimed.upload_id == first.id
@@ -744,7 +832,7 @@ def test_ack_timestamp_is_sampled_after_scheduler_and_upload_locks(monkeypatch):
 
 
 @pytest.mark.django_db
-def test_crash_after_delete_before_ack_retries_same_exact_key_idempotently():
+def test_crash_after_delete_before_ack_retries_same_exact_key_idempotently(monkeypatch):
     """Catches losing a candidate when the process dies after object deletion."""
     now = timezone.now()
     org = Organization.objects.create(
@@ -769,8 +857,10 @@ def test_crash_after_delete_before_ack_retries_same_exact_key_idempotently():
     assert record.promotion_target_key not in storage.objects
 
     schedule = CleanupScheduleState.objects.get(pk=1)
+    expires_at = schedule.reconciliation_claim_expires_at
+    monkeypatch.setattr(retention_services.timezone, "now", lambda: expires_at)
     reclaimed = retention_services._claim_reconciliation(
-        now=schedule.reconciliation_claim_expires_at,
+        now=now,
     )
     retried = retention_services._attempt_reconciliation(claim=reclaimed, storage=storage)
     assert retried.succeeded is True
