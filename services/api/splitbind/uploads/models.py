@@ -30,6 +30,69 @@ class PromotionStatus(models.TextChoices):
     FAILED = "failed", "Failed"
 
 
+class CleanupLane(models.TextChoices):
+    ORDINARY = "ordinary", "Ordinary"
+    RECONCILIATION = "reconciliation", "Reconciliation"
+
+
+class CleanupScheduleQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        raise ValidationError("cleanup schedule is retention-service state")
+
+    def delete(self):
+        raise ValidationError("cleanup schedule must be preserved")
+
+
+class CleanupScheduleState(models.Model):
+    """Singleton database-backed lane scheduler for bounded cleanup scans."""
+
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    next_lane = models.CharField(
+        max_length=16, choices=CleanupLane.choices, default=CleanupLane.ORDINARY,
+    )
+    reconciliation_cursor_at = models.DateTimeField(null=True, blank=True)
+    reconciliation_cursor_id = models.UUIDField(null=True, blank=True)
+    has_run = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+    objects = models.Manager.from_queryset(CleanupScheduleQuerySet)()
+
+    class Meta:
+        base_manager_name = "objects"
+        default_manager_name = "objects"
+        constraints = [
+            models.CheckConstraint(condition=Q(id=1), name="cleanup_schedule_singleton"),
+            models.CheckConstraint(
+                condition=Q(next_lane__in=CleanupLane.values),
+                name="cleanup_schedule_lane_stable",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(
+                        reconciliation_cursor_at__isnull=True,
+                        reconciliation_cursor_id__isnull=True,
+                    )
+                    | Q(
+                        reconciliation_cursor_at__isnull=False,
+                        reconciliation_cursor_id__isnull=False,
+                    )
+                ),
+                name="cleanup_schedule_cursor_complete",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        from splitbind.retention.capabilities import cleanup_schedule_write_allowed
+
+        if self.pk != 1:
+            raise ValidationError("cleanup schedule must be the singleton row")
+        if not cleanup_schedule_write_allowed():
+            raise ValidationError("cleanup schedule requires the retention service")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("cleanup schedule must be preserved")
+
+
 class UploadRequestQuerySet(ValidatedOrganizationQuerySet):
     _IMMUTABLE_FIELDS = {
         "purpose", "object_key", "expected_sha256", "size_bytes", "expires_at",
@@ -49,6 +112,9 @@ class UploadRequestQuerySet(ValidatedOrganizationQuerySet):
             names = ", ".join(sorted(immutable))
             raise ValueError(f"upload intent fields are immutable ({names})")
         return super().update(**kwargs)
+
+    def delete(self):
+        raise ValidationError("upload evidence must be preserved")
 
     def bulk_create(self, objs, **kwargs):
         if kwargs.get("update_conflicts"):
@@ -141,6 +207,18 @@ class UploadRequest(ValidatedOrganizationOwnedModel):
         indexes = [
             models.Index(fields=["organization", "purpose", "created_at"], name="upload_org_purpose_idx"),
             models.Index(fields=["finalized_at", "expires_at"], name="upload_retention_idx"),
+            models.Index(
+                fields=["promotion_status", "promotion_target_deleted_at", "promotion_status_changed_at", "id"],
+                name="upload_stale_scan_idx",
+            ),
+            models.Index(
+                fields=["promotion_target_deleted_at", "id"],
+                name="upload_reconcile_cursor_idx",
+            ),
+            models.Index(
+                fields=["orphan_deleted_at", "created_at", "id"],
+                name="upload_orphan_scan_idx",
+            ),
         ]
 
     def clean(self) -> None:
@@ -201,6 +279,9 @@ class UploadRequest(ValidatedOrganizationOwnedModel):
                 if changed:
                     raise ValueError(f"upload intent fields are immutable ({', '.join(sorted(changed))})")
         super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("upload evidence must be preserved")
 
     @transaction.atomic
     def save_promotion(

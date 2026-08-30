@@ -13,7 +13,9 @@ from splitbind.access.models import Organization, Recipient, Role, User
 from splitbind.documents.models import Document, Issuance
 from splitbind.integrations.storage.fake import FakeObjectStorage
 from splitbind.retention.services import STALE_COPYING_AGE, cleanup_expired
-from splitbind.uploads.models import PromotionStatus, UploadPurpose, UploadRequest
+from splitbind.uploads.models import (
+    CleanupScheduleState, PromotionStatus, UploadPurpose, UploadRequest,
+)
 
 
 @pytest.mark.django_db
@@ -104,6 +106,24 @@ def test_reconciliation_observation_reverse_guard_preserves_retry_evidence():
 
     with pytest.raises(RuntimeError, match="reconciliation evidence"):
         migration.refuse_reconciliation_evidence_rollback(
+            apps, SimpleNamespace(connection=connection),
+        )
+
+
+@pytest.mark.django_db
+def test_cleanup_schedule_reverse_guard_preserves_used_fairness_position():
+    schedule = CleanupScheduleState.objects.get(pk=1)
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "UPDATE uploads_cleanupschedulestate SET has_run = %s WHERE id = %s",
+            [True, schedule.pk],
+        )
+    migration = importlib.import_module(
+        "splitbind.uploads.migrations.0009_cleanup_schedule_fairness"
+    )
+
+    with pytest.raises(RuntimeError, match="fairness position"):
+        migration.refuse_used_schedule_rollback(
             apps, SimpleNamespace(connection=connection),
         )
 

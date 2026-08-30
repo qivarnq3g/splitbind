@@ -17,16 +17,21 @@ from splitbind.jobs.services import create_issuance, create_verification
 from splitbind.documents.models import Document, Issuance
 from splitbind.retention.services import STALE_COPYING_AGE, cleanup_expired
 from splitbind.retention import services as retention_services
-from splitbind.uploads.models import PromotionStatus, UploadPurpose, UploadRequest
+from splitbind.uploads.models import (
+    CleanupScheduleState, PromotionStatus, UploadPurpose, UploadRequest,
+)
 from django.core.exceptions import ValidationError
 
 
 SHA256 = "a" * 64
 
 
-def upload(org, actor, *, created_at, status=PromotionStatus.NONE, purpose=UploadPurpose.ISSUANCE):
+def upload(
+    org, actor, *, created_at, status=PromotionStatus.NONE,
+    purpose=UploadPurpose.ISSUANCE, upload_id=None,
+):
     kind = "issuance_input" if purpose == UploadPurpose.ISSUANCE else "verification_input"
-    upload_id = uuid.uuid4()
+    upload_id = upload_id or uuid.uuid4()
     record = UploadRequest.objects.create(
         id=upload_id,
         organization=org,
@@ -290,7 +295,7 @@ def test_next_cleanup_scan_removes_a_late_copy_after_promotion_tombstone():
     record.refresh_from_db()
     assert record.promotion_target_key not in storage.objects
     assert unrelated in storage.objects
-    assert record.promotion_target_reconciled_at == now
+    assert record.promotion_target_reconciled_at >= now
 
 
 @pytest.mark.django_db
@@ -399,6 +404,262 @@ def test_reconciliation_observation_is_service_only_and_monotonic():
         record.save(update_fields=["promotion_target_reconciled_at"])
     record.refresh_from_db()
     assert record.promotion_target_reconciled_at == observed_at
+
+
+def _set_promotion_tombstone(record, *, at, target_key=None):
+    target_key = target_key or record.promotion_target_key
+    stored_at = connection.ops.adapt_datetimefield_value(at)
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "UPDATE uploads_uploadrequest SET promotion_target_key = %s, "
+            "promotion_target_deleted_at = %s WHERE id = %s",
+            [target_key, stored_at, record.id.hex],
+        )
+    record.refresh_from_db()
+    return record
+
+
+@pytest.mark.django_db
+def test_batch_one_persistently_alternates_ordinary_and_reconciliation_after_restart():
+    now = timezone.now()
+    org = Organization.objects.create(name="Fair lanes", slug=f"fair-lanes-{uuid.uuid4().hex[:8]}")
+    actor = User.objects.create_user(
+        username="fair-lanes", password="test", organization=org, role=Role.ISSUER,
+    )
+    ordinary = upload(org, actor, created_at=now - timedelta(hours=25))
+    reconciled = upload(
+        org, actor, created_at=now - STALE_COPYING_AGE - timedelta(minutes=1),
+        status=PromotionStatus.FAILED,
+    )
+    _set_promotion_tombstone(reconciled, at=now - timedelta(minutes=1))
+    storage = FakeObjectStorage()
+    storage.inject_object(
+        key=ordinary.object_key, content_type="application/pdf", size_bytes=1, sha256=SHA256,
+    )
+    storage.inject_object(
+        key=reconciled.promotion_target_key,
+        content_type="application/pdf", size_bytes=1, sha256=SHA256,
+    )
+
+    cleanup_expired(now=now, storage=storage, batch_size=1)
+    import importlib
+    import splitbind.retention.services as cleanup_module
+    importlib.reload(cleanup_module)
+    cleanup_module.cleanup_expired(
+        now=now + timedelta(seconds=1), storage=storage, batch_size=1,
+    )
+
+    ordinary.refresh_from_db()
+    reconciled.refresh_from_db()
+    assert ordinary.orphan_deleted_at is not None
+    assert reconciled.promotion_target_reconciled_at is not None
+    assert ordinary.object_key not in storage.objects
+    assert reconciled.promotion_target_key not in storage.objects
+
+
+@pytest.mark.django_db
+def test_ordinary_cleanup_is_not_starved_by_permanent_reconciliation_backlog():
+    now = timezone.now()
+    org = Organization.objects.create(name="Ordinary fair", slug=f"ordinary-fair-{uuid.uuid4().hex[:8]}")
+    actor = User.objects.create_user(
+        username="ordinary-fair", password="test", organization=org, role=Role.ISSUER,
+    )
+    ordinary = upload(org, actor, created_at=now - timedelta(hours=25))
+    storage = FakeObjectStorage()
+    storage.inject_object(
+        key=ordinary.object_key, content_type="application/pdf", size_bytes=1, sha256=SHA256,
+    )
+    for index in range(4):
+        record = upload(
+            org, actor,
+            created_at=now - STALE_COPYING_AGE - timedelta(minutes=index + 1),
+            status=PromotionStatus.FAILED,
+        )
+        _set_promotion_tombstone(record, at=now - timedelta(minutes=index + 1))
+
+    for index in range(2):
+        cleanup_expired(
+            now=now + timedelta(seconds=index), storage=storage, batch_size=1,
+        )
+
+    ordinary.refresh_from_db()
+    assert ordinary.orphan_deleted_at is not None
+
+
+@pytest.mark.django_db
+def test_reconciliation_is_not_starved_by_permanent_ordinary_backlog():
+    now = timezone.now()
+    org = Organization.objects.create(name="Reconcile fair", slug=f"reconcile-fair-{uuid.uuid4().hex[:8]}")
+    actor = User.objects.create_user(
+        username="reconcile-fair", password="test", organization=org, role=Role.ISSUER,
+    )
+    reconciled = upload(
+        org, actor, created_at=now - STALE_COPYING_AGE - timedelta(minutes=1),
+        status=PromotionStatus.FAILED,
+    )
+    _set_promotion_tombstone(reconciled, at=now - timedelta(minutes=1))
+    storage = FakeObjectStorage()
+    storage.inject_object(
+        key=reconciled.promotion_target_key,
+        content_type="application/pdf", size_bytes=1, sha256=SHA256,
+    )
+    for index in range(4):
+        record = upload(
+            org, actor, created_at=now - timedelta(hours=25, minutes=index),
+        )
+        storage.inject_object(
+            key=record.object_key,
+            content_type="application/pdf", size_bytes=1, sha256=SHA256,
+        )
+
+    for index in range(2):
+        cleanup_expired(
+            now=now + timedelta(seconds=index), storage=storage, batch_size=1,
+        )
+
+    reconciled.refresh_from_db()
+    assert reconciled.promotion_target_reconciled_at is not None
+    assert reconciled.promotion_target_key not in storage.objects
+
+
+@pytest.mark.django_db
+def test_invalid_reconciliation_key_advances_fair_order_and_audits_safe_failure():
+    now = timezone.now()
+    org = Organization.objects.create(name="Invalid fair", slug=f"invalid-fair-{uuid.uuid4().hex[:8]}")
+    actor = User.objects.create_user(
+        username="invalid-fair", password="test", organization=org, role=Role.ISSUER,
+    )
+    invalid = upload(
+        org, actor, created_at=now - STALE_COPYING_AGE - timedelta(minutes=2),
+        status=PromotionStatus.FAILED,
+    )
+    valid = upload(
+        org, actor, created_at=now - STALE_COPYING_AGE - timedelta(minutes=1),
+        status=PromotionStatus.FAILED,
+    )
+    wrong_key = f"inputs/issuance/{org.id}/{uuid.uuid4()}.bin"
+    _set_promotion_tombstone(invalid, at=now - timedelta(minutes=2), target_key=wrong_key)
+    _set_promotion_tombstone(valid, at=now - timedelta(minutes=1))
+    storage = FakeObjectStorage()
+    storage.inject_object(
+        key=valid.promotion_target_key,
+        content_type="application/pdf", size_bytes=1, sha256=SHA256,
+    )
+
+    cleanup_expired(now=now, storage=storage, batch_size=1)
+    schedule = CleanupScheduleState.objects.get(pk=1)
+    assert schedule.reconciliation_cursor_id == invalid.id
+    assert schedule.reconciliation_cursor_at == invalid.promotion_target_deleted_at
+    cleanup_expired(now=now + timedelta(seconds=1), storage=storage, batch_size=1)
+    schedule.refresh_from_db()
+    assert schedule.reconciliation_cursor_id == valid.id
+
+    invalid.refresh_from_db()
+    valid.refresh_from_db()
+    assert invalid.promotion_target_reconciled_at is not None
+    assert valid.promotion_target_reconciled_at is not None
+    assert valid.promotion_target_key not in storage.objects
+    failure = AuditEvent.objects.get(
+        action="object.promotion.reconciliation.failed", target_id=str(invalid.pk),
+    )
+    assert failure.metadata == {"safe_error_code": "INVALID_CONTROLLED_KEY"}
+
+
+@pytest.mark.django_db
+def test_new_invalid_tombstones_do_not_monopolize_reconciliation_order():
+    now = timezone.now()
+    org = Organization.objects.create(name="Cursor fair", slug=f"cursor-fair-{uuid.uuid4().hex[:8]}")
+    actor = User.objects.create_user(
+        username="cursor-fair", password="test", organization=org, role=Role.ISSUER,
+    )
+    first = upload(
+        org, actor, created_at=now - STALE_COPYING_AGE - timedelta(minutes=3),
+        status=PromotionStatus.FAILED,
+        upload_id=uuid.UUID("00000000-0000-4000-8000-000000000001"),
+    )
+    valid = upload(
+        org, actor, created_at=now - STALE_COPYING_AGE - timedelta(minutes=2),
+        status=PromotionStatus.FAILED,
+        upload_id=uuid.UUID("00000000-0000-4000-8000-000000000002"),
+    )
+    _set_promotion_tombstone(
+        first, at=now - timedelta(minutes=3),
+        target_key=f"inputs/issuance/{org.id}/{uuid.uuid4()}.bin",
+    )
+    _set_promotion_tombstone(valid, at=now - timedelta(minutes=2))
+    storage = FakeObjectStorage()
+    storage.inject_object(
+        key=valid.promotion_target_key,
+        content_type="application/pdf", size_bytes=1, sha256=SHA256,
+    )
+
+    cleanup_expired(now=now, storage=storage, batch_size=1)
+    newcomer = upload(
+        org, actor, created_at=now - STALE_COPYING_AGE - timedelta(minutes=1),
+        status=PromotionStatus.FAILED,
+        upload_id=uuid.UUID("00000000-0000-4000-8000-000000000000"),
+    )
+    _set_promotion_tombstone(
+        newcomer, at=now - timedelta(minutes=1),
+        target_key=f"inputs/issuance/{org.id}/{uuid.uuid4()}.bin",
+    )
+    cleanup_expired(now=now + timedelta(seconds=1), storage=storage, batch_size=1)
+
+    first.refresh_from_db()
+    valid.refresh_from_db()
+    newcomer.refresh_from_db()
+    assert first.promotion_target_reconciled_at is not None
+    assert valid.promotion_target_reconciled_at is not None
+    assert newcomer.promotion_target_reconciled_at is None
+    assert valid.promotion_target_key not in storage.objects
+
+
+@pytest.mark.django_db
+def test_reconciliation_clamps_stale_requested_time_after_locked_observation():
+    now = timezone.now()
+    org = Organization.objects.create(name="Clamp observation", slug=f"clamp-{uuid.uuid4().hex[:8]}")
+    actor = User.objects.create_user(
+        username="clamp-observation", password="test", organization=org, role=Role.ISSUER,
+    )
+    record = upload(
+        org, actor, created_at=now - STALE_COPYING_AGE - timedelta(minutes=1),
+        status=PromotionStatus.FAILED,
+    )
+    _set_promotion_tombstone(record, at=now - timedelta(minutes=1))
+    future = now + timedelta(minutes=5)
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "UPDATE uploads_uploadrequest SET promotion_target_reconciled_at = %s WHERE id = %s",
+            [future, record.id.hex],
+        )
+
+    assert cleanup_expired(now=now, storage=FakeObjectStorage(), batch_size=1) == 0
+    record.refresh_from_db()
+    assert record.promotion_target_reconciled_at == future
+
+
+@pytest.mark.django_db
+def test_reconciliation_samples_observation_time_after_acquiring_row_lock(monkeypatch):
+    requested_at = timezone.now()
+    locked_at = requested_at + timedelta(seconds=5)
+    org = Organization.objects.create(name="Locked clock", slug=f"locked-clock-{uuid.uuid4().hex[:8]}")
+    actor = User.objects.create_user(
+        username="locked-clock", password="test", organization=org, role=Role.ISSUER,
+    )
+    record = upload(
+        org, actor,
+        created_at=requested_at - STALE_COPYING_AGE - timedelta(minutes=1),
+        status=PromotionStatus.FAILED,
+    )
+    _set_promotion_tombstone(record, at=requested_at - timedelta(minutes=1))
+    monkeypatch.setattr(retention_services.timezone, "now", lambda: locked_at)
+
+    cleanup_expired(
+        now=requested_at, storage=FakeObjectStorage(), batch_size=1,
+    )
+
+    record.refresh_from_db()
+    assert record.promotion_target_reconciled_at == locked_at
 
 
 @pytest.mark.django_db

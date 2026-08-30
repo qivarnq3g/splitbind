@@ -2,7 +2,7 @@ import uuid
 from datetime import timedelta
 
 from django.db import connection, transaction
-from django.db.models import Exists, F, OuterRef
+from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
 from splitbind.audit.models import AuditEvent, AuditOutcome
@@ -12,9 +12,14 @@ from splitbind.integrations.storage.base import (
     validate_issuance_output_key, validate_orphan_key, validate_promoted_key,
 )
 from splitbind.jobs.models import Job, JobStatus
-from splitbind.retention.capabilities import _allow_deletion_evidence_write
+from splitbind.retention.capabilities import (
+    _allow_cleanup_schedule_write, _allow_deletion_evidence_write,
+)
 from splitbind.retention.policies import retention_deadline
-from splitbind.uploads.models import PromotionStatus, UploadPurpose, UploadRequest
+from splitbind.uploads.models import (
+    CleanupLane, CleanupScheduleState, PromotionStatus, UploadPurpose,
+    UploadRequest,
+)
 from splitbind.uploads.services import get_storage
 
 
@@ -81,11 +86,13 @@ def _record_deletion_evidence(
         return True
 
 
-def _record_promotion_reconciliation(record, *, at, succeeded):
+def _record_promotion_reconciliation(
+    record, *, at, succeeded, safe_error_code="STORAGE_DELETE_RETRY",
+):
     """Persist one reconciliation observation and at most one audit per outcome."""
     previous = record.promotion_target_reconciled_at
     if previous is not None and at < previous:
-        raise ValueError("promotion reconciliation time must be monotonic")
+        at = previous
     record.promotion_target_reconciled_at = at
     with _allow_deletion_evidence_write():
         record.save(update_fields=["promotion_target_reconciled_at"])
@@ -99,9 +106,11 @@ def _record_promotion_reconciliation(record, *, at, succeeded):
         outcome=outcome,
     ).exists()
     if not already_reported:
-        metadata = {"status": "deleted"} if succeeded else {
-            "safe_error_code": "STORAGE_DELETE_RETRY",
-        }
+        metadata = (
+            {"status": "deleted"}
+            if succeeded
+            else {"safe_error_code": safe_error_code}
+        )
         record_system_event(
             record.organization, action, record, outcome, uuid.uuid4(), metadata,
         )
@@ -118,15 +127,26 @@ def _reconcile_fenced_promotion(*, pk, storage, now) -> bool:
             return False
         if record.promotion_target_deleted_at is None:
             return False
+        observed_at = max(
+            now,
+            timezone.now(),
+            record.promotion_target_reconciled_at or now,
+        )
         key = record.promotion_target_key
         if not key or not _key_is_owned(record, "stale_promotion", key):
+            _record_promotion_reconciliation(
+                record, at=observed_at, succeeded=False,
+                safe_error_code="INVALID_CONTROLLED_KEY",
+            )
             return False
         try:
             storage.delete(key=key)
         except Exception:
-            _record_promotion_reconciliation(record, at=now, succeeded=False)
+            _record_promotion_reconciliation(
+                record, at=observed_at, succeeded=False,
+            )
             return False
-        _record_promotion_reconciliation(record, at=now, succeeded=True)
+        _record_promotion_reconciliation(record, at=observed_at, succeeded=True)
         return True
 
 
@@ -274,22 +294,18 @@ def _delete_one(*, model, pk, key_field, timestamp_field, action, category,
         )
 
 
-def cleanup_expired(*, now=None, storage=None, batch_size=DEFAULT_BATCH_SIZE) -> int:
-    now = now or timezone.now()
-    if timezone.is_naive(now):
-        raise ValueError("cleanup time must be timezone-aware")
-    if not isinstance(batch_size, int) or isinstance(batch_size, bool) or not 1 <= batch_size <= MAX_BATCH_SIZE:
-        raise ValueError("cleanup batch size is invalid")
-    storage = storage or get_storage()
+def _ordinary_candidates(*, now, limit):
     candidates = []
 
     def add(queryset, model, key_field, timestamp_field, action, category,
             order_field="created_at", expected_state=None):
-        remaining = batch_size - len(candidates)
+        remaining = limit - len(candidates)
         if remaining <= 0:
             return
         for pk in queryset.order_by(order_field, "pk").values_list("pk", flat=True)[:remaining]:
-            candidates.append((model, pk, key_field, timestamp_field, action, category, expected_state))
+            candidates.append(
+                (model, pk, key_field, timestamp_field, action, category, expected_state)
+            )
 
     stale = now - STALE_COPYING_AGE
     terminal = list(TERMINAL_JOB_STATUSES)
@@ -351,20 +367,98 @@ def cleanup_expired(*, now=None, storage=None, batch_size=DEFAULT_BATCH_SIZE) ->
     add(UploadRequest._base_manager.filter(
         orphan_deleted_at__isnull=True, created_at__lte=now - _window("orphan_upload", now),
     ), UploadRequest, "object_key", "orphan_deleted_at", "object.orphan.deleted", "orphan")
+    return candidates
 
-    remaining = batch_size - len(candidates)
-    if remaining > 0:
-        reconciliation_ids = UploadRequest._base_manager.filter(
-            promotion_target_deleted_at__isnull=False,
-            promotion_target_key__isnull=False,
-        ).order_by(
-            F("promotion_target_reconciled_at").asc(nulls_first=True),
+
+def _next_reconciliation_candidate(schedule, *, excluded_ids):
+    queryset = UploadRequest._base_manager.filter(
+        promotion_target_deleted_at__isnull=False,
+        promotion_target_key__isnull=False,
+    ).exclude(pk__in=excluded_ids)
+    if (
+        schedule.reconciliation_cursor_at is not None
+        and schedule.reconciliation_cursor_id is not None
+    ):
+        after_cursor = queryset.filter(
+            Q(promotion_target_deleted_at__gt=schedule.reconciliation_cursor_at)
+            | Q(
+                promotion_target_deleted_at=schedule.reconciliation_cursor_at,
+                pk__gt=schedule.reconciliation_cursor_id,
+            )
+        )
+        candidate = after_cursor.order_by(
             "promotion_target_deleted_at", "pk",
-        ).values_list(
-            "pk", flat=True,
-        )[:remaining]
-        for pk in reconciliation_ids:
-            candidates.append(("reconcile_promotion", pk, None, None, None, None, None))
+        ).values_list("pk", "promotion_target_deleted_at").first()
+        if candidate is not None:
+            return candidate
+    return queryset.order_by(
+        "promotion_target_deleted_at", "pk",
+    ).values_list("pk", "promotion_target_deleted_at").first()
+
+
+def _scheduled_candidates(*, now, batch_size):
+    """Claim a durable round-robin batch while serializing scheduler state."""
+    with transaction.atomic():
+        schedule = CleanupScheduleState.objects.select_for_update().get(pk=1)
+        ordinary = _ordinary_candidates(now=now, limit=batch_size)
+        ordinary_index = 0
+        reconciliation_ids = set()
+        selected = []
+
+        def take(lane):
+            nonlocal ordinary_index
+            if lane == CleanupLane.ORDINARY:
+                if ordinary_index >= len(ordinary):
+                    return None
+                candidate = ordinary[ordinary_index]
+                ordinary_index += 1
+                return candidate
+            candidate = _next_reconciliation_candidate(
+                schedule, excluded_ids=reconciliation_ids,
+            )
+            if candidate is None:
+                return None
+            pk, tombstoned_at = candidate
+            reconciliation_ids.add(pk)
+            schedule.reconciliation_cursor_at = tombstoned_at
+            schedule.reconciliation_cursor_id = pk
+            return ("reconcile_promotion", pk, None, None, None, None, None)
+
+        for _ in range(batch_size):
+            preferred = schedule.next_lane
+            candidate = take(preferred)
+            used_lane = preferred
+            if candidate is None:
+                used_lane = (
+                    CleanupLane.RECONCILIATION
+                    if preferred == CleanupLane.ORDINARY
+                    else CleanupLane.ORDINARY
+                )
+                candidate = take(used_lane)
+            if candidate is None:
+                break
+            selected.append(candidate)
+            schedule.next_lane = (
+                CleanupLane.RECONCILIATION
+                if used_lane == CleanupLane.ORDINARY
+                else CleanupLane.ORDINARY
+            )
+
+        if selected:
+            schedule.has_run = True
+            with _allow_cleanup_schedule_write():
+                schedule.save()
+        return selected
+
+
+def cleanup_expired(*, now=None, storage=None, batch_size=DEFAULT_BATCH_SIZE) -> int:
+    now = now or timezone.now()
+    if timezone.is_naive(now):
+        raise ValueError("cleanup time must be timezone-aware")
+    if not isinstance(batch_size, int) or isinstance(batch_size, bool) or not 1 <= batch_size <= MAX_BATCH_SIZE:
+        raise ValueError("cleanup batch size is invalid")
+    storage = storage or get_storage()
+    candidates = _scheduled_candidates(now=now, batch_size=batch_size)
 
     deleted = 0
     for model, pk, key_field, timestamp_field, action, category, expected_state in candidates:

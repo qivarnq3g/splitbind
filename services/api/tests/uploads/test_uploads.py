@@ -278,6 +278,53 @@ def test_upload_intent_identity_is_immutable_on_instance_and_queryset_updates(or
         UploadRequest.objects.filter(pk=record.pk).update(size_bytes=2)
 
 
+@pytest.mark.django_db
+@pytest.mark.parametrize("manager_name", ["objects", "_base_manager"])
+def test_upload_evidence_queryset_delete_is_rejected_without_partial_deletion(
+    organization, actors, manager_name,
+):
+    records = [
+        UploadRequest.objects.create(
+            organization=organization,
+            requested_by=actors[Role.ISSUER],
+            purpose=UploadPurpose.ISSUANCE,
+            object_key=(
+                f"uploads/orphan/issuance_input/{organization.id}/{uuid.uuid4().hex}.bin"
+            ),
+            expected_sha256=SHA256,
+            size_bytes=1,
+            expires_at=timezone.now() + timedelta(minutes=15),
+        )
+        for _ in range(2)
+    ]
+
+    manager = getattr(UploadRequest, manager_name)
+    with pytest.raises(ValidationError, match="preserved"):
+        manager.filter(pk__in=[record.pk for record in records]).delete()
+
+    assert set(UploadRequest.objects.values_list("pk", flat=True)) == {
+        record.pk for record in records
+    }
+
+
+@pytest.mark.django_db
+def test_upload_evidence_instance_delete_is_rejected(organization, actors):
+    record = UploadRequest.objects.create(
+        organization=organization,
+        requested_by=actors[Role.ISSUER],
+        purpose=UploadPurpose.ISSUANCE,
+        object_key=f"uploads/orphan/issuance_input/{organization.id}/{uuid.uuid4().hex}.bin",
+        expected_sha256=SHA256,
+        size_bytes=1,
+        expires_at=timezone.now() + timedelta(minutes=15),
+    )
+
+    with pytest.raises(ValidationError, match="preserved"):
+        record.delete()
+
+    assert UploadRequest.objects.filter(pk=record.pk).exists()
+
+
 def test_fake_storage_enforces_orphan_to_promoted_copy_boundary():
     storage = FakeObjectStorage()
     source = f"uploads/orphan/issuance_input/{uuid.uuid4()}/{uuid.uuid4().hex}.bin"
