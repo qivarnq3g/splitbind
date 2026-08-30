@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import path
 
 from splitbind.access.views import AuditEventListView, LoginView, LogoutView, SessionView
-from splitbind.health.views import live
+from splitbind.health.views import live, ready
 from splitbind.documents.views import (
     IssuanceCreateView,
     IssuanceDetailView,
@@ -16,6 +16,7 @@ from splitbind.uploads.views import UploadCompleteView, UploadIntentView
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("health/live", live, name="health-live"),
+    path("health/ready", ready, name="health-ready"),
     path("api/v1/auth/session", SessionView.as_view(), name="auth-session"),
     path("api/v1/auth/login", LoginView.as_view(), name="auth-login"),
     path("api/v1/auth/logout", LogoutView.as_view(), name="auth-logout"),

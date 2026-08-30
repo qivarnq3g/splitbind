@@ -74,11 +74,13 @@ class UploadRequest(ValidatedOrganizationOwnedModel):
     )
     expires_at = models.DateTimeField()
     finalized_at = models.DateTimeField(null=True, blank=True)
+    orphan_deleted_at = models.DateTimeField(null=True, blank=True)
     promotion_target_key = models.CharField(max_length=1024, null=True, blank=True)
     promotion_status = models.CharField(
         max_length=16, choices=PromotionStatus.choices, default=PromotionStatus.NONE,
     )
     safe_error_code = models.CharField(max_length=80, null=True, blank=True)
+    promotion_target_deleted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

@@ -1,6 +1,7 @@
 import os
 
 from .database import parse_postgresql_url
+from .limits import load_runtime_limits
 from .settings_common import *  # noqa: F403
 
 
@@ -12,10 +13,11 @@ def _required_environment(name: str) -> str:
 
 
 SECRET_KEY = _required_environment("DJANGO_SECRET_KEY")
+ENVIRONMENT = os.environ.get("ENVIRONMENT", "production")
+globals().update(load_runtime_limits(ENVIRONMENT, os.environ))
 # Storage is environment-backed. The adapter validates this complete set when
 # direct-upload functionality is initialized, preserving independent database
 # configuration validation during settings import.
-ENVIRONMENT = os.environ.get("ENVIRONMENT", "production")
 OBJECT_STORAGE_ENDPOINT = os.environ.get("OBJECT_STORAGE_ENDPOINT", "")
 OBJECT_STORAGE_ENDPOINT_HINT = os.environ.get("OBJECT_STORAGE_ENDPOINT_HINT", "")
 OBJECT_STORAGE_BUCKET = os.environ.get("OBJECT_STORAGE_BUCKET", "")

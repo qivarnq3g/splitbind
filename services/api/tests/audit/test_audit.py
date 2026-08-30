@@ -7,7 +7,7 @@ from django.core.exceptions import ValidationError
 from splitbind.access.models import Organization, Recipient, Role
 from splitbind.audit.models import AuditEvent, AuditOutcome
 from splitbind.audit.redaction import redact_metadata
-from splitbind.audit.services import record_event
+from splitbind.audit.services import record_event, record_system_event
 
 
 @pytest.fixture
@@ -169,4 +169,31 @@ def test_record_event_rejects_unsaved_targets_even_when_uuid_is_present(
             AuditOutcome.SUCCEEDED,
             uuid.uuid4(),
             {"kind": "target"},
+        )
+
+
+@pytest.mark.django_db
+def test_system_event_is_actorless_same_tenant_and_uses_the_same_redaction(audit_actor):
+    event = record_system_event(
+        audit_actor.organization,
+        "object.orphan.deleted",
+        audit_actor,
+        AuditOutcome.FAILED,
+        uuid.uuid4(),
+        {"safe_error_code": "STORAGE_DELETE_RETRY", "object_key": "private/key"},
+    )
+
+    assert event.actor_id is None
+    assert event.organization_id == audit_actor.organization_id
+    assert event.metadata == {"safe_error_code": "STORAGE_DELETE_RETRY"}
+
+    other = Organization.objects.create(name="Other System Audit", slug="other-system-audit")
+    with pytest.raises(ValidationError, match="belong"):
+        record_system_event(
+            other,
+            "object.orphan.deleted",
+            audit_actor,
+            AuditOutcome.SUCCEEDED,
+            uuid.uuid4(),
+            {},
         )

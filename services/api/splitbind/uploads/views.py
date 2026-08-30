@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from splitbind.access.throttles import AccountRateThrottle, SourceIPRateThrottle
 from splitbind.integrations.storage.base import UploadRejected
 from splitbind.uploads.serializers import UploadCompleteSerializer, UploadIntentSerializer, serialize_upload
 from splitbind.uploads.services import complete_upload, create_upload, record_serializer_denial
@@ -13,6 +14,7 @@ from splitbind.uploads.services import complete_upload, create_upload, record_se
 @method_decorator(csrf_protect, name="dispatch")
 class UploadIntentView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_classes = [AccountRateThrottle, SourceIPRateThrottle]
 
     def post(self, request):
         serializer = UploadIntentSerializer(data=request.data)
@@ -33,6 +35,7 @@ class UploadIntentView(APIView):
 @method_decorator(csrf_protect, name="dispatch")
 class UploadCompleteView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_classes = [AccountRateThrottle, SourceIPRateThrottle]
 
     def post(self, request, upload_id):
         serializer = UploadCompleteSerializer(data=request.data)

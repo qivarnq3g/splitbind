@@ -23,6 +23,10 @@ from splitbind.uploads.models import UploadPurpose, UploadRequest
 
 
 SHA256 = "a" * 64
+PUBLIC_KEY_PEM = """-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAAAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+-----END PUBLIC KEY-----
+"""
 
 
 @pytest.fixture
@@ -96,7 +100,7 @@ def tenant_pair(db):
     second_signing_key = SigningKey.objects.create(
         organization=second,
         key_id="second-signing-key",
-        public_key="synthetic-public-key",
+        public_key=PUBLIC_KEY_PEM,
         valid_from=timezone.now(),
     )
     return {

@@ -71,7 +71,7 @@ def _validate_intent(actor, *, kind: str, content_type: str, size_bytes: int, sh
         _reject(actor, "UPLOAD_KIND", action="upload.intent.denied", kind=kind)
     if content_type not in _CONTENT_TYPES[kind]:
         _reject(actor, "UPLOAD_CONTENT_TYPE", action="upload.intent.denied", kind=kind)
-    if not isinstance(size_bytes, int) or isinstance(size_bytes, bool) or not 1 <= size_bytes <= MAX_UPLOAD_BYTES:
+    if not isinstance(size_bytes, int) or isinstance(size_bytes, bool) or not 1 <= size_bytes <= settings.MAX_PDF_BYTES:
         _reject(actor, "UPLOAD_SIZE", action="upload.intent.denied", kind=kind)
     import re
     if not isinstance(sha256, str) or not re.fullmatch(SHA256_PATTERN, sha256):

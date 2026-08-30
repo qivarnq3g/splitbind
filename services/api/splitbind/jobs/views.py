@@ -7,6 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from splitbind.access.throttles import AccountRateThrottle, SourceIPRateThrottle
 from splitbind.access.selectors import scope_jobs
 from splitbind.audit.models import AuditOutcome
 from splitbind.audit.services import record_event
@@ -29,6 +30,7 @@ class JobDetailView(APIView):
 @method_decorator(csrf_protect, name="dispatch")
 class JobCancelView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_classes = [AccountRateThrottle, SourceIPRateThrottle]
 
     def post(self, request, job_id):
         serializer = CancelJobSerializer(data=request.data)

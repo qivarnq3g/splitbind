@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Mapping, Protocol
 
+from django.conf import settings
+
 from splitbind.validators import SHA256_PATTERN
 
 
@@ -15,6 +17,11 @@ _PROMOTED_KEY = re.compile(
     r"^inputs/(?P<kind>issuance|verification)/"
     r"(?P<organization>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/"
     r"(?P<upload>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.bin$"
+)
+_ISSUANCE_OUTPUT_KEY = re.compile(
+    r"^outputs/issuance/"
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/"
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.pdf$"
 )
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 _CONTENT_TYPES = {
@@ -65,7 +72,9 @@ class ObjectStorage(Protocol):
 
 def validate_controlled_key(key: str) -> None:
     """Accept only application-generated orphan or promoted input keys."""
-    if not isinstance(key, str) or not (_ORPHAN_KEY.fullmatch(key) or _PROMOTED_KEY.fullmatch(key)):
+    if not isinstance(key, str) or not (
+        _ORPHAN_KEY.fullmatch(key) or _PROMOTED_KEY.fullmatch(key) or _ISSUANCE_OUTPUT_KEY.fullmatch(key)
+    ):
         raise ValueError("storage key must use a controlled application shape")
     if any(character in key for character in ("\\", "\x00", "\r", "\n")) or ".." in key:
         raise ValueError("storage key must use a controlled application shape")
@@ -109,7 +118,8 @@ def validate_put_constraints(key: str, content_type: str, size_bytes: int, sha25
     kind = key.split("/", 3)[2]
     if content_type not in _CONTENT_TYPES[kind]:
         raise ValueError("storage content type is not allowed for this upload kind")
-    if not isinstance(size_bytes, int) or isinstance(size_bytes, bool) or not 1 <= size_bytes <= MAX_UPLOAD_BYTES:
+    runtime_max = getattr(settings, "MAX_PDF_BYTES", MAX_UPLOAD_BYTES)
+    if not isinstance(size_bytes, int) or isinstance(size_bytes, bool) or not 1 <= size_bytes <= runtime_max:
         raise ValueError("storage object size must be between one byte and ten MiB")
     validate_checksum(sha256)
     validate_expiry(expires)

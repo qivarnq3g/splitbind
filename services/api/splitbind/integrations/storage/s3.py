@@ -32,12 +32,9 @@ class S3ObjectStorage:
         bucket = getattr(settings, "OBJECT_STORAGE_BUCKET", "")
         access_key = getattr(settings, "OBJECT_STORAGE_ACCESS_KEY", "")
         secret_key = getattr(settings, "OBJECT_STORAGE_SECRET_KEY", "")
-        if not all((endpoint, bucket, access_key, secret_key)):
-            raise ImproperlyConfigured("R2 storage endpoint, bucket, and credentials are required")
-        environment = getattr(settings, "ENVIRONMENT", "production")
-        cls._validate_endpoint(
-            endpoint,
-            environment=environment,
+        cls.validate_configuration(
+            endpoint=endpoint, bucket=bucket, access_key=access_key, secret_key=secret_key,
+            environment=getattr(settings, "ENVIRONMENT", "production"),
             managed_hint=getattr(settings, "OBJECT_STORAGE_ENDPOINT_HINT", ""),
         )
         import boto3
@@ -52,6 +49,23 @@ class S3ObjectStorage:
                 region_name="auto",
             ),
         )
+
+    @classmethod
+    def validate_settings_configuration(cls) -> None:
+        cls.validate_configuration(
+            endpoint=getattr(settings, "OBJECT_STORAGE_ENDPOINT", ""),
+            bucket=getattr(settings, "OBJECT_STORAGE_BUCKET", ""),
+            access_key=getattr(settings, "OBJECT_STORAGE_ACCESS_KEY", ""),
+            secret_key=getattr(settings, "OBJECT_STORAGE_SECRET_KEY", ""),
+            environment=getattr(settings, "ENVIRONMENT", "production"),
+            managed_hint=getattr(settings, "OBJECT_STORAGE_ENDPOINT_HINT", ""),
+        )
+
+    @classmethod
+    def validate_configuration(cls, *, endpoint, bucket, access_key, secret_key, environment, managed_hint):
+        if not all((endpoint, bucket, access_key, secret_key)):
+            raise ImproperlyConfigured("R2 storage endpoint, bucket, and credentials are required")
+        cls._validate_endpoint(endpoint, environment=environment, managed_hint=managed_hint)
 
     @staticmethod
     def _validate_endpoint(endpoint: str, *, environment: str, managed_hint: str) -> None:

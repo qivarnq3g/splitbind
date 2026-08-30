@@ -1,3 +1,4 @@
+from django.conf import settings
 from rest_framework import serializers
 
 from splitbind.validators import SHA256_PATTERN
@@ -7,7 +8,7 @@ class UploadIntentSerializer(serializers.Serializer):
     kind = serializers.ChoiceField(choices=["issuance_input", "verification_input"])
     filename = serializers.CharField(max_length=255, allow_blank=False, write_only=True)
     content_type = serializers.CharField(max_length=100)
-    size_bytes = serializers.IntegerField(min_value=1, max_value=10 * 1024 * 1024)
+    size_bytes = serializers.IntegerField(min_value=1, max_value=settings.MAX_PDF_BYTES)
     sha256 = serializers.RegexField(
         SHA256_PATTERN,
         help_text="Client-computed expected SHA-256; the worker independently hashes stored bytes.",

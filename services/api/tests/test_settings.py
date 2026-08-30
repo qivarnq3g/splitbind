@@ -9,6 +9,16 @@ def load_production_settings(monkeypatch, database_url, **environment):
     monkeypatch.setenv("DATABASE_URL", database_url)
     monkeypatch.delenv("NEON_DATABASE_HOST", raising=False)
     monkeypatch.delenv("SPLITBIND_DATABASE_HOST", raising=False)
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    defaults = {
+        "MAX_PDF_BYTES": str(10 * 1024 * 1024),
+        "MAX_PDF_PAGES": "50",
+        "MAX_IMAGE_PIXELS": "40000000",
+        "JOB_TIMEOUT_SECONDS": "600",
+        "WORKER_CONCURRENCY": "1",
+    }
+    for name, value in defaults.items():
+        monkeypatch.setenv(name, value)
     for name, value in environment.items():
         monkeypatch.setenv(name, value)
     sys.modules.pop("config.settings", None)

@@ -1,4 +1,8 @@
-from .settings_common import *  # noqa: F403
+import os
+
+os.environ.setdefault("ENVIRONMENT", "test")
+
+from .settings_common import *  # noqa: F403,E402
 
 
 SECRET_KEY = "splitbind-obvious-fixed-test-key-not-for-production"

@@ -73,6 +73,7 @@ class Issuance(ValidatedOrganizationOwnedModel):
         null=True,
         blank=True,
     )
+    output_deleted_at = models.DateTimeField(null=True, blank=True)
     issued_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

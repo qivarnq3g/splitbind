@@ -1,3 +1,4 @@
+import re
 import uuid
 
 from django.contrib.auth.models import AbstractUser, UserManager as DjangoUserManager
@@ -210,7 +211,27 @@ class SigningKeyStatus(models.TextChoices):
     REVOKED = "revoked", "Revoked"
 
 
+class SigningKeyQuerySet(ValidatedOrganizationQuerySet):
+    _VALIDATED_FIELDS = {
+        "key_id", "algorithm", "public_key", "status", "valid_from",
+        "valid_until", "revoked_at", "metadata",
+    }
+
+    def update(self, **kwargs):
+        protected = self._VALIDATED_FIELDS & kwargs.keys()
+        if protected:
+            raise ValidationError(
+                "signing-key lifecycle fields require instance validation"
+            )
+        return super().update(**kwargs)
+
+
+class SigningKeyManager(ValidatedOrganizationManager.from_queryset(SigningKeyQuerySet)):
+    pass
+
+
 class SigningKey(ValidatedOrganizationOwnedModel):
+    objects = SigningKeyManager()
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     key_id = models.CharField(max_length=120, unique=True)
     algorithm = models.CharField(max_length=20, default="Ed25519", editable=False)
@@ -230,3 +251,68 @@ class SigningKey(ValidatedOrganizationOwnedModel):
         indexes = [
             models.Index(fields=["organization", "status"], name="signkey_org_status_idx")
         ]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(status__in=SigningKeyStatus.values),
+                name="signkey_status_stable",
+            ),
+            models.CheckConstraint(
+                condition=Q(valid_until__isnull=True) | Q(valid_until__gt=models.F("valid_from")),
+                name="signkey_valid_window_ordered",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(status=SigningKeyStatus.REVOKED, revoked_at__isnull=False)
+                    | Q(status__in=[SigningKeyStatus.ACTIVE, SigningKeyStatus.VERIFY_ONLY], revoked_at__isnull=True)
+                ),
+                name="signkey_revocation_state",
+            ),
+        ]
+
+    def clean(self) -> None:
+        super().clean()
+        if self.algorithm != "Ed25519":
+            raise ValidationError("signing key algorithm must be Ed25519")
+        if not isinstance(self.key_id, str) or re.fullmatch(
+            r"[A-Za-z0-9][A-Za-z0-9._:-]{0,119}", self.key_id
+        ) is None:
+            raise ValidationError("signing key identifier is invalid")
+        validate_ed25519_public_pem(self.public_key)
+        if self.valid_until is not None and self.valid_until <= self.valid_from:
+            raise ValidationError("signing key validity window is invalid")
+        if self.status == SigningKeyStatus.REVOKED:
+            if self.revoked_at is None or self.revoked_at < self.valid_from:
+                raise ValidationError("revoked signing key requires a valid revocation time")
+        elif self.revoked_at is not None:
+            raise ValidationError("only revoked signing keys may have a revocation time")
+        if not isinstance(self.metadata, dict):
+            raise ValidationError("signing key metadata must be an object")
+        allowed = {"label", "purpose"}
+        if set(self.metadata) - allowed or any(
+            not isinstance(value, str) or not 1 <= len(value) <= 120
+            for value in self.metadata.values()
+        ):
+            raise ValidationError("signing key metadata is unsafe")
+
+
+def validate_ed25519_public_pem(value: object):
+    """Return an Ed25519 public key only for exact standard SPKI PEM."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+    if not isinstance(value, str) or not 1 <= len(value) <= 1024:
+        raise ValidationError("public key must be bounded PEM text")
+    try:
+        encoded = value.encode("ascii")
+        key = serialization.load_pem_public_key(encoded)
+    except (ValueError, TypeError, UnicodeError) as error:
+        raise ValidationError("public key must be standard Ed25519 SPKI PEM") from error
+    if not isinstance(key, Ed25519PublicKey):
+        raise ValidationError("public key must be Ed25519")
+    canonical = key.public_bytes(
+        serialization.Encoding.PEM,
+        serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    if encoded != canonical:
+        raise ValidationError("public key must use canonical SPKI PEM encoding")
+    return key

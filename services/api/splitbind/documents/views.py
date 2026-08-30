@@ -7,6 +7,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from splitbind.access.throttles import (
+    AccountRateThrottle,
+    IssuanceJobRateThrottle,
+    SourceIPRateThrottle,
+    VerificationJobRateThrottle,
+)
 from splitbind.audit.models import AuditOutcome
 from splitbind.audit.services import record_event
 from splitbind.documents.serializers import (
@@ -43,6 +49,7 @@ def _error_response(error):
 @method_decorator(csrf_protect, name="dispatch")
 class IssuanceCreateView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_classes = [AccountRateThrottle, SourceIPRateThrottle, IssuanceJobRateThrottle]
 
     def post(self, request):
         serializer = IssuanceCreateSerializer(data=request.data)
@@ -70,6 +77,7 @@ class IssuanceDetailView(APIView):
 @method_decorator(csrf_protect, name="dispatch")
 class VerificationCreateView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_classes = [AccountRateThrottle, SourceIPRateThrottle, VerificationJobRateThrottle]
 
     def post(self, request):
         serializer = VerificationCreateSerializer(data=request.data)

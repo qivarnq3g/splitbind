@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+from .limits import load_runtime_limits
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -76,11 +78,23 @@ SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SECURE = True
 
+ENVIRONMENT = os.environ.get("ENVIRONMENT", "production")
+globals().update(load_runtime_limits(ENVIRONMENT, os.environ))
+SPLITBIND_BROKER_READINESS = None
+BROKER_READINESS_TIMEOUT_SECONDS = 1.0
+
 REST_FRAMEWORK = {
+    "NUM_PROXIES": 1,
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    "DEFAULT_THROTTLE_RATES": {
+        "account": os.environ.get("ACCOUNT_THROTTLE_RATE", "60/min"),
+        "source_ip": os.environ.get("SOURCE_IP_THROTTLE_RATE", "120/min"),
+        "issuance_job": os.environ.get("ISSUANCE_THROTTLE_RATE", "10/hour"),
+        "verification_job": os.environ.get("VERIFICATION_THROTTLE_RATE", "10/hour"),
+    },
 }

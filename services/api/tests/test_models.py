@@ -26,6 +26,10 @@ from splitbind.uploads.models import UploadPurpose, UploadRequest
 
 SHA256_A = "a" * 64
 SHA256_B = "b" * 64
+PUBLIC_KEY_PEM = """-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAAAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+-----END PUBLIC KEY-----
+"""
 
 
 @pytest.fixture
@@ -94,7 +98,7 @@ def signing_key(organization):
     return SigningKey.objects.create(
         organization=organization,
         key_id="manifest-ed25519-2026-01",
-        public_key="MCowBQYDK2VwAyEAsynthetic-public-key-only",
+        public_key=PUBLIC_KEY_PEM,
         valid_from=timezone.now(),
     )
 
@@ -340,7 +344,7 @@ def test_model_boundaries_reject_cross_organization_relations(
     other_signing_key = SigningKey.objects.create(
         organization=other,
         key_id="manifest-ed25519-other",
-        public_key="MCowBQYDK2VwAyEAsynthetic-other-public-key-only",
+        public_key=PUBLIC_KEY_PEM,
         valid_from=timezone.now(),
     )
     checks = [
@@ -487,7 +491,7 @@ def test_idempotency_keys_and_job_attempt_identity_are_unique(
         SigningKey.objects.create(
             organization=organization,
             key_id=signing_key.key_id,
-            public_key="another-public-key",
+            public_key=PUBLIC_KEY_PEM,
             valid_from=timezone.now(),
         )
 

@@ -56,3 +56,40 @@ def record_event(
         outcome=outcome,
         metadata=redact_metadata(metadata),
     )
+
+
+def record_system_event(
+    organization,
+    action: str,
+    target,
+    outcome: str,
+    correlation_id,
+    metadata,
+) -> AuditEvent:
+    """Narrow actor-less path for persisted same-organization system work."""
+    if organization is None or organization.pk is None or organization._state.adding:
+        raise ValidationError("system audit organization must be persisted")
+    if target is None or not hasattr(target, "organization_id"):
+        raise ValidationError("system audit target must be organization-owned")
+    if target.pk is None or target._state.adding:
+        raise ValidationError("system audit target must be persisted")
+    if target.organization_id != organization.pk:
+        raise ValidationError("system audit target must belong to the organization")
+    if not isinstance(action, str) or not action or len(action) > 120:
+        raise ValidationError("audit action must be a non-empty bounded string")
+    if outcome not in AuditOutcome.values:
+        raise ValidationError("audit outcome is invalid")
+    target_type = target._meta.label_lower
+    target_id = str(target.pk)
+    if len(target_type) > 80 or len(target_id) > 120:
+        raise ValidationError("audit target identifier is too long")
+    return AuditEvent._create_from_record_event(
+        organization_id=organization.pk,
+        actor_id=None,
+        action=action,
+        target_type=target_type,
+        target_id=target_id,
+        correlation_id=_normalized_correlation_id(correlation_id),
+        outcome=outcome,
+        metadata=redact_metadata(metadata),
+    )

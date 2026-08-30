@@ -17,7 +17,10 @@ from splitbind.uploads.models import PromotionStatus, UploadPurpose, UploadReque
 from splitbind.uploads.services import get_storage
 
 
-JOB_DEADLINE = timedelta(minutes=10)
+def job_deadline(now):
+    from django.conf import settings
+
+    return now + timedelta(seconds=settings.JOB_TIMEOUT_SECONDS)
 
 
 class WorkflowNotFound(LookupError):
@@ -138,7 +141,7 @@ def _copy_then_finalize(actor, upload, kind: str, correlation_id, create_domain)
                 attempt=0,
                 issuance=domain if kind == JobKind.ISSUANCE else None,
                 verification=domain if kind == JobKind.VERIFICATION else None,
-                deadline_at=timezone.now() + JOB_DEADLINE,
+                deadline_at=job_deadline(timezone.now()),
                 correlation_id=correlation_id,
             )
             create_job_event(
@@ -177,6 +180,20 @@ def _copy_then_finalize(actor, upload, kind: str, correlation_id, create_domain)
             correlation_id,
             {"safe_error_code": "ORPHAN_CLEANUP_DEFERRED", "status": job.status},
         )
+    else:
+        with transaction.atomic():
+            locked_upload = UploadRequest.objects.select_for_update().get(pk=upload.pk)
+            if locked_upload.orphan_deleted_at is None:
+                locked_upload.orphan_deleted_at = timezone.now()
+                locked_upload.save(update_fields=["orphan_deleted_at"])
+                record_event(
+                    actor,
+                    "object.orphan.deleted",
+                    locked_upload,
+                    AuditOutcome.SUCCEEDED,
+                    correlation_id,
+                    {"status": "deleted"},
+                )
     return domain, job
 
 
