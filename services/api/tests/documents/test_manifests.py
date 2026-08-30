@@ -11,8 +11,10 @@ from cryptography.hazmat.primitives.asymmetric.rsa import generate_private_key a
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from splitbind.access.models import Organization, SigningKey, SigningKeyStatus
-from splitbind.documents.manifests import verify_stored_manifest
+from splitbind.access.models import Organization, Recipient, Role, SigningKey, SigningKeyStatus, User
+from splitbind.documents.manifests import shareable_public_manifest, verify_stored_manifest
+from splitbind.documents.models import Document, Issuance, Manifest
+from splitbind.uploads.models import UploadPurpose, UploadRequest
 
 
 def key_material():
@@ -43,6 +45,30 @@ def signed(private, payload, key_id="manifest-key-1"):
         "key_id": key_id,
         "signature": base64.b64encode(private.sign(canonical)).decode("ascii"),
     }
+
+
+@pytest.fixture
+def manifest_domain(db):
+    org = Organization.objects.create(name="Manifest domain", slug=f"domain-{uuid.uuid4().hex[:8]}")
+    actor = User.objects.create_user(username=f"domain-{uuid.uuid4().hex[:8]}", password="test", organization=org, role=Role.ISSUER)
+    upload = UploadRequest.objects.create(
+        organization=org, requested_by=actor, purpose=UploadPurpose.ISSUANCE,
+        object_key=f"uploads/orphan/issuance_input/{org.id}/{uuid.uuid4().hex}.bin",
+        expected_sha256="a" * 64, size_bytes=1,
+        expires_at=timezone.now() + timedelta(minutes=15),
+    )
+    document = Document.objects.create(
+        organization=org, created_by=actor, upload_request=upload,
+        source_object_key=f"inputs/issuance/{org.id}/{upload.id}.bin",
+        expected_source_sha256="a" * 64,
+    )
+    recipient = Recipient.objects.create(
+        organization=org, external_reference="R", display_name="Synthetic",
+    )
+    issuance = Issuance.objects.create(
+        organization=org, document=document, recipient=recipient, created_by=actor,
+    )
+    return org, issuance
 
 
 @pytest.mark.django_db
@@ -213,3 +239,118 @@ def test_manifest_payload_size_is_bounded_before_parsing():
 
     assert result.code == "INVALID_PAYLOAD"
     assert result.cryptographically_valid is False
+
+
+@pytest.mark.django_db
+def test_signature_base64_must_be_the_exact_canonical_88_character_encoding():
+    private, pem = key_material()
+    now = timezone.now()
+    org = Organization.objects.create(name="Canonical", slug=f"canonical-{uuid.uuid4().hex[:8]}")
+    key = SigningKey.objects.create(
+        organization=org, key_id="manifest-key-1", public_key=pem,
+        valid_from=now - timedelta(minutes=1),
+    )
+    payload, envelope = signed(private, public_payload())
+    envelope["signature"] = envelope["signature"] + "="
+
+    assert verify_stored_manifest(payload, envelope, key, now=now).code == "INVALID_ENVELOPE"
+
+
+@pytest.mark.django_db
+def test_registry_algorithm_is_required_for_verification_and_readiness(monkeypatch):
+    private, pem = key_material()
+    now = timezone.now()
+    org = Organization.objects.create(name="Algorithm", slug=f"algorithm-{uuid.uuid4().hex[:8]}")
+    key = SigningKey.objects.create(
+        organization=org, key_id="manifest-key-1", public_key=pem,
+        valid_from=now - timedelta(minutes=1),
+    )
+    from django.db import connection
+    with connection.cursor() as cursor:
+        cursor.execute("UPDATE access_signingkey SET algorithm = %s WHERE id = %s", ["RSA", key.id.hex])
+    key.refresh_from_db()
+    payload, envelope = signed(private, public_payload())
+
+    assert verify_stored_manifest(payload, envelope, key, now=now).code == "INVALID_REGISTRY"
+    from splitbind.health.readiness import public_key_registry_ready
+    assert public_key_registry_ready() is False
+
+
+@pytest.mark.django_db
+def test_signing_key_history_is_immutable_except_validated_lifecycle_transition():
+    _, pem = key_material()
+    now = timezone.now()
+    org = Organization.objects.create(name="Immutable", slug=f"immutable-{uuid.uuid4().hex[:8]}")
+    key = SigningKey.objects.create(
+        organization=org, key_id="history-key", public_key=pem, valid_from=now,
+        metadata={"label": "historical"},
+    )
+
+    key.key_id = "replacement"
+    with pytest.raises(ValidationError, match="immutable"):
+        key.save(update_fields=["key_id"])
+    with pytest.raises(ValidationError, match="immutable"):
+        SigningKey._base_manager.filter(pk=key.pk).update(metadata={"label": "changed"})
+    with pytest.raises(ValidationError, match="preserved"):
+        key.delete()
+
+    from splitbind.access.services import transition_signing_key
+    transitioned = transition_signing_key(key.pk, SigningKeyStatus.VERIFY_ONLY, at=now + timedelta(seconds=1))
+    assert transitioned.status == SigningKeyStatus.VERIFY_ONLY
+    revoked = transition_signing_key(key.pk, SigningKeyStatus.REVOKED, at=now + timedelta(seconds=2))
+    assert revoked.revoked_at == now + timedelta(seconds=2)
+    with pytest.raises(ValidationError, match="terminal"):
+        transition_signing_key(key.pk, SigningKeyStatus.ACTIVE, at=now + timedelta(seconds=3))
+
+
+@pytest.mark.django_db
+def test_manifest_history_cannot_be_updated_or_deleted(manifest_domain):
+    organization, issuance = manifest_domain
+    _, pem = key_material()
+    signing_key = SigningKey.objects.create(
+        organization=organization, key_id="immutable-manifest-key", public_key=pem,
+        valid_from=timezone.now(),
+    )
+    record = Manifest.objects.create(
+        organization=organization, issuance=issuance, signing_key=signing_key,
+        internal_payload="{}", internal_signature_envelope={},
+        public_payload="{}", public_signature_envelope={},
+    )
+    record.public_payload = '{"changed":true}'
+    with pytest.raises(ValidationError, match="immutable"):
+        record.save(update_fields=["public_payload"])
+    with pytest.raises(ValidationError, match="immutable"):
+        Manifest._base_manager.filter(pk=record.pk).update(public_payload="{}")
+    with pytest.raises(ValidationError, match="preserved"):
+        record.delete()
+
+
+@pytest.mark.django_db
+def test_shareable_public_manifest_requires_trusted_public_projection(manifest_domain):
+    organization, issuance = manifest_domain
+    private, pem = key_material()
+    now = timezone.now()
+    key = SigningKey.objects.create(
+        organization=organization, key_id="manifest-key-1", public_key=pem,
+        valid_from=now - timedelta(minutes=1), valid_until=now + timedelta(minutes=1),
+    )
+    public, public_envelope = signed(private, public_payload())
+    internal_object = {**public_payload(), "document_id": str(uuid.uuid4()),
+                       "recipient_id": str(uuid.uuid4()), "source_sha256": "b" * 64,
+                       "retention_policy_id": "retention-v1"}
+    internal, internal_envelope = signed(private, internal_object)
+    record = Manifest.objects.create(
+        organization=organization, issuance=issuance, signing_key=key,
+        internal_payload=internal, internal_signature_envelope=internal_envelope,
+        public_payload=public, public_signature_envelope=public_envelope,
+    )
+
+    projected = shareable_public_manifest(record, now=now)
+    assert projected["payload"] == public
+    assert "recipient_id" not in str(projected) and "document_id" not in str(projected)
+
+    Manifest._base_manager.model.objects  # keep the supported manager visible to the test
+    record.public_payload = internal
+    record.public_signature_envelope = internal_envelope
+    with pytest.raises(ValidationError, match="shareable"):
+        shareable_public_manifest(record, now=now)

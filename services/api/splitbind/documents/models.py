@@ -2,10 +2,14 @@ import uuid
 
 from django.conf import settings
 from django.core.validators import MinValueValidator
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
 
-from splitbind.access.models import SigningKey, ValidatedOrganizationOwnedModel
+from splitbind.access.models import (
+    SigningKey, ValidatedOrganizationManager, ValidatedOrganizationOwnedModel,
+    ValidatedOrganizationQuerySet,
+)
 from splitbind.uploads.models import UploadRequest
 from splitbind.validators import SHA256_PATTERN, validate_sha256
 
@@ -30,6 +34,8 @@ class Document(ValidatedOrganizationOwnedModel):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        base_manager_name = "objects"
+        default_manager_name = "objects"
         constraints = [
             models.CheckConstraint(
                 condition=Q(expected_source_sha256__regex=SHA256_PATTERN),
@@ -49,7 +55,25 @@ class Document(ValidatedOrganizationOwnedModel):
         self.validate_organization_relations(self.created_by, self.upload_request)
 
 
+class IssuanceQuerySet(ValidatedOrganizationQuerySet):
+    def update(self, **kwargs):
+        if "output_deleted_at" in kwargs:
+            raise ValidationError("deletion evidence requires the retention service")
+        return super().update(**kwargs)
+
+    def bulk_create(self, objs, **kwargs):
+        objects = tuple(objs)
+        if any(record.output_deleted_at is not None for record in objects):
+            raise ValidationError("deletion evidence requires the retention service")
+        return super().bulk_create(objects, **kwargs)
+
+
+class IssuanceManager(ValidatedOrganizationManager.from_queryset(IssuanceQuerySet)):
+    pass
+
+
 class Issuance(ValidatedOrganizationOwnedModel):
+    objects = IssuanceManager()
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     document = models.ForeignKey(
         Document,
@@ -77,6 +101,8 @@ class Issuance(ValidatedOrganizationOwnedModel):
     issued_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        base_manager_name = "objects"
+        default_manager_name = "objects"
         constraints = [
             models.CheckConstraint(
                 condition=Q(output_sha256__isnull=True) | Q(output_sha256__regex=SHA256_PATTERN),
@@ -92,6 +118,23 @@ class Issuance(ValidatedOrganizationOwnedModel):
         super().clean()
         self.validate_organization_relations(self.document, self.recipient, self.created_by)
 
+    def save(self, *args, **kwargs):
+        if self._state.adding and self.output_deleted_at is not None:
+            from splitbind.retention.capabilities import deletion_evidence_write_allowed
+            if not deletion_evidence_write_allowed():
+                raise ValidationError("deletion evidence requires the retention service")
+        if not self._state.adding:
+            update_fields = kwargs.get("update_fields")
+            if update_fields is None or "output_deleted_at" in update_fields:
+                persisted = type(self)._base_manager.only("output_deleted_at").get(pk=self.pk)
+                if self.output_deleted_at != persisted.output_deleted_at:
+                    from splitbind.retention.capabilities import deletion_evidence_write_allowed
+                    if not deletion_evidence_write_allowed():
+                        raise ValidationError("deletion evidence requires the retention service")
+                    if persisted.output_deleted_at is not None or self.output_deleted_at is None:
+                        raise ValidationError("deletion evidence is monotonic")
+        super().save(*args, **kwargs)
+
     def public_payload(self) -> dict[str, str]:
         return {
             "issuance_id": str(self.id),
@@ -100,7 +143,20 @@ class Issuance(ValidatedOrganizationOwnedModel):
         }
 
 
+class ImmutableManifestQuerySet(ValidatedOrganizationQuerySet):
+    def update(self, **kwargs):
+        raise ValidationError("manifest evidence is immutable")
+
+    def delete(self):
+        raise ValidationError("manifest evidence must be preserved")
+
+
+class ManifestManager(ValidatedOrganizationManager.from_queryset(ImmutableManifestQuerySet)):
+    pass
+
+
 class Manifest(ValidatedOrganizationOwnedModel):
+    objects = ManifestManager()
     issuance = models.OneToOneField(
         Issuance,
         on_delete=models.PROTECT,
@@ -118,6 +174,8 @@ class Manifest(ValidatedOrganizationOwnedModel):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        base_manager_name = "objects"
+        default_manager_name = "objects"
         indexes = [
             models.Index(fields=["organization", "created_at"], name="manifest_org_created_idx")
         ]
@@ -125,6 +183,14 @@ class Manifest(ValidatedOrganizationOwnedModel):
     def clean(self) -> None:
         super().clean()
         self.validate_organization_relations(self.issuance, self.signing_key)
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError("manifest evidence is immutable")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("manifest evidence must be preserved")
 
 
 class VerificationStatus(models.TextChoices):

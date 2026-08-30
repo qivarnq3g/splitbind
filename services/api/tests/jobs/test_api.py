@@ -33,9 +33,10 @@ def make_user(org, role, prefix):
 
 
 def ready_upload(org, actor, storage, purpose):
-    key = f"uploads/orphan/{purpose}_input/{org.id}/{uuid.uuid4().hex}.bin"
+    upload_id = uuid.uuid4()
+    key = f"uploads/orphan/{purpose}_input/{org.id}/{upload_id.hex}.bin"
     upload = UploadRequest.objects.create(
-        organization=org, requested_by=actor, purpose=purpose, object_key=key,
+        id=upload_id, organization=org, requested_by=actor, purpose=purpose, object_key=key,
         expected_sha256=SHA256, size_bytes=1,
         expires_at=timezone.now() + timedelta(minutes=5), finalized_at=timezone.now(),
     )

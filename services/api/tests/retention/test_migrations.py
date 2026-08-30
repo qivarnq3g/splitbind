@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 from django.apps import apps
 from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
 from django.utils import timezone
 
 from splitbind.access.models import Organization, Recipient, Role, User
@@ -24,7 +25,6 @@ def test_cleanup_timestamp_reverse_guards_fail_closed_before_evidence_loss():
         expected_sha256="a" * 64,
         size_bytes=1,
         expires_at=timezone.now(),
-        orphan_deleted_at=timezone.now(),
     )
     document = Document.objects.create(
         organization=org,
@@ -44,8 +44,17 @@ def test_cleanup_timestamp_reverse_guards_fail_closed_before_evidence_loss():
         recipient=recipient,
         output_object_key=f"outputs/issuance/{org.id}/{uuid.uuid4()}.pdf",
         output_sha256="b" * 64,
-        output_deleted_at=timezone.now(),
     )
+    deletion_time = timezone.now()
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "UPDATE uploads_uploadrequest SET orphan_deleted_at = %s WHERE id = %s",
+            [deletion_time, upload.id.hex],
+        )
+        cursor.execute(
+            "UPDATE documents_issuance SET output_deleted_at = %s WHERE id = %s",
+            [deletion_time, issuance.id.hex],
+        )
     editor = SimpleNamespace(connection=connection)
     upload_migration = importlib.import_module(
         "splitbind.uploads.migrations.0005_cleanup_timestamps"
@@ -63,3 +72,46 @@ def test_cleanup_timestamp_reverse_guards_fail_closed_before_evidence_loss():
     issuance.refresh_from_db()
     assert upload.orphan_deleted_at is not None
     assert issuance.output_deleted_at is not None
+
+
+@pytest.mark.django_db(transaction=True)
+def test_signing_key_constraint_preflight_rejects_invalid_legacy_rows_with_actionable_error():
+    target = [("access", "0003_alter_user_managers")]
+    executor = MigrationExecutor(connection)
+    executor.migrate(target)
+    old_apps = executor.loader.project_state(target).apps
+    LegacyOrganization = old_apps.get_model("access", "Organization")
+    LegacySigningKey = old_apps.get_model("access", "SigningKey")
+    org = LegacyOrganization.objects.create(name="Legacy key", slug=f"legacy-key-{uuid.uuid4().hex[:8]}")
+    key = LegacySigningKey.objects.create(
+        organization=org, key_id="legacy-key", public_key="legacy-public-evidence",
+        valid_from=timezone.now(), status="legacy-invalid",
+    )
+    migration = importlib.import_module("splitbind.access.migrations.0004_signing_key_lifecycle")
+
+    try:
+        with pytest.raises(RuntimeError, match="invalid legacy signing-key lifecycle"):
+            migration.validate_legacy_signing_keys(old_apps, SimpleNamespace(connection=connection))
+    finally:
+        LegacySigningKey.objects.filter(pk=key.pk).delete()
+        MigrationExecutor(connection).migrate([("access", "0005_alter_signingkey_options")])
+
+
+@pytest.mark.django_db
+def test_signing_key_constraint_reverse_refuses_to_drop_registry_guards_with_evidence():
+    org = Organization.objects.create(name="Registry guard", slug=f"registry-guard-{uuid.uuid4().hex[:8]}")
+    from splitbind.access.services import register_signing_key
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    pem = Ed25519PrivateKey.generate().public_key().public_bytes(
+        serialization.Encoding.PEM,
+        serialization.PublicFormat.SubjectPublicKeyInfo,
+    ).decode("ascii")
+    register_signing_key(
+        organization=org, key_id="registry-guard", public_key=pem,
+        valid_from=timezone.now(),
+    )
+    migration = importlib.import_module("splitbind.access.migrations.0004_signing_key_lifecycle")
+
+    with pytest.raises(RuntimeError, match="registry evidence exists"):
+        migration.refuse_lifecycle_guard_rollback(apps, SimpleNamespace(connection=connection))

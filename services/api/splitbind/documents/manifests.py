@@ -75,9 +75,15 @@ def _parse_exact_payload(payload: object):
     return value, encoded, canonical
 
 
-def verify_stored_manifest(manifest, signature, public_key, *, now=None) -> ManifestVerification:
+def verify_stored_manifest(manifest, signature, public_key, *, now=None, expected_kind=None) -> ManifestVerification:
     """Verify stored canonical bytes with one public registry record; never signs."""
     lifecycle = getattr(public_key, "status", "invalid")
+    try:
+        if getattr(public_key, "algorithm", None) != "Ed25519":
+            raise ValidationError("registry algorithm")
+        public_key.clean()
+    except Exception:
+        return _result("INVALID_REGISTRY", lifecycle=lifecycle)
     try:
         value, stored, canonical = _parse_exact_payload(manifest)
     except Exception:
@@ -85,6 +91,8 @@ def verify_stored_manifest(manifest, signature, public_key, *, now=None) -> Mani
     if stored != canonical:
         return _result("NONCANONICAL_PAYLOAD", lifecycle=lifecycle)
     kind = "internal" if "recipient_id" in value else "public"
+    if expected_kind is not None and kind != expected_kind:
+        return _result("INVALID_SCHEMA", lifecycle=lifecycle)
     try:
         Draft202012Validator(
             _load_schema(kind), format_checker=FormatChecker()
@@ -104,10 +112,10 @@ def verify_stored_manifest(manifest, signature, public_key, *, now=None) -> Mani
         return _result("KEY_ID_MISMATCH", lifecycle=lifecycle)
     try:
         encoded_signature = signature["signature"]
-        if not isinstance(encoded_signature, str) or len(encoded_signature) > 128:
+        if not isinstance(encoded_signature, str) or len(encoded_signature) != 88:
             raise ValueError
         raw_signature = base64.b64decode(encoded_signature, validate=True)
-        if len(raw_signature) != 64:
+        if len(raw_signature) != 64 or base64.b64encode(raw_signature).decode("ascii") != encoded_signature:
             raise ValueError
         verifier = validate_ed25519_public_pem(public_key.public_key)
     except (ValueError, ValidationError, binascii.Error, AttributeError, TypeError, UnicodeError):
@@ -133,9 +141,18 @@ def verify_stored_manifest(manifest, signature, public_key, *, now=None) -> Mani
     return _result("VALID_TRUSTED", crypto=True, trusted=True, lifecycle=lifecycle)
 
 
-def shareable_public_manifest(record) -> dict[str, object]:
+def shareable_public_manifest(record, *, now=None) -> dict[str, object]:
     """Project only the externally shareable public pair and public metadata."""
     key = record.signing_key
+    result = verify_stored_manifest(
+        record.public_payload,
+        record.public_signature_envelope,
+        key,
+        now=now,
+        expected_kind="public",
+    )
+    if not result.cryptographically_valid or not result.trusted:
+        raise ValidationError("manifest is not shareable")
     return {
         "payload": record.public_payload,
         "signature": record.public_signature_envelope,

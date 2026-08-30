@@ -82,7 +82,8 @@ def create_upload(actor, *, kind: str, filename: str, content_type: str, size_by
     """Create an exact-key, 15-minute browser upload intent; filename never affects storage."""
     _validate_intent(actor, kind=kind, content_type=content_type, size_bytes=size_bytes, sha256=sha256)
     now = timezone.now()
-    key = f"uploads/orphan/{kind}/{actor.organization_id}/{uuid.uuid4().hex}.bin"
+    upload_id = uuid.uuid4()
+    key = f"uploads/orphan/{kind}/{actor.organization_id}/{upload_id.hex}.bin"
     try:
         signed = get_storage().presign_put(
             key=key, content_type=content_type, size_bytes=size_bytes, sha256=sha256, expires=UPLOAD_TTL
@@ -91,6 +92,7 @@ def create_upload(actor, *, kind: str, filename: str, content_type: str, size_by
         _reject(actor, "STORAGE_UNAVAILABLE", action="upload.intent.denied", kind=kind)
     with transaction.atomic():
         record = UploadRequest.objects.create(
+            id=upload_id,
             organization_id=actor.organization_id,
             requested_by=actor,
             purpose=_KIND_TO_PURPOSE[kind],

@@ -45,11 +45,13 @@ def workflow_context(db):
 
 def completed_upload(org, actor, storage, purpose):
     kind = f"{purpose}_input"
+    upload_id = uuid.uuid4()
     record = UploadRequest.objects.create(
+        id=upload_id,
         organization=org,
         requested_by=actor,
         purpose=purpose,
-        object_key=f"uploads/orphan/{kind}/{org.id}/{uuid.uuid4().hex}.bin",
+        object_key=f"uploads/orphan/{kind}/{org.id}/{upload_id.hex}.bin",
         expected_sha256=SHA256,
         size_bytes=100,
         expires_at=timezone.now() + timedelta(minutes=10),
@@ -204,11 +206,26 @@ def test_reservation_rejects_invalid_own_upload_state(workflow_context, problem)
         upload.save(update_fields=["finalized_at"])
     elif problem == "expired":
         upload.expires_at = timezone.now() - timedelta(seconds=1)
-        UploadRequest._base_manager.filter(pk=upload.pk).update(expires_at=upload.expires_at)
+        # Persist an otherwise unreachable legacy/corrupt state so the
+        # reservation boundary itself remains covered without bypassing the
+        # model's supported immutable manager.
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE uploads_uploadrequest SET expires_at = %s WHERE id = %s",
+                [upload.expires_at, upload.id.hex],
+            )
     elif problem == "reused":
-        UploadRequest._base_manager.filter(pk=upload.pk).update(
-            promotion_status=PromotionStatus.ATTACHED,
-            promotion_target_key=f"inputs/issuance/{org.id}/{upload.id}.bin",
+        target = f"inputs/issuance/{org.id}/{upload.id}.bin"
+        upload.save_promotion(
+            status=PromotionStatus.COPYING,
+            target_key=target,
+            safe_error_code=None,
+        )
+        upload.save_promotion(
+            status=PromotionStatus.ATTACHED,
+            target_key=target,
+            safe_error_code=None,
         )
     with override_settings(SPLITBIND_OBJECT_STORAGE=storage):
         with pytest.raises((UploadRejected, JobConflict)):
@@ -280,6 +297,27 @@ def test_orphan_delete_failure_keeps_attached_workflow_and_safe_audit(workflow_c
     assert Issuance.objects.filter(pk=issuance.pk).exists() and Job.objects.filter(pk=job.pk).exists()
     event = AuditEvent.objects.get(action="object.cleanup_deferred_to_lifecycle")
     assert "provider" not in json.dumps(event.metadata).lower()
+
+
+@pytest.mark.django_db
+def test_orphan_identity_corruption_defers_cleanup_with_safe_audit(workflow_context):
+    org, issuer, _, recipient, storage = workflow_context
+    upload = completed_upload(org, issuer, storage, UploadPurpose.ISSUANCE)
+    wrong = f"uploads/orphan/issuance_input/{org.id}/{uuid.uuid4().hex}.bin"
+    storage.inject_object(key=wrong, content_type="application/pdf", size_bytes=100, sha256=SHA256)
+    from django.db import connection
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "UPDATE uploads_uploadrequest SET object_key = %s WHERE id = %s",
+            [wrong, upload.id.hex],
+        )
+
+    with override_settings(SPLITBIND_OBJECT_STORAGE=storage):
+        create_issuance(issuer, recipient.id, upload.id, uuid.uuid4())
+
+    event = AuditEvent.objects.get(action="object.cleanup_deferred_to_lifecycle")
+    assert event.metadata["safe_error_code"] == "ORPHAN_CLEANUP_DEFERRED"
+    assert wrong in storage.objects
 
 
 @pytest.mark.django_db

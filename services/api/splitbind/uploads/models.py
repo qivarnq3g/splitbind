@@ -36,11 +36,24 @@ class UploadRequestQuerySet(ValidatedOrganizationQuerySet):
     }
 
     def update(self, **kwargs):
+        deletion_fields = {"orphan_deleted_at", "promotion_target_deleted_at"} & kwargs.keys()
+        if deletion_fields:
+            raise ValidationError("deletion evidence requires the retention service")
         immutable = self._IMMUTABLE_FIELDS & kwargs.keys()
         if immutable:
             names = ", ".join(sorted(immutable))
             raise ValueError(f"upload intent fields are immutable ({names})")
         return super().update(**kwargs)
+
+    def bulk_create(self, objs, **kwargs):
+        objects = tuple(objs)
+        if any(
+            record.orphan_deleted_at is not None
+            or record.promotion_target_deleted_at is not None
+            for record in objects
+        ):
+            raise ValidationError("deletion evidence requires the retention service")
+        return super().bulk_create(objects, **kwargs)
 
 
 class UploadRequestManager(ValidatedOrganizationManager.from_queryset(UploadRequestQuerySet)):
@@ -84,6 +97,8 @@ class UploadRequest(ValidatedOrganizationOwnedModel):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        base_manager_name = "objects"
+        default_manager_name = "objects"
         constraints = [
             models.CheckConstraint(
                 condition=Q(expected_sha256__isnull=True) | Q(expected_sha256__regex=SHA256_PATTERN),
@@ -127,6 +142,29 @@ class UploadRequest(ValidatedOrganizationOwnedModel):
                 raise ValidationError("new upload intent size must be between one byte and ten MiB")
 
     def save(self, *args, **kwargs) -> None:
+        if self._state.adding and (
+            self.orphan_deleted_at is not None or self.promotion_target_deleted_at is not None
+        ):
+            from splitbind.retention.capabilities import deletion_evidence_write_allowed
+            if not deletion_evidence_write_allowed():
+                raise ValidationError("deletion evidence requires the retention service")
+        if not self._state.adding:
+            update_fields = kwargs.get("update_fields")
+            deletion_fields = {"orphan_deleted_at", "promotion_target_deleted_at"}
+            names = set(update_fields) if update_fields is not None else deletion_fields
+            if names & deletion_fields:
+                persisted_deletions = type(self)._base_manager.only(*deletion_fields).get(pk=self.pk)
+                changed_deletions = {
+                    name for name in deletion_fields
+                    if getattr(self, name) != getattr(persisted_deletions, name)
+                }
+                if changed_deletions:
+                    from splitbind.retention.capabilities import deletion_evidence_write_allowed
+                    if not deletion_evidence_write_allowed():
+                        raise ValidationError("deletion evidence requires the retention service")
+                    for name in changed_deletions:
+                        if getattr(persisted_deletions, name) is not None or getattr(self, name) is None:
+                            raise ValidationError("deletion evidence is monotonic")
         if not self._state.adding:
             update_fields = kwargs.get("update_fields")
             names = set(update_fields) if update_fields is not None else set(self._IMMUTABLE_FIELDS)

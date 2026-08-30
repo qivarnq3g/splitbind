@@ -1,5 +1,6 @@
 import re
 import uuid
+from contextvars import ContextVar
 
 from django.contrib.auth.models import AbstractUser, UserManager as DjangoUserManager
 from django.core.exceptions import ValidationError
@@ -221,9 +222,12 @@ class SigningKeyQuerySet(ValidatedOrganizationQuerySet):
         protected = self._VALIDATED_FIELDS & kwargs.keys()
         if protected:
             raise ValidationError(
-                "signing-key lifecycle fields require instance validation"
+                "signing-key historical evidence is immutable; use the lifecycle service"
             )
         return super().update(**kwargs)
+
+    def delete(self):
+        raise ValidationError("signing-key evidence must be preserved")
 
 
 class SigningKeyManager(ValidatedOrganizationManager.from_queryset(SigningKeyQuerySet)):
@@ -248,6 +252,8 @@ class SigningKey(ValidatedOrganizationOwnedModel):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        base_manager_name = "objects"
+        default_manager_name = "objects"
         indexes = [
             models.Index(fields=["organization", "status"], name="signkey_org_status_idx")
         ]
@@ -293,6 +299,26 @@ class SigningKey(ValidatedOrganizationOwnedModel):
             for value in self.metadata.values()
         ):
             raise ValidationError("signing key metadata is unsafe")
+
+    def save(self, *args, **kwargs) -> None:
+        if not self._state.adding:
+            fields = {
+                "key_id", "algorithm", "public_key", "status", "valid_from",
+                "valid_until", "revoked_at", "metadata",
+            }
+            persisted = type(self)._base_manager.only(*fields).get(pk=self.pk)
+            changed = {name for name in fields if getattr(self, name) != getattr(persisted, name)}
+            lifecycle = {"status", "revoked_at"}
+            if changed:
+                if not _signing_key_lifecycle_write.get() or not changed <= lifecycle:
+                    raise ValidationError("signing-key historical evidence is immutable")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("signing-key evidence must be preserved")
+
+
+_signing_key_lifecycle_write = ContextVar("signing_key_lifecycle_write", default=False)
 
 
 def validate_ed25519_public_pem(value: object):

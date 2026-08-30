@@ -20,8 +20,8 @@ _PROMOTED_KEY = re.compile(
 )
 _ISSUANCE_OUTPUT_KEY = re.compile(
     r"^outputs/issuance/"
-    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/"
-    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.pdf$"
+    r"(?P<organization>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/"
+    r"(?P<issuance>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.pdf$"
 )
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 _CONTENT_TYPES = {
@@ -89,6 +89,12 @@ def validate_orphan_key(key: str):
 def validate_promoted_key(key: str):
     if not isinstance(key, str) or not (match := _PROMOTED_KEY.fullmatch(key)):
         raise ValueError("storage destination key must use the controlled promoted-input shape")
+    return match
+
+
+def validate_issuance_output_key(key: str):
+    if not isinstance(key, str) or not (match := _ISSUANCE_OUTPUT_KEY.fullmatch(key)):
+        raise ValueError("issuance output key must use the controlled output shape")
     return match
 
 

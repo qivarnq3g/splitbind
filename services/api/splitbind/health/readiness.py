@@ -28,11 +28,13 @@ def storage_configuration_ready() -> bool:
 def public_key_registry_ready() -> bool:
     now = timezone.now()
     candidates = SigningKey.objects.filter(
+        algorithm="Ed25519",
         status=SigningKeyStatus.ACTIVE,
         valid_from__lte=now,
     ).filter(Q(valid_until__isnull=True) | Q(valid_until__gt=now))
     for key in candidates.order_by("key_id")[:20]:
         try:
+            key.clean()
             validate_ed25519_public_pem(key.public_key)
             return True
         except Exception:

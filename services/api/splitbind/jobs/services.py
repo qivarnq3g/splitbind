@@ -13,6 +13,7 @@ from splitbind.integrations.storage.base import UploadRejected
 from splitbind.jobs.models import Job, JobKind, JobStatus
 from splitbind.jobs.state import transition_job
 from splitbind.outbox.services import create_job_event
+from splitbind.retention.services import delete_attached_orphan_source
 from splitbind.uploads.models import PromotionStatus, UploadPurpose, UploadRequest
 from splitbind.uploads.services import get_storage
 
@@ -170,7 +171,12 @@ def _copy_then_finalize(actor, upload, kind: str, correlation_id, create_domain)
         raise
 
     try:
-        storage.delete(key=upload.object_key)
+        delete_attached_orphan_source(
+            upload_id=upload.pk,
+            storage=storage,
+            actor=actor,
+            correlation_id=correlation_id,
+        )
     except Exception:
         record_event(
             actor,
@@ -180,20 +186,6 @@ def _copy_then_finalize(actor, upload, kind: str, correlation_id, create_domain)
             correlation_id,
             {"safe_error_code": "ORPHAN_CLEANUP_DEFERRED", "status": job.status},
         )
-    else:
-        with transaction.atomic():
-            locked_upload = UploadRequest.objects.select_for_update().get(pk=upload.pk)
-            if locked_upload.orphan_deleted_at is None:
-                locked_upload.orphan_deleted_at = timezone.now()
-                locked_upload.save(update_fields=["orphan_deleted_at"])
-                record_event(
-                    actor,
-                    "object.orphan.deleted",
-                    locked_upload,
-                    AuditOutcome.SUCCEEDED,
-                    correlation_id,
-                    {"status": "deleted"},
-                )
     return domain, job
 
 
