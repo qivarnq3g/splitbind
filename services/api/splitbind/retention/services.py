@@ -275,7 +275,7 @@ def _delete_one(*, model, pk, key_field, timestamp_field, action, category,
         )
 
 
-def _ordinary_candidates(*, now, limit):
+def _ordinary_candidates(*, now, limit, excluded_ids):
     candidates = []
 
     def add(queryset, model, key_field, timestamp_field, action, category,
@@ -283,6 +283,12 @@ def _ordinary_candidates(*, now, limit):
         remaining = limit - len(candidates)
         if remaining <= 0:
             return
+        excluded_pks = [
+            pk for candidate_model, pk, candidate_timestamp_field in excluded_ids
+            if candidate_model is model and candidate_timestamp_field == timestamp_field
+        ]
+        if excluded_pks:
+            queryset = queryset.exclude(pk__in=excluded_pks)
         for pk in queryset.order_by(order_field, "pk").values_list("pk", flat=True)[:remaining]:
             candidates.append(
                 (model, pk, key_field, timestamp_field, action, category, expected_state)
@@ -528,11 +534,14 @@ def _mark_ordinary_attempt():
         _save_schedule(schedule)
 
 
-def _run_ordinary_once(*, now, storage):
-    candidates = _ordinary_candidates(now=now, limit=1)
+def _run_ordinary_once(*, now, storage, attempted_ids):
+    candidates = _ordinary_candidates(
+        now=now, limit=1, excluded_ids=attempted_ids,
+    )
     if not candidates:
         return None
     model, pk, key_field, timestamp_field, action, category, expected_state = candidates[0]
+    attempted_ids.add((model, pk, timestamp_field))
     completed = _delete_one(
         model=model, pk=pk, key_field=key_field,
         timestamp_field=timestamp_field, action=action,
@@ -569,10 +578,13 @@ def cleanup_expired(*, now=None, storage=None, batch_size=DEFAULT_BATCH_SIZE) ->
         raise ValueError("cleanup batch size is invalid")
     storage = storage or get_storage()
     deleted = 0
+    ordinary_attempted_ids = set()
     for _ in range(batch_size):
         preferred = _preferred_lane()
         if preferred == CleanupLane.ORDINARY:
-            completed = _run_ordinary_once(now=now, storage=storage)
+            completed = _run_ordinary_once(
+                now=now, storage=storage, attempted_ids=ordinary_attempted_ids,
+            )
             if completed is not None:
                 deleted += int(completed)
                 continue
@@ -581,7 +593,9 @@ def cleanup_expired(*, now=None, storage=None, batch_size=DEFAULT_BATCH_SIZE) ->
         else:
             if _run_reconciliation_once(now=now, storage=storage):
                 continue
-            completed = _run_ordinary_once(now=now, storage=storage)
+            completed = _run_ordinary_once(
+                now=now, storage=storage, attempted_ids=ordinary_attempted_ids,
+            )
             if completed is not None:
                 deleted += int(completed)
                 continue

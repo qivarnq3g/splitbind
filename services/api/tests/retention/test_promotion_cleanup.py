@@ -1078,6 +1078,60 @@ def test_transient_cleanup_failure_retains_timestamp_and_writes_only_safe_audit(
 
 
 @pytest.mark.django_db
+def test_ordinary_scan_attempts_failed_candidate_once_then_processes_later_candidate():
+    """Catches one failing key monopolizing every slot in a cleanup scan."""
+    class PerKeyFailingStorage(FakeObjectStorage):
+        def __init__(self, failed_key):
+            super().__init__()
+            self.failed_key = failed_key
+            self.failed_attempts = 0
+
+        def delete(self, *, key):
+            if key == self.failed_key:
+                self.failed_attempts += 1
+                raise RuntimeError("provider detail must not escape")
+            return super().delete(key=key)
+
+    now = timezone.now()
+    org = Organization.objects.create(
+        name="Bounded ordinary scan",
+        slug=f"bounded-ordinary-{uuid.uuid4().hex[:8]}",
+    )
+    actor = User.objects.create_user(
+        username="bounded-ordinary", password="test",
+        organization=org, role=Role.ISSUER,
+    )
+    failing = upload(org, actor, created_at=now - timedelta(hours=26))
+    later = upload(org, actor, created_at=now - timedelta(hours=25))
+    storage = PerKeyFailingStorage(failing.object_key)
+    for record in (failing, later):
+        storage.inject_object(
+            key=record.object_key, content_type="application/pdf",
+            size_bytes=1, sha256=SHA256,
+        )
+
+    assert cleanup_expired(now=now, storage=storage, batch_size=2) == 1
+
+    failing.refresh_from_db()
+    later.refresh_from_db()
+    assert failing.orphan_deleted_at is None
+    assert later.orphan_deleted_at is not None
+    assert failing.object_key in storage.objects
+    assert later.object_key not in storage.objects
+    assert storage.failed_attempts == 1
+    failures = AuditEvent.objects.filter(
+        action="object.orphan.deleted.failed", target_id=str(failing.id),
+        outcome=AuditOutcome.FAILED,
+    )
+    assert failures.count() == 1
+    assert failures.get().metadata == {"safe_error_code": "STORAGE_DELETE_RETRY"}
+
+    assert cleanup_expired(now=now, storage=storage, batch_size=1) == 0
+    assert storage.failed_attempts == 2
+    assert failures.count() == 2
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize("purpose", [UploadPurpose.ISSUANCE, UploadPurpose.VERIFICATION])
 def test_attached_input_cleanup_uses_outcome_specific_window(purpose):
     now = timezone.now()
