@@ -2,10 +2,10 @@ import uuid
 from datetime import timedelta
 
 from django.db import connection, transaction
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, F, OuterRef
 from django.utils import timezone
 
-from splitbind.audit.models import AuditOutcome
+from splitbind.audit.models import AuditEvent, AuditOutcome
 from splitbind.audit.services import record_event, record_system_event
 from splitbind.documents.models import Issuance
 from splitbind.integrations.storage.base import (
@@ -78,6 +78,55 @@ def _record_deletion_evidence(
                 actor, action, record, AuditOutcome.SUCCEEDED,
                 correlation_id, {"status": "deleted"},
             )
+        return True
+
+
+def _record_promotion_reconciliation(record, *, at, succeeded):
+    """Persist one reconciliation observation and at most one audit per outcome."""
+    previous = record.promotion_target_reconciled_at
+    if previous is not None and at < previous:
+        raise ValueError("promotion reconciliation time must be monotonic")
+    record.promotion_target_reconciled_at = at
+    with _allow_deletion_evidence_write():
+        record.save(update_fields=["promotion_target_reconciled_at"])
+    outcome = AuditOutcome.SUCCEEDED if succeeded else AuditOutcome.FAILED
+    action = f"object.promotion.reconciliation.{outcome}"
+    already_reported = AuditEvent.objects.filter(
+        organization_id=record.organization_id,
+        action=action,
+        target_type=record._meta.label_lower,
+        target_id=str(record.pk),
+        outcome=outcome,
+    ).exists()
+    if not already_reported:
+        metadata = {"status": "deleted"} if succeeded else {
+            "safe_error_code": "STORAGE_DELETE_RETRY",
+        }
+        record_system_event(
+            record.organization, action, record, outcome, uuid.uuid4(), metadata,
+        )
+
+
+def _reconcile_fenced_promotion(*, pk, storage, now) -> bool:
+    """Periodically re-delete a tombstoned target without claiming finality."""
+    with transaction.atomic():
+        try:
+            record = _locked(
+                UploadRequest._base_manager.select_related("organization")
+            ).get(pk=pk)
+        except UploadRequest.DoesNotExist:
+            return False
+        if record.promotion_target_deleted_at is None:
+            return False
+        key = record.promotion_target_key
+        if not key or not _key_is_owned(record, "stale_promotion", key):
+            return False
+        try:
+            storage.delete(key=key)
+        except Exception:
+            _record_promotion_reconciliation(record, at=now, succeeded=False)
+            return False
+        _record_promotion_reconciliation(record, at=now, succeeded=True)
         return True
 
 
@@ -303,11 +352,34 @@ def cleanup_expired(*, now=None, storage=None, batch_size=DEFAULT_BATCH_SIZE) ->
         orphan_deleted_at__isnull=True, created_at__lte=now - _window("orphan_upload", now),
     ), UploadRequest, "object_key", "orphan_deleted_at", "object.orphan.deleted", "orphan")
 
+    remaining = batch_size - len(candidates)
+    if remaining > 0:
+        reconciliation_ids = UploadRequest._base_manager.filter(
+            promotion_target_deleted_at__isnull=False,
+            promotion_target_key__isnull=False,
+        ).order_by(
+            F("promotion_target_reconciled_at").asc(nulls_first=True),
+            "promotion_target_deleted_at", "pk",
+        ).values_list(
+            "pk", flat=True,
+        )[:remaining]
+        for pk in reconciliation_ids:
+            candidates.append(("reconcile_promotion", pk, None, None, None, None, None))
+
     deleted = 0
     for model, pk, key_field, timestamp_field, action, category, expected_state in candidates:
-        if _delete_one(model=model, pk=pk, key_field=key_field,
-                       timestamp_field=timestamp_field, action=action,
-                       category=category, expected_state=expected_state,
-                       storage=storage, now=now):
+        if model == "reconcile_promotion":
+            # Reconciliation repeats a prior logical deletion. Keep the public
+            # count as newly tombstoned objects while still consuming one
+            # bounded batch slot and recording the physical observation.
+            _reconcile_fenced_promotion(pk=pk, storage=storage, now=now)
+            continue
+        completed = _delete_one(
+            model=model, pk=pk, key_field=key_field,
+            timestamp_field=timestamp_field, action=action,
+            category=category, expected_state=expected_state,
+            storage=storage, now=now,
+        )
+        if completed:
             deleted += 1
     return deleted

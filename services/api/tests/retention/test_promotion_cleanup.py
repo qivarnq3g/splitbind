@@ -260,6 +260,148 @@ def test_cleaned_promotion_target_is_a_permanent_transition_fence():
 
 
 @pytest.mark.django_db
+def test_next_cleanup_scan_removes_a_late_copy_after_promotion_tombstone():
+    now = timezone.now()
+    org = Organization.objects.create(name="Late copy", slug=f"late-copy-{uuid.uuid4().hex[:8]}")
+    actor = User.objects.create_user(
+        username="late-copy", password="test", organization=org, role=Role.ISSUER,
+    )
+    record = upload(
+        org, actor, created_at=now - STALE_COPYING_AGE - timedelta(minutes=1),
+        status=PromotionStatus.FAILED,
+    )
+    storage = FakeObjectStorage()
+
+    assert cleanup_expired(now=now, storage=storage, batch_size=1) == 1
+    record.refresh_from_db()
+    assert record.promotion_target_deleted_at is not None
+    assert record.promotion_target_reconciled_at is None
+
+    storage.inject_object(
+        key=record.promotion_target_key, content_type="application/pdf", size_bytes=1,
+        sha256=SHA256,
+    )
+    unrelated = f"inputs/issuance/{org.id}/{uuid.uuid4()}.bin"
+    storage.inject_object(
+        key=unrelated, content_type="application/pdf", size_bytes=1, sha256=SHA256,
+    )
+
+    assert cleanup_expired(now=now, storage=storage, batch_size=1) == 0
+    record.refresh_from_db()
+    assert record.promotion_target_key not in storage.objects
+    assert unrelated in storage.objects
+    assert record.promotion_target_reconciled_at == now
+
+
+@pytest.mark.django_db
+def test_failed_late_copy_reconciliation_remains_durably_retryable():
+    now = timezone.now()
+    org = Organization.objects.create(name="Late retry", slug=f"late-retry-{uuid.uuid4().hex[:8]}")
+    actor = User.objects.create_user(
+        username="late-retry", password="test", organization=org, role=Role.ISSUER,
+    )
+    record = upload(
+        org, actor, created_at=now - STALE_COPYING_AGE - timedelta(minutes=1),
+        status=PromotionStatus.FAILED,
+    )
+    storage = FakeObjectStorage()
+    assert cleanup_expired(now=now, storage=storage, batch_size=1) == 1
+    storage.inject_object(
+        key=record.promotion_target_key, content_type="application/pdf", size_bytes=1,
+        sha256=SHA256,
+    )
+    storage.fail_next("delete", "https://provider.invalid/private?token=secret")
+
+    failed_at = now + timedelta(minutes=1)
+    assert cleanup_expired(now=failed_at, storage=storage, batch_size=1) == 0
+    record.refresh_from_db()
+    assert record.promotion_target_key in storage.objects
+    assert record.promotion_target_reconciled_at == failed_at
+    failure = AuditEvent.objects.get(action="object.promotion.reconciliation.failed")
+    assert failure.metadata == {"safe_error_code": "STORAGE_DELETE_RETRY"}
+
+    second_failed_at = failed_at + timedelta(seconds=1)
+    storage.fail_next("delete", "another provider detail that must remain private")
+    assert cleanup_expired(now=second_failed_at, storage=storage, batch_size=1) == 0
+    record.refresh_from_db()
+    assert record.promotion_target_reconciled_at == second_failed_at
+    assert AuditEvent.objects.filter(
+        action="object.promotion.reconciliation.failed",
+    ).count() == 1
+
+    retry_at = second_failed_at + timedelta(seconds=1)
+    assert cleanup_expired(now=retry_at, storage=storage, batch_size=1) == 0
+    record.refresh_from_db()
+    assert record.promotion_target_key not in storage.objects
+    assert record.promotion_target_reconciled_at == retry_at
+
+
+@pytest.mark.django_db
+def test_repeated_reconciliation_is_exact_key_idempotent_with_bounded_audit():
+    now = timezone.now()
+    org = Organization.objects.create(name="Late idempotent", slug=f"late-idem-{uuid.uuid4().hex[:8]}")
+    actor = User.objects.create_user(
+        username="late-idem", password="test", organization=org, role=Role.ISSUER,
+    )
+    record = upload(
+        org, actor, created_at=now - STALE_COPYING_AGE - timedelta(minutes=1),
+        status=PromotionStatus.FAILED,
+    )
+    storage = FakeObjectStorage()
+    assert cleanup_expired(now=now, storage=storage, batch_size=1) == 1
+    tombstone = AuditEvent.objects.get(action="object.promotion.deleted")
+
+    first = now + timedelta(minutes=1)
+    assert cleanup_expired(now=first, storage=storage, batch_size=1) == 0
+    storage.inject_object(
+        key=record.promotion_target_key, content_type="application/pdf", size_bytes=1,
+        sha256=SHA256,
+    )
+    unrelated = f"inputs/issuance/{org.id}/{uuid.uuid4()}.bin"
+    storage.inject_object(
+        key=unrelated, content_type="application/pdf", size_bytes=1, sha256=SHA256,
+    )
+    second = first + timedelta(seconds=1)
+    assert cleanup_expired(now=second, storage=storage, batch_size=1) == 0
+
+    assert record.promotion_target_key not in storage.objects
+    assert unrelated in storage.objects
+    assert AuditEvent.objects.filter(pk=tombstone.pk).count() == 1
+    assert AuditEvent.objects.filter(action="object.promotion.deleted").count() == 1
+    assert AuditEvent.objects.filter(
+        action="object.promotion.reconciliation.succeeded",
+    ).count() == 1
+
+
+@pytest.mark.django_db
+def test_reconciliation_observation_is_service_only_and_monotonic():
+    now = timezone.now()
+    org = Organization.objects.create(name="Reconcile evidence", slug=f"recon-evidence-{uuid.uuid4().hex[:8]}")
+    actor = User.objects.create_user(
+        username="recon-evidence", password="test", organization=org, role=Role.ISSUER,
+    )
+    record = upload(
+        org, actor, created_at=now - STALE_COPYING_AGE - timedelta(minutes=1),
+        status=PromotionStatus.FAILED,
+    )
+    storage = FakeObjectStorage()
+    assert cleanup_expired(now=now, storage=storage, batch_size=1) == 1
+    observed_at = now + timedelta(seconds=1)
+    assert cleanup_expired(now=observed_at, storage=storage, batch_size=1) == 0
+    record.refresh_from_db()
+
+    with pytest.raises(ValidationError, match="retention service"):
+        UploadRequest._base_manager.filter(pk=record.pk).update(
+            promotion_target_reconciled_at=None,
+        )
+    record.promotion_target_reconciled_at = observed_at - timedelta(seconds=1)
+    with pytest.raises(ValidationError, match="retention service"):
+        record.save(update_fields=["promotion_target_reconciled_at"])
+    record.refresh_from_db()
+    assert record.promotion_target_reconciled_at == observed_at
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize("manager_name", ["objects", "_base_manager"])
 @pytest.mark.parametrize("as_generator", [False, True])
 def test_upload_conflict_upsert_cannot_rewrite_promotion_evidence(manager_name, as_generator):
@@ -363,8 +505,9 @@ def test_issuance_output_cleanup_is_bounded_and_preserves_key():
     from django.db import connection
     with connection.cursor() as cursor:
         cursor.execute(
-            "UPDATE uploads_uploadrequest SET promotion_target_deleted_at = %s WHERE id = %s",
-            [now, record.id.hex],
+            "UPDATE uploads_uploadrequest SET promotion_target_deleted_at = %s, "
+            "promotion_target_reconciled_at = %s WHERE id = %s",
+            [now, now, record.id.hex],
         )
     output_key = f"outputs/issuance/{org.id}/{issuance.id}.pdf"
     issuance.__class__.objects.filter(pk=issuance.pk).update(

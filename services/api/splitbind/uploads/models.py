@@ -38,7 +38,10 @@ class UploadRequestQuerySet(ValidatedOrganizationQuerySet):
     }
 
     def update(self, **kwargs):
-        deletion_fields = {"orphan_deleted_at", "promotion_target_deleted_at"} & kwargs.keys()
+        deletion_fields = {
+            "orphan_deleted_at", "promotion_target_deleted_at",
+            "promotion_target_reconciled_at",
+        } & kwargs.keys()
         if deletion_fields:
             raise ValidationError("deletion evidence requires the retention service")
         immutable = self._IMMUTABLE_FIELDS & kwargs.keys()
@@ -54,6 +57,7 @@ class UploadRequestQuerySet(ValidatedOrganizationQuerySet):
         if any(
             record.orphan_deleted_at is not None
             or record.promotion_target_deleted_at is not None
+            or record.promotion_target_reconciled_at is not None
             for record in objects
         ):
             raise ValidationError("deletion evidence requires the retention service")
@@ -100,6 +104,7 @@ class UploadRequest(ValidatedOrganizationOwnedModel):
     promotion_status_changed_at = models.DateTimeField(auto_now_add=True)
     safe_error_code = models.CharField(max_length=80, null=True, blank=True)
     promotion_target_deleted_at = models.DateTimeField(null=True, blank=True)
+    promotion_target_reconciled_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -149,14 +154,19 @@ class UploadRequest(ValidatedOrganizationOwnedModel):
 
     def save(self, *args, **kwargs) -> None:
         if self._state.adding and (
-            self.orphan_deleted_at is not None or self.promotion_target_deleted_at is not None
+            self.orphan_deleted_at is not None
+            or self.promotion_target_deleted_at is not None
+            or self.promotion_target_reconciled_at is not None
         ):
             from splitbind.retention.capabilities import deletion_evidence_write_allowed
             if not deletion_evidence_write_allowed():
                 raise ValidationError("deletion evidence requires the retention service")
         if not self._state.adding:
             update_fields = kwargs.get("update_fields")
-            deletion_fields = {"orphan_deleted_at", "promotion_target_deleted_at"}
+            deletion_fields = {
+                "orphan_deleted_at", "promotion_target_deleted_at",
+                "promotion_target_reconciled_at",
+            }
             names = set(update_fields) if update_fields is not None else deletion_fields
             if names & deletion_fields:
                 persisted_deletions = type(self)._base_manager.only(*deletion_fields).get(pk=self.pk)
@@ -169,7 +179,17 @@ class UploadRequest(ValidatedOrganizationOwnedModel):
                     if not deletion_evidence_write_allowed():
                         raise ValidationError("deletion evidence requires the retention service")
                     for name in changed_deletions:
-                        if getattr(persisted_deletions, name) is not None or getattr(self, name) is None:
+                        old = getattr(persisted_deletions, name)
+                        new = getattr(self, name)
+                        reconciliation_moves_back = (
+                            name == "promotion_target_reconciled_at"
+                            and (new is None or (old is not None and new < old))
+                        )
+                        deletion_tombstone_changes = (
+                            name != "promotion_target_reconciled_at"
+                            and (old is not None or new is None)
+                        )
+                        if reconciliation_moves_back or deletion_tombstone_changes:
                             raise ValidationError("deletion evidence is monotonic")
         if not self._state.adding:
             update_fields = kwargs.get("update_fields")

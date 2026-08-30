@@ -77,6 +77,37 @@ def test_cleanup_timestamp_reverse_guards_fail_closed_before_evidence_loss():
     assert issuance.output_deleted_at is not None
 
 
+@pytest.mark.django_db
+def test_reconciliation_observation_reverse_guard_preserves_retry_evidence():
+    org = Organization.objects.create(name="Reconcile guard", slug=f"reconcile-{uuid.uuid4().hex[:8]}")
+    actor = User.objects.create_user(
+        username="reconcile-guard", password="test", organization=org, role=Role.ISSUER,
+    )
+    upload = UploadRequest.objects.create(
+        organization=org,
+        requested_by=actor,
+        purpose=UploadPurpose.ISSUANCE,
+        object_key=f"uploads/orphan/issuance_input/{org.id}/{uuid.uuid4().hex}.bin",
+        expected_sha256="a" * 64,
+        size_bytes=1,
+        expires_at=timezone.now(),
+    )
+    observed_at = timezone.now()
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "UPDATE uploads_uploadrequest SET promotion_target_reconciled_at = %s WHERE id = %s",
+            [observed_at, upload.id.hex],
+        )
+    migration = importlib.import_module(
+        "splitbind.uploads.migrations.0008_uploadrequest_promotion_target_reconciled_at"
+    )
+
+    with pytest.raises(RuntimeError, match="reconciliation evidence"):
+        migration.refuse_reconciliation_evidence_rollback(
+            apps, SimpleNamespace(connection=connection),
+        )
+
+
 @pytest.mark.django_db(transaction=True)
 def test_signing_key_constraint_preflight_rejects_invalid_legacy_rows_with_actionable_error():
     target = [("access", "0003_alter_user_managers")]

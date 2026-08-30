@@ -320,6 +320,43 @@ def test_inflight_copy_finishing_after_stale_cleanup_cannot_attach_or_leave_live
 
 
 @pytest.mark.django_db
+def test_scanner_recovers_when_request_late_copy_compensation_exits(
+    workflow_context, monkeypatch,
+):
+    org, issuer, _, recipient, storage = workflow_context
+    upload = completed_upload(org, issuer, storage, UploadPurpose.ISSUANCE)
+    original_copy = storage.copy_verified
+    cleanup_at = timezone.now()
+
+    def copy_after_cleanup(**kwargs):
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE uploads_uploadrequest SET promotion_status_changed_at = %s WHERE id = %s",
+                [cleanup_at - timedelta(hours=2), upload.id.hex],
+            )
+        from splitbind.retention.services import cleanup_expired
+        assert cleanup_expired(now=cleanup_at, storage=storage, batch_size=1) == 1
+        return original_copy(**kwargs)
+
+    monkeypatch.setattr(storage, "copy_verified", copy_after_cleanup)
+    monkeypatch.setattr(
+        "splitbind.jobs.services.delete_fenced_promotion_target",
+        lambda **kwargs: (_ for _ in ()).throw(SystemExit("request exited")),
+    )
+    with override_settings(SPLITBIND_OBJECT_STORAGE=storage):
+        with pytest.raises(SystemExit, match="request exited"):
+            create_issuance(issuer, recipient.id, upload.id, uuid.uuid4())
+
+    upload.refresh_from_db()
+    assert upload.promotion_target_deleted_at is not None
+    assert upload.promotion_target_key in storage.objects
+
+    from splitbind.retention.services import cleanup_expired
+    assert cleanup_expired(now=cleanup_at, storage=storage, batch_size=1) == 0
+    assert upload.promotion_target_key not in storage.objects
+
+
+@pytest.mark.django_db
 def test_inflight_mismatched_copy_after_cleanup_is_also_removed(
     workflow_context, monkeypatch,
 ):
@@ -612,7 +649,9 @@ class B4MigrationContractTests(TransactionTestCase):
                 MigrationExecutor(connection).migrate(old_target)
             preserved = {
                 row.id: (row.promotion_status, row.promotion_target_key, row.safe_error_code)
-                for row in Upload.objects.filter(pk__in=[record.pk for record in records])
+                for row in Upload.objects.filter(
+                    pk__in=[record.pk for record in records],
+                ).only("id", "promotion_status", "promotion_target_key", "safe_error_code")
             }
             for record in records:
                 self.assertEqual(
