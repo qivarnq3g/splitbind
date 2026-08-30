@@ -1,6 +1,8 @@
 import uuid
+from dataclasses import dataclass
 from datetime import timedelta
 
+from django.conf import settings
 from django.db import connection, transaction
 from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
@@ -116,38 +118,17 @@ def _record_promotion_reconciliation(
         )
 
 
-def _reconcile_fenced_promotion(*, pk, storage, now) -> bool:
-    """Periodically re-delete a tombstoned target without claiming finality."""
-    with transaction.atomic():
-        try:
-            record = _locked(
-                UploadRequest._base_manager.select_related("organization")
-            ).get(pk=pk)
-        except UploadRequest.DoesNotExist:
-            return False
-        if record.promotion_target_deleted_at is None:
-            return False
-        observed_at = max(
-            now,
-            timezone.now(),
-            record.promotion_target_reconciled_at or now,
-        )
-        key = record.promotion_target_key
-        if not key or not _key_is_owned(record, "stale_promotion", key):
-            _record_promotion_reconciliation(
-                record, at=observed_at, succeeded=False,
-                safe_error_code="INVALID_CONTROLLED_KEY",
-            )
-            return False
-        try:
-            storage.delete(key=key)
-        except Exception:
-            _record_promotion_reconciliation(
-                record, at=observed_at, succeeded=False,
-            )
-            return False
-        _record_promotion_reconciliation(record, at=observed_at, succeeded=True)
-        return True
+@dataclass(frozen=True)
+class ReconciliationClaim:
+    upload_id: uuid.UUID
+    token: uuid.UUID
+
+
+@dataclass(frozen=True)
+class ReconciliationAttempt:
+    succeeded: bool
+    acknowledge: bool
+    safe_error_code: str | None = None
 
 
 def delete_attached_orphan_source(
@@ -396,59 +377,188 @@ def _next_reconciliation_candidate(schedule, *, excluded_ids):
     ).values_list("pk", "promotion_target_deleted_at").first()
 
 
-def _scheduled_candidates(*, now, batch_size):
-    """Claim a durable round-robin batch while serializing scheduler state."""
+def _save_schedule(schedule):
+    with _allow_cleanup_schedule_write():
+        schedule.save()
+
+
+def _clear_claim(schedule):
+    schedule.reconciliation_claim_upload_id = None
+    schedule.reconciliation_claim_token = None
+    schedule.reconciliation_claim_expires_at = None
+
+
+def _claim_reconciliation(*, now):
+    """Persist one leased claim without moving the acknowledged cursor."""
     with transaction.atomic():
         schedule = CleanupScheduleState.objects.select_for_update().get(pk=1)
-        ordinary = _ordinary_candidates(now=now, limit=batch_size)
-        ordinary_index = 0
-        reconciliation_ids = set()
-        selected = []
-
-        def take(lane):
-            nonlocal ordinary_index
-            if lane == CleanupLane.ORDINARY:
-                if ordinary_index >= len(ordinary):
-                    return None
-                candidate = ordinary[ordinary_index]
-                ordinary_index += 1
-                return candidate
-            candidate = _next_reconciliation_candidate(
-                schedule, excluded_ids=reconciliation_ids,
-            )
-            if candidate is None:
+        locked_now = max(now, timezone.now())
+        upload_id = schedule.reconciliation_claim_upload_id
+        if upload_id is not None:
+            if schedule.reconciliation_claim_expires_at > locked_now:
                 return None
-            pk, tombstoned_at = candidate
-            reconciliation_ids.add(pk)
-            schedule.reconciliation_cursor_at = tombstoned_at
-            schedule.reconciliation_cursor_id = pk
-            return ("reconcile_promotion", pk, None, None, None, None, None)
+        else:
+            selected = _next_reconciliation_candidate(schedule, excluded_ids=set())
+            if selected is None:
+                return None
+            upload_id, _ = selected
 
-        for _ in range(batch_size):
-            preferred = schedule.next_lane
-            candidate = take(preferred)
-            used_lane = preferred
-            if candidate is None:
-                used_lane = (
-                    CleanupLane.RECONCILIATION
-                    if preferred == CleanupLane.ORDINARY
-                    else CleanupLane.ORDINARY
-                )
-                candidate = take(used_lane)
-            if candidate is None:
-                break
-            selected.append(candidate)
-            schedule.next_lane = (
-                CleanupLane.RECONCILIATION
-                if used_lane == CleanupLane.ORDINARY
-                else CleanupLane.ORDINARY
-            )
+        try:
+            record = UploadRequest._base_manager.select_for_update().get(pk=upload_id)
+        except UploadRequest.DoesNotExist:
+            _clear_claim(schedule)
+            _save_schedule(schedule)
+            return None
+        if record.promotion_target_deleted_at is None:
+            _clear_claim(schedule)
+            _save_schedule(schedule)
+            return None
 
-        if selected:
-            schedule.has_run = True
-            with _allow_cleanup_schedule_write():
-                schedule.save()
-        return selected
+        token = uuid.uuid4()
+        schedule.reconciliation_claim_upload_id = record.pk
+        schedule.reconciliation_claim_token = token
+        schedule.reconciliation_claim_expires_at = locked_now + timedelta(
+            seconds=settings.RETENTION_RECONCILIATION_LEASE_SECONDS,
+        )
+        schedule.has_run = True
+        _save_schedule(schedule)
+        return ReconciliationClaim(upload_id=record.pk, token=token)
+
+
+def _attempt_reconciliation(*, claim, storage):
+    """Attempt exact-key deletion without holding the scheduler row lock."""
+    try:
+        record = UploadRequest._base_manager.get(pk=claim.upload_id)
+    except UploadRequest.DoesNotExist:
+        return ReconciliationAttempt(False, True, "MISSING_CLEANUP_OWNER")
+    if record.promotion_target_deleted_at is None:
+        return ReconciliationAttempt(False, True, "INELIGIBLE_CLEANUP_OWNER")
+    key = record.promotion_target_key
+    if not key or not _key_is_owned(record, "stale_promotion", key):
+        return ReconciliationAttempt(False, True, "INVALID_CONTROLLED_KEY")
+    try:
+        storage.delete(key=key)
+    except Exception:
+        return ReconciliationAttempt(False, False, "STORAGE_DELETE_RETRY")
+    return ReconciliationAttempt(True, True)
+
+
+def _claim_matches(schedule, claim):
+    return (
+        schedule.reconciliation_claim_upload_id == claim.upload_id
+        and schedule.reconciliation_claim_token == claim.token
+    )
+
+
+def _ack_reconciliation(*, claim, at, succeeded, safe_error_code=None):
+    """Record an attempted outcome and advance only the matching claim token."""
+    with transaction.atomic():
+        schedule = CleanupScheduleState.objects.select_for_update().get(pk=1)
+        if not _claim_matches(schedule, claim):
+            return False
+        try:
+            record = UploadRequest._base_manager.select_for_update().select_related(
+                "organization",
+            ).get(pk=claim.upload_id)
+        except UploadRequest.DoesNotExist:
+            _clear_claim(schedule)
+            _save_schedule(schedule)
+            return False
+        if record.promotion_target_deleted_at is None:
+            _clear_claim(schedule)
+            _save_schedule(schedule)
+            return False
+        observed_at = max(
+            at, timezone.now(), record.promotion_target_reconciled_at or at,
+        )
+        _record_promotion_reconciliation(
+            record, at=observed_at, succeeded=succeeded,
+            safe_error_code=safe_error_code or "STORAGE_DELETE_RETRY",
+        )
+        schedule.reconciliation_cursor_at = record.promotion_target_deleted_at
+        schedule.reconciliation_cursor_id = record.pk
+        _clear_claim(schedule)
+        schedule.next_lane = CleanupLane.ORDINARY
+        schedule.has_run = True
+        _save_schedule(schedule)
+        return True
+
+
+def _record_claim_retry(*, claim, at, safe_error_code):
+    """Persist retry evidence while retaining claim ownership and cursor."""
+    with transaction.atomic():
+        schedule = CleanupScheduleState.objects.select_for_update().get(pk=1)
+        if not _claim_matches(schedule, claim):
+            return False
+        try:
+            record = UploadRequest._base_manager.select_for_update().select_related(
+                "organization",
+            ).get(pk=claim.upload_id)
+        except UploadRequest.DoesNotExist:
+            _clear_claim(schedule)
+            _save_schedule(schedule)
+            return False
+        if record.promotion_target_deleted_at is None:
+            _clear_claim(schedule)
+            _save_schedule(schedule)
+            return False
+        observed_at = max(
+            at, timezone.now(), record.promotion_target_reconciled_at or at,
+        )
+        _record_promotion_reconciliation(
+            record, at=observed_at, succeeded=False,
+            safe_error_code=safe_error_code,
+        )
+        schedule.next_lane = CleanupLane.ORDINARY
+        schedule.has_run = True
+        _save_schedule(schedule)
+        return True
+
+
+def _preferred_lane():
+    with transaction.atomic():
+        return CleanupScheduleState.objects.select_for_update().get(pk=1).next_lane
+
+
+def _mark_ordinary_attempt():
+    with transaction.atomic():
+        schedule = CleanupScheduleState.objects.select_for_update().get(pk=1)
+        schedule.next_lane = CleanupLane.RECONCILIATION
+        schedule.has_run = True
+        _save_schedule(schedule)
+
+
+def _run_ordinary_once(*, now, storage):
+    candidates = _ordinary_candidates(now=now, limit=1)
+    if not candidates:
+        return None
+    model, pk, key_field, timestamp_field, action, category, expected_state = candidates[0]
+    completed = _delete_one(
+        model=model, pk=pk, key_field=key_field,
+        timestamp_field=timestamp_field, action=action,
+        category=category, expected_state=expected_state,
+        storage=storage, now=now,
+    )
+    _mark_ordinary_attempt()
+    return completed
+
+
+def _run_reconciliation_once(*, now, storage):
+    claim = _claim_reconciliation(now=now)
+    if claim is None:
+        return False
+    attempt = _attempt_reconciliation(claim=claim, storage=storage)
+    if attempt.acknowledge:
+        _ack_reconciliation(
+            claim=claim, at=now, succeeded=attempt.succeeded,
+            safe_error_code=attempt.safe_error_code,
+        )
+    else:
+        _record_claim_retry(
+            claim=claim, at=now,
+            safe_error_code=attempt.safe_error_code or "STORAGE_DELETE_RETRY",
+        )
+    return True
 
 
 def cleanup_expired(*, now=None, storage=None, batch_size=DEFAULT_BATCH_SIZE) -> int:
@@ -458,22 +568,22 @@ def cleanup_expired(*, now=None, storage=None, batch_size=DEFAULT_BATCH_SIZE) ->
     if not isinstance(batch_size, int) or isinstance(batch_size, bool) or not 1 <= batch_size <= MAX_BATCH_SIZE:
         raise ValueError("cleanup batch size is invalid")
     storage = storage or get_storage()
-    candidates = _scheduled_candidates(now=now, batch_size=batch_size)
-
     deleted = 0
-    for model, pk, key_field, timestamp_field, action, category, expected_state in candidates:
-        if model == "reconcile_promotion":
-            # Reconciliation repeats a prior logical deletion. Keep the public
-            # count as newly tombstoned objects while still consuming one
-            # bounded batch slot and recording the physical observation.
-            _reconcile_fenced_promotion(pk=pk, storage=storage, now=now)
-            continue
-        completed = _delete_one(
-            model=model, pk=pk, key_field=key_field,
-            timestamp_field=timestamp_field, action=action,
-            category=category, expected_state=expected_state,
-            storage=storage, now=now,
-        )
-        if completed:
-            deleted += 1
+    for _ in range(batch_size):
+        preferred = _preferred_lane()
+        if preferred == CleanupLane.ORDINARY:
+            completed = _run_ordinary_once(now=now, storage=storage)
+            if completed is not None:
+                deleted += int(completed)
+                continue
+            if _run_reconciliation_once(now=now, storage=storage):
+                continue
+        else:
+            if _run_reconciliation_once(now=now, storage=storage):
+                continue
+            completed = _run_ordinary_once(now=now, storage=storage)
+            if completed is not None:
+                deleted += int(completed)
+                continue
+        break
     return deleted

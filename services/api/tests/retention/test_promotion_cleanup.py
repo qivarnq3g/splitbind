@@ -325,8 +325,14 @@ def test_failed_late_copy_reconciliation_remains_durably_retryable():
     failure = AuditEvent.objects.get(action="object.promotion.reconciliation.failed")
     assert failure.metadata == {"safe_error_code": "STORAGE_DELETE_RETRY"}
 
-    second_failed_at = failed_at + timedelta(seconds=1)
+    schedule = CleanupScheduleState.objects.get(pk=1)
+    before_expiry = failed_at + timedelta(seconds=1)
     storage.fail_next("delete", "another provider detail that must remain private")
+    assert cleanup_expired(now=before_expiry, storage=storage, batch_size=1) == 0
+    record.refresh_from_db()
+    assert record.promotion_target_reconciled_at == failed_at
+
+    second_failed_at = schedule.reconciliation_claim_expires_at
     assert cleanup_expired(now=second_failed_at, storage=storage, batch_size=1) == 0
     record.refresh_from_db()
     assert record.promotion_target_reconciled_at == second_failed_at
@@ -334,7 +340,8 @@ def test_failed_late_copy_reconciliation_remains_durably_retryable():
         action="object.promotion.reconciliation.failed",
     ).count() == 1
 
-    retry_at = second_failed_at + timedelta(seconds=1)
+    schedule.refresh_from_db()
+    retry_at = schedule.reconciliation_claim_expires_at
     assert cleanup_expired(now=retry_at, storage=storage, batch_size=1) == 0
     record.refresh_from_db()
     assert record.promotion_target_key not in storage.objects
@@ -417,6 +424,362 @@ def _set_promotion_tombstone(record, *, at, target_key=None):
         )
     record.refresh_from_db()
     return record
+
+
+@pytest.mark.django_db
+def test_crash_after_claim_keeps_candidate_pending_without_advancing_cursor():
+    """Catches advancing the cursor before an object-store attempt is acknowledged."""
+    class SimulatedProcessCrash(BaseException):
+        pass
+
+    class CrashingStorage(FakeObjectStorage):
+        def delete(self, *, key):
+            raise SimulatedProcessCrash
+
+    now = timezone.now()
+    org = Organization.objects.create(
+        name="Claim crash", slug=f"claim-crash-{uuid.uuid4().hex[:8]}",
+    )
+    actor = User.objects.create_user(
+        username="claim-crash", password="test", organization=org, role=Role.ISSUER,
+    )
+    record = upload(
+        org, actor, created_at=now - STALE_COPYING_AGE - timedelta(minutes=1),
+        status=PromotionStatus.FAILED,
+    )
+    _set_promotion_tombstone(record, at=now - timedelta(minutes=1))
+
+    with pytest.raises(SimulatedProcessCrash):
+        cleanup_expired(now=now, storage=CrashingStorage(), batch_size=1)
+
+    schedule = CleanupScheduleState.objects.get(pk=1)
+    assert schedule.reconciliation_cursor_id is None
+    assert schedule.reconciliation_claim_upload_id == record.id
+    assert schedule.reconciliation_claim_token is not None
+
+
+@pytest.mark.django_db
+def test_nonexpired_claim_is_not_stolen_and_expired_claim_gets_new_token():
+    """Catches replacing live ownership or reusing a stale ownership token."""
+    now = timezone.now()
+    org = Organization.objects.create(
+        name="Claim lease", slug=f"claim-lease-{uuid.uuid4().hex[:8]}",
+    )
+    actor = User.objects.create_user(
+        username="claim-lease", password="test", organization=org, role=Role.ISSUER,
+    )
+    record = upload(
+        org, actor, created_at=now - STALE_COPYING_AGE - timedelta(minutes=1),
+        status=PromotionStatus.FAILED,
+    )
+    _set_promotion_tombstone(record, at=now - timedelta(minutes=1))
+
+    first = retention_services._claim_reconciliation(now=now)
+    schedule = CleanupScheduleState.objects.get(pk=1)
+    assert first.upload_id == record.id
+    assert retention_services._claim_reconciliation(
+        now=schedule.reconciliation_claim_expires_at - timedelta(microseconds=1),
+    ) is None
+
+    reclaimed = retention_services._claim_reconciliation(
+        now=schedule.reconciliation_claim_expires_at,
+    )
+    assert reclaimed.upload_id == record.id
+    assert reclaimed.token != first.token
+
+
+@pytest.mark.django_db
+def test_stale_token_cannot_acknowledge_or_clear_reclaimed_candidate():
+    """Catches an old worker mutating state after another worker reclaims the lease."""
+    now = timezone.now()
+    org = Organization.objects.create(
+        name="Stale token", slug=f"stale-token-{uuid.uuid4().hex[:8]}",
+    )
+    actor = User.objects.create_user(
+        username="stale-token", password="test", organization=org, role=Role.ISSUER,
+    )
+    record = upload(
+        org, actor, created_at=now - STALE_COPYING_AGE - timedelta(minutes=1),
+        status=PromotionStatus.FAILED,
+    )
+    _set_promotion_tombstone(record, at=now - timedelta(minutes=1))
+    stale = retention_services._claim_reconciliation(now=now)
+    schedule = CleanupScheduleState.objects.get(pk=1)
+    current = retention_services._claim_reconciliation(
+        now=schedule.reconciliation_claim_expires_at,
+    )
+
+    assert retention_services._ack_reconciliation(
+        claim=stale, at=now + timedelta(minutes=10), succeeded=True,
+    ) is False
+    schedule.refresh_from_db()
+    record.refresh_from_db()
+    assert schedule.reconciliation_claim_token == current.token
+    assert schedule.reconciliation_cursor_id is None
+    assert record.promotion_target_reconciled_at is None
+
+
+@pytest.mark.django_db
+def test_pending_claim_precedes_newer_tombstone_after_restart_and_expiry():
+    """Catches selecting fresh tombstones ahead of durable pending ownership."""
+    now = timezone.now()
+    org = Organization.objects.create(
+        name="Pending order", slug=f"pending-order-{uuid.uuid4().hex[:8]}",
+    )
+    actor = User.objects.create_user(
+        username="pending-order", password="test", organization=org, role=Role.ISSUER,
+    )
+    first = upload(
+        org, actor, created_at=now - STALE_COPYING_AGE - timedelta(minutes=2),
+        status=PromotionStatus.FAILED,
+    )
+    _set_promotion_tombstone(first, at=now - timedelta(minutes=2))
+    claim = retention_services._claim_reconciliation(now=now)
+    newer = upload(
+        org, actor, created_at=now - STALE_COPYING_AGE - timedelta(minutes=1),
+        status=PromotionStatus.FAILED,
+    )
+    _set_promotion_tombstone(newer, at=now - timedelta(minutes=1))
+
+    import importlib
+    import splitbind.retention.services as restarted_services
+    restarted_services = importlib.reload(restarted_services)
+    assert restarted_services._claim_reconciliation(now=now + timedelta(seconds=1)) is None
+    schedule = CleanupScheduleState.objects.get(pk=1)
+    reclaimed = restarted_services._claim_reconciliation(
+        now=schedule.reconciliation_claim_expires_at,
+    )
+    assert claim.upload_id == first.id
+    assert reclaimed.upload_id == first.id
+    assert reclaimed.upload_id != newer.id
+
+
+@pytest.mark.django_db
+def test_storage_failure_records_safe_retry_without_acknowledging_claim():
+    """Catches clearing ownership or moving the cursor after retryable storage failure."""
+    now = timezone.now()
+    org = Organization.objects.create(
+        name="Claim retry", slug=f"claim-retry-{uuid.uuid4().hex[:8]}",
+    )
+    actor = User.objects.create_user(
+        username="claim-retry", password="test", organization=org, role=Role.ISSUER,
+    )
+    record = upload(
+        org, actor, created_at=now - STALE_COPYING_AGE - timedelta(minutes=1),
+        status=PromotionStatus.FAILED,
+    )
+    _set_promotion_tombstone(record, at=now - timedelta(minutes=1))
+    storage = FakeObjectStorage()
+    storage.inject_object(
+        key=record.promotion_target_key,
+        content_type="application/pdf", size_bytes=1, sha256=SHA256,
+    )
+    storage.fail_next("delete", "provider secret must not escape")
+
+    assert cleanup_expired(now=now, storage=storage, batch_size=1) == 0
+    schedule = CleanupScheduleState.objects.get(pk=1)
+    record.refresh_from_db()
+    assert schedule.reconciliation_claim_upload_id == record.id
+    assert schedule.reconciliation_cursor_id is None
+    assert record.promotion_target_reconciled_at >= now
+    failure = AuditEvent.objects.get(
+        action="object.promotion.reconciliation.failed", target_id=str(record.id),
+    )
+    assert failure.metadata == {"safe_error_code": "STORAGE_DELETE_RETRY"}
+
+
+@pytest.mark.django_db
+def test_audit_failure_rolls_back_ack_evidence_and_retains_claim(monkeypatch):
+    """Catches partially committing evidence/cursor when audit persistence fails."""
+    now = timezone.now()
+    org = Organization.objects.create(
+        name="Claim audit", slug=f"claim-audit-{uuid.uuid4().hex[:8]}",
+    )
+    actor = User.objects.create_user(
+        username="claim-audit", password="test", organization=org, role=Role.ISSUER,
+    )
+    record = upload(
+        org, actor, created_at=now - STALE_COPYING_AGE - timedelta(minutes=1),
+        status=PromotionStatus.FAILED,
+    )
+    _set_promotion_tombstone(record, at=now - timedelta(minutes=1))
+    claim = retention_services._claim_reconciliation(now=now)
+    monkeypatch.setattr(
+        retention_services, "record_system_event",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("audit unavailable")),
+    )
+
+    with pytest.raises(RuntimeError, match="audit unavailable"):
+        retention_services._ack_reconciliation(
+            claim=claim, at=now + timedelta(seconds=1), succeeded=True,
+        )
+
+    schedule = CleanupScheduleState.objects.get(pk=1)
+    record.refresh_from_db()
+    assert schedule.reconciliation_claim_token == claim.token
+    assert schedule.reconciliation_cursor_id is None
+    assert record.promotion_target_reconciled_at is None
+
+
+@pytest.mark.django_db
+def test_audit_failure_rolls_back_retry_evidence_and_retains_claim(monkeypatch):
+    """Catches committing failed-attempt evidence without its required audit event."""
+    now = timezone.now()
+    org = Organization.objects.create(
+        name="Retry audit", slug=f"retry-audit-{uuid.uuid4().hex[:8]}",
+    )
+    actor = User.objects.create_user(
+        username="retry-audit", password="test", organization=org, role=Role.ISSUER,
+    )
+    record = upload(
+        org, actor, created_at=now - STALE_COPYING_AGE - timedelta(minutes=1),
+        status=PromotionStatus.FAILED,
+    )
+    _set_promotion_tombstone(record, at=now - timedelta(minutes=1))
+    claim = retention_services._claim_reconciliation(now=now)
+    monkeypatch.setattr(
+        retention_services, "record_system_event",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("audit unavailable")),
+    )
+
+    with pytest.raises(RuntimeError, match="audit unavailable"):
+        retention_services._record_claim_retry(
+            claim=claim, at=now + timedelta(seconds=1),
+            safe_error_code="STORAGE_DELETE_RETRY",
+        )
+
+    schedule = CleanupScheduleState.objects.get(pk=1)
+    record.refresh_from_db()
+    assert schedule.reconciliation_claim_token == claim.token
+    assert schedule.reconciliation_cursor_id is None
+    assert record.promotion_target_reconciled_at is None
+
+
+@pytest.mark.django_db
+def test_nonexpired_failed_claim_allows_ordinary_fallback_without_newer_bypass():
+    """Catches a leased retry starving ordinary work or yielding to a newer tombstone."""
+    now = timezone.now()
+    org = Organization.objects.create(
+        name="Claim fallback", slug=f"claim-fallback-{uuid.uuid4().hex[:8]}",
+    )
+    actor = User.objects.create_user(
+        username="claim-fallback", password="test", organization=org, role=Role.ISSUER,
+    )
+    pending = upload(
+        org, actor, created_at=now - STALE_COPYING_AGE - timedelta(minutes=2),
+        status=PromotionStatus.FAILED,
+    )
+    _set_promotion_tombstone(pending, at=now - timedelta(minutes=2))
+    ordinary = upload(org, actor, created_at=now - timedelta(hours=25))
+    storage = FakeObjectStorage()
+    storage.inject_object(
+        key=pending.promotion_target_key,
+        content_type="application/pdf", size_bytes=1, sha256=SHA256,
+    )
+    storage.inject_object(
+        key=ordinary.object_key,
+        content_type="application/pdf", size_bytes=1, sha256=SHA256,
+    )
+    claim = retention_services._claim_reconciliation(now=now)
+    assert retention_services._record_claim_retry(
+        claim=claim, at=now, safe_error_code="STORAGE_DELETE_RETRY",
+    ) is True
+    assert cleanup_expired(now=now, storage=storage, batch_size=1) == 1
+    pending.refresh_from_db()
+    ordinary.refresh_from_db()
+    schedule = CleanupScheduleState.objects.get(pk=1)
+    assert ordinary.orphan_deleted_at is not None
+    assert schedule.reconciliation_claim_upload_id == pending.id
+
+    newer = upload(
+        org, actor, created_at=now - STALE_COPYING_AGE - timedelta(minutes=1),
+        status=PromotionStatus.FAILED,
+    )
+    _set_promotion_tombstone(newer, at=now - timedelta(minutes=1))
+    assert retention_services._claim_reconciliation(
+        now=now + timedelta(seconds=2),
+    ) is None
+    schedule.refresh_from_db()
+    assert schedule.reconciliation_claim_upload_id == pending.id
+    assert schedule.reconciliation_cursor_id is None
+
+
+@pytest.mark.django_db
+def test_ack_timestamp_is_sampled_after_scheduler_and_upload_locks(monkeypatch):
+    """Catches sampling lifecycle evidence before both authoritative rows are locked."""
+    now = timezone.now()
+    org = Organization.objects.create(
+        name="Ack clock", slug=f"ack-clock-{uuid.uuid4().hex[:8]}",
+    )
+    actor = User.objects.create_user(
+        username="ack-clock", password="test", organization=org, role=Role.ISSUER,
+    )
+    record = upload(
+        org, actor, created_at=now - STALE_COPYING_AGE - timedelta(minutes=1),
+        status=PromotionStatus.FAILED,
+    )
+    _set_promotion_tombstone(record, at=now - timedelta(minutes=1))
+    claim = retention_services._claim_reconciliation(now=now)
+    events = []
+    from django.db.models.query import QuerySet
+    original_get = QuerySet.get
+
+    def observed_get(queryset, *args, **kwargs):
+        if queryset.query.select_for_update:
+            events.append(queryset.model)
+        return original_get(queryset, *args, **kwargs)
+
+    def observed_now():
+        events.append("clock")
+        return now + timedelta(seconds=5)
+
+    monkeypatch.setattr(QuerySet, "get", observed_get)
+    monkeypatch.setattr(retention_services.timezone, "now", observed_now)
+    assert retention_services._ack_reconciliation(
+        claim=claim, at=now, succeeded=True,
+    ) is True
+    assert events[:3] == [CleanupScheduleState, UploadRequest, "clock"]
+    record.refresh_from_db()
+    assert record.promotion_target_reconciled_at == now + timedelta(seconds=5)
+
+
+@pytest.mark.django_db
+def test_crash_after_delete_before_ack_retries_same_exact_key_idempotently():
+    """Catches losing a candidate when the process dies after object deletion."""
+    now = timezone.now()
+    org = Organization.objects.create(
+        name="Post-delete crash", slug=f"post-delete-crash-{uuid.uuid4().hex[:8]}",
+    )
+    actor = User.objects.create_user(
+        username="post-delete-crash", password="test", organization=org, role=Role.ISSUER,
+    )
+    record = upload(
+        org, actor, created_at=now - STALE_COPYING_AGE - timedelta(minutes=1),
+        status=PromotionStatus.FAILED,
+    )
+    _set_promotion_tombstone(record, at=now - timedelta(minutes=1))
+    storage = FakeObjectStorage()
+    storage.inject_object(
+        key=record.promotion_target_key,
+        content_type="application/pdf", size_bytes=1, sha256=SHA256,
+    )
+    first = retention_services._claim_reconciliation(now=now)
+    attempted = retention_services._attempt_reconciliation(claim=first, storage=storage)
+    assert attempted.succeeded is True
+    assert record.promotion_target_key not in storage.objects
+
+    schedule = CleanupScheduleState.objects.get(pk=1)
+    reclaimed = retention_services._claim_reconciliation(
+        now=schedule.reconciliation_claim_expires_at,
+    )
+    retried = retention_services._attempt_reconciliation(claim=reclaimed, storage=storage)
+    assert retried.succeeded is True
+    assert retention_services._ack_reconciliation(
+        claim=reclaimed, at=now + timedelta(minutes=10), succeeded=True,
+    ) is True
+    schedule.refresh_from_db()
+    assert schedule.reconciliation_cursor_id == record.id
+    assert schedule.reconciliation_claim_upload_id is None
 
 
 @pytest.mark.django_db
