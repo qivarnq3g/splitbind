@@ -4,7 +4,9 @@ from django.db import migrations, models
 def refuse_live_claim_rollback(apps, schema_editor):
     Schedule = apps.get_model("uploads", "CleanupScheduleState")
     live = Schedule.objects.using(schema_editor.connection.alias).filter(
-        reconciliation_claim_upload_id__isnull=False,
+        models.Q(reconciliation_claim_upload_id__isnull=False)
+        | models.Q(reconciliation_claim_token__isnull=False)
+        | models.Q(reconciliation_claim_expires_at__isnull=False)
     ).exists()
     if live:
         raise RuntimeError(

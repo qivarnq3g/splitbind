@@ -205,6 +205,66 @@ def test_reconciliation_claim_migration_refuses_live_claim_reverse_and_preserves
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("field_name", "raw_value"),
+    [
+        ("reconciliation_claim_upload_id", "00000000000040008000000000000001"),
+        ("reconciliation_claim_token", "00000000000040008000000000000002"),
+        ("reconciliation_claim_expires_at", "2030-01-02 03:04:05+00:00"),
+    ],
+)
+def test_reconciliation_claim_reverse_guard_preserves_any_partial_claim_field(
+    field_name, raw_value,
+):
+    schedule = cleanup_schedule()
+    columns = [
+        "reconciliation_claim_upload_id",
+        "reconciliation_claim_token",
+        "reconciliation_claim_expires_at",
+    ]
+    migration = importlib.import_module(
+        "splitbind.uploads.migrations.0010_reconciliation_claim"
+    )
+
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("PRAGMA ignore_check_constraints = ON")
+            cursor.execute(
+                f"UPDATE uploads_cleanupschedulestate SET {field_name} = %s "
+                "WHERE id = %s",
+                [raw_value, schedule.pk],
+            )
+            cursor.execute("PRAGMA ignore_check_constraints = OFF")
+
+        with pytest.raises(RuntimeError, match="reconciliation claim is live"):
+            migration.refuse_live_claim_rollback(
+                apps, SimpleNamespace(connection=connection),
+            )
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT reconciliation_claim_upload_id, "
+                "reconciliation_claim_token, reconciliation_claim_expires_at "
+                "FROM uploads_cleanupschedulestate WHERE id = %s",
+                [schedule.pk],
+            )
+            retained = cursor.fetchone()
+        assert retained[columns.index(field_name)] is not None
+        assert sum(value is not None for value in retained) == 1
+    finally:
+        with connection.cursor() as cursor:
+            cursor.execute("PRAGMA ignore_check_constraints = ON")
+            cursor.execute(
+                "UPDATE uploads_cleanupschedulestate SET "
+                "reconciliation_claim_upload_id = NULL, "
+                "reconciliation_claim_token = NULL, "
+                "reconciliation_claim_expires_at = NULL WHERE id = %s",
+                [schedule.pk],
+            )
+            cursor.execute("PRAGMA ignore_check_constraints = OFF")
+
+
+@pytest.mark.django_db
 def test_reconciliation_claim_database_constraint_rejects_partial_state():
     schedule = cleanup_schedule()
 
