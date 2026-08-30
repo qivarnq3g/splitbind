@@ -3,7 +3,7 @@ import uuid
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Q
 
 from splitbind.access.models import (
@@ -22,8 +22,18 @@ class UploadPurpose(models.TextChoices):
     VERIFICATION = "verification", "Verification"
 
 
+class PromotionStatus(models.TextChoices):
+    NONE = "none", "None"
+    COPYING = "copying", "Copying"
+    ATTACHED = "attached", "Attached"
+    FAILED = "failed", "Failed"
+
+
 class UploadRequestQuerySet(ValidatedOrganizationQuerySet):
-    _IMMUTABLE_FIELDS = {"purpose", "object_key", "expected_sha256", "size_bytes", "expires_at"}
+    _IMMUTABLE_FIELDS = {
+        "purpose", "object_key", "expected_sha256", "size_bytes", "expires_at",
+        "promotion_target_key", "promotion_status", "safe_error_code",
+    }
 
     def update(self, **kwargs):
         immutable = self._IMMUTABLE_FIELDS & kwargs.keys()
@@ -39,7 +49,10 @@ class UploadRequestManager(ValidatedOrganizationManager.from_queryset(UploadRequ
 
 class UploadRequest(ValidatedOrganizationOwnedModel):
     objects = UploadRequestManager()
-    _IMMUTABLE_FIELDS = ("purpose", "object_key", "expected_sha256", "size_bytes", "expires_at")
+    _IMMUTABLE_FIELDS = (
+        "purpose", "object_key", "expected_sha256", "size_bytes", "expires_at",
+        "promotion_target_key", "promotion_status", "safe_error_code",
+    )
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     requested_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -61,6 +74,11 @@ class UploadRequest(ValidatedOrganizationOwnedModel):
     )
     expires_at = models.DateTimeField()
     finalized_at = models.DateTimeField(null=True, blank=True)
+    promotion_target_key = models.CharField(max_length=1024, null=True, blank=True)
+    promotion_status = models.CharField(
+        max_length=16, choices=PromotionStatus.choices, default=PromotionStatus.NONE,
+    )
+    safe_error_code = models.CharField(max_length=80, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -72,6 +90,24 @@ class UploadRequest(ValidatedOrganizationOwnedModel):
             models.CheckConstraint(
                 condition=Q(size_bytes__isnull=True) | Q(size_bytes__gte=1, size_bytes__lte=MAX_UPLOAD_BYTES),
                 name="upload_size_legacy_null_or_bounded",
+            ),
+            models.CheckConstraint(
+                condition=Q(promotion_status__in=PromotionStatus.values),
+                name="upload_promotion_status_stable",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(promotion_status=PromotionStatus.NONE, promotion_target_key__isnull=True)
+                    | Q(promotion_status__in=[PromotionStatus.COPYING, PromotionStatus.ATTACHED, PromotionStatus.FAILED], promotion_target_key__isnull=False)
+                ),
+                name="upload_promotion_target_state",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    ~Q(promotion_status=PromotionStatus.FAILED)
+                    | Q(safe_error_code__isnull=False)
+                ),
+                name="upload_failed_has_safe_code",
             ),
         ]
         indexes = [
@@ -99,3 +135,53 @@ class UploadRequest(ValidatedOrganizationOwnedModel):
                 if changed:
                     raise ValueError(f"upload intent fields are immutable ({', '.join(sorted(changed))})")
         super().save(*args, **kwargs)
+
+    @transaction.atomic
+    def save_promotion(self, *, status: str, target_key: str | None, safe_error_code: str | None) -> None:
+        """The sole application path allowed to mutate durable promotion ownership."""
+        if status not in PromotionStatus.values:
+            raise ValueError("promotion status is invalid")
+        if (status == PromotionStatus.NONE) != (target_key is None):
+            raise ValueError("promotion target and state do not match")
+        if status == PromotionStatus.FAILED and not safe_error_code:
+            raise ValueError("failed promotion requires a safe error code")
+        if status != PromotionStatus.FAILED and safe_error_code is not None:
+            raise ValueError("only failed promotion may retain a safe error code")
+
+        persisted = type(self)._base_manager.select_for_update().only(
+            "promotion_status", "promotion_target_key", "safe_error_code",
+        ).get(pk=self.pk)
+        if (
+            status == persisted.promotion_status
+            and target_key == persisted.promotion_target_key
+            and safe_error_code == persisted.safe_error_code
+        ):
+            return
+        allowed = {
+            PromotionStatus.NONE: {PromotionStatus.COPYING},
+            PromotionStatus.COPYING: {PromotionStatus.ATTACHED, PromotionStatus.FAILED},
+            PromotionStatus.FAILED: {PromotionStatus.COPYING},
+            PromotionStatus.ATTACHED: set(),
+        }
+        if status not in allowed[persisted.promotion_status]:
+            raise ValueError("promotion transition is invalid")
+        if (
+            persisted.promotion_target_key is not None
+            and target_key != persisted.promotion_target_key
+        ):
+            raise ValueError("promotion target is immutable after reservation")
+        if target_key is not None:
+            from splitbind.integrations.storage.base import validate_promoted_key
+
+            match = validate_promoted_key(target_key)
+            expected_kind = "issuance" if self.purpose == UploadPurpose.ISSUANCE else "verification"
+            if (
+                match.group("kind") != expected_kind
+                or match.group("organization") != str(self.organization_id)
+                or match.group("upload") != str(self.id)
+            ):
+                raise ValueError("promotion target must identify this upload, organization, and purpose")
+        self.promotion_status = status
+        self.promotion_target_key = target_key
+        self.safe_error_code = safe_error_code
+        super().save(update_fields=["promotion_status", "promotion_target_key", "safe_error_code"])

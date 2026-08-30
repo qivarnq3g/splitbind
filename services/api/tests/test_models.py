@@ -72,7 +72,7 @@ def document(organization, user, upload_request):
         created_by=user,
         upload_request=upload_request,
         source_object_key=upload_request.object_key,
-        source_sha256=SHA256_A,
+        expected_source_sha256=SHA256_A,
         page_count=1,
     )
 
@@ -316,7 +316,7 @@ def test_model_boundaries_reject_cross_organization_relations(
         created_by=other_user,
         upload_request=other_upload,
         source_object_key=other_upload.object_key,
-        source_sha256=SHA256_A,
+        expected_source_sha256=SHA256_A,
         page_count=1,
     )
     other_recipient = Recipient.objects.create(
@@ -358,7 +358,7 @@ def test_model_boundaries_reject_cross_organization_relations(
             created_by=other_user,
             upload_request=upload_request,
             source_object_key="org/example/uploads/cross-document.pdf",
-            source_sha256=SHA256_A,
+            expected_source_sha256=SHA256_A,
             page_count=1,
         ),
         Manifest(
@@ -419,7 +419,7 @@ def test_sha256_validator_rejects_noncanonical_values(
         created_by=user,
         upload_request=upload_request,
         source_object_key="org/example/uploads/invalid.pdf",
-        source_sha256=invalid_hash,
+        expected_source_sha256=invalid_hash,
         page_count=1,
     )
 
@@ -436,7 +436,7 @@ def test_sha256_database_constraint_rejects_noncanonical_value(
             created_by=user,
             upload_request=upload_request,
             source_object_key="org/example/uploads/uppercase.pdf",
-            source_sha256="A" * 64,
+            expected_source_sha256="A" * 64,
             page_count=1,
         )
 

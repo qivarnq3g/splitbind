@@ -39,7 +39,7 @@ def create_issuance(organization, actor, suffix):
         created_by=actor,
         upload_request=upload,
         source_object_key=f"{organization.slug}/{suffix}/document.pdf",
-        source_sha256=SHA256,
+        expected_source_sha256=SHA256,
         page_count=1,
     )
     recipient = Recipient.objects.create(

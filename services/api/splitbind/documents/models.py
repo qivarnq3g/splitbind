@@ -23,16 +23,22 @@ class Document(ValidatedOrganizationOwnedModel):
         related_name="document",
     )
     source_object_key = models.CharField(max_length=1024, unique=True)
-    source_sha256 = models.CharField(max_length=64, validators=[validate_sha256])
-    page_count = models.PositiveSmallIntegerField(validators=[MinValueValidator(1)])
+    expected_source_sha256 = models.CharField(max_length=64, validators=[validate_sha256])
+    page_count = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1)], null=True, blank=True,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         constraints = [
             models.CheckConstraint(
-                condition=Q(source_sha256__regex=SHA256_PATTERN),
+                condition=Q(expected_source_sha256__regex=SHA256_PATTERN),
                 name="document_sha256_canonical",
-            )
+            ),
+            models.CheckConstraint(
+                condition=Q(page_count__isnull=True) | Q(page_count__gte=1, page_count__lte=50),
+                name="document_page_count_pending_or_1_50",
+            ),
         ]
         indexes = [
             models.Index(fields=["organization", "created_at"], name="document_org_created_idx")

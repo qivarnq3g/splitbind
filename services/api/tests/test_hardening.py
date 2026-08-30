@@ -55,7 +55,7 @@ def tenant_pair(db):
         created_by=first_user,
         upload_request=first_upload,
         source_object_key="first/document.pdf",
-        source_sha256=SHA256,
+        expected_source_sha256=SHA256,
         page_count=1,
     )
     second_upload = UploadRequest.objects.create(
@@ -72,7 +72,7 @@ def tenant_pair(db):
         created_by=second_user,
         upload_request=second_upload,
         source_object_key="second/document.pdf",
-        source_sha256=SHA256,
+        expected_source_sha256=SHA256,
         page_count=1,
     )
     second_recipient = Recipient.objects.create(
@@ -157,7 +157,7 @@ def test_objects_create_and_save_reject_cross_tenant_relations(tenant_pair):
         created_by=second_user,
         upload_request=first_upload,
         source_object_key="first/cross-document.pdf",
-        source_sha256=SHA256,
+        expected_source_sha256=SHA256,
         page_count=1,
     )
     with pytest.raises(ValidationError, match="same organization"):
