@@ -115,3 +115,41 @@ def test_signing_key_constraint_reverse_refuses_to_drop_registry_guards_with_evi
 
     with pytest.raises(RuntimeError, match="registry evidence exists"):
         migration.refuse_lifecycle_guard_rollback(apps, SimpleNamespace(connection=connection))
+
+
+@pytest.mark.django_db(transaction=True)
+def test_promotion_transition_clock_migration_backfills_legacy_created_at():
+    old_target = [("uploads", "0006_alter_uploadrequest_options")]
+    latest_targets = MigrationExecutor(connection).loader.graph.leaf_nodes()
+    try:
+        MigrationExecutor(connection).migrate(old_target)
+        old_apps = MigrationExecutor(connection).loader.project_state(old_target).apps
+        LegacyOrganization = old_apps.get_model("access", "Organization")
+        LegacyUser = old_apps.get_model("access", "User")
+        LegacyUpload = old_apps.get_model("uploads", "UploadRequest")
+        org = LegacyOrganization.objects.create(
+            name="Legacy transition", slug=f"legacy-transition-{uuid.uuid4().hex[:8]}",
+        )
+        actor = LegacyUser.objects.create(
+            username="legacy-transition", password="unusable-test-value",
+            organization_id=org.id, role=Role.ISSUER, is_active=True,
+            is_staff=False, is_superuser=False, date_joined=timezone.now(),
+        )
+        upload_id = uuid.uuid4()
+        legacy = LegacyUpload.objects.create(
+            id=upload_id,
+            organization_id=org.id,
+            requested_by_id=actor.id,
+            purpose=UploadPurpose.ISSUANCE,
+            object_key=f"uploads/orphan/issuance_input/{org.id}/{upload_id.hex}.bin",
+            expected_sha256="a" * 64,
+            size_bytes=1,
+            expires_at=timezone.now(),
+        )
+        legacy_created_at = legacy.created_at
+
+        MigrationExecutor(connection).migrate(latest_targets)
+        migrated = UploadRequest.objects.get(pk=legacy.pk)
+        assert migrated.promotion_status_changed_at == legacy_created_at
+    finally:
+        MigrationExecutor(connection).migrate(latest_targets)

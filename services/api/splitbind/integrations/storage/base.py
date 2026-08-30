@@ -67,7 +67,9 @@ class ObjectStorage(Protocol):
         """Copy and observe metadata; on mismatch, retain the destination for owned cleanup."""
         ...
 
-    def delete(self, *, key: str) -> None: ...
+    def delete(self, *, key: str) -> None:
+        """Delete exactly ``key``; succeed when that exact key is already absent."""
+        ...
 
 
 def validate_controlled_key(key: str) -> None:

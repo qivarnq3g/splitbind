@@ -292,6 +292,7 @@ def test_fake_storage_enforces_orphan_to_promoted_copy_boundary():
     assert copied.key == destination
     assert storage.head(key=destination).client_sha256_metadata == SHA256
     storage.delete(key=destination)
+    storage.delete(key=destination)
     assert storage.head(key=destination) is None
     with pytest.raises(ValueError, match="controlled"):
         storage.presign_get(key="uploads/orphan/../secret", expires=timedelta(minutes=1))
@@ -339,6 +340,26 @@ def test_s3_storage_rejects_metadata_mismatch_but_never_deletes_promoted_destina
     with pytest.raises(UploadRejected, match="STORAGE_COPY_MISMATCH"):
         storage.copy_verified(source=source, destination=destination, sha256=SHA256)
     assert client.deleted == []
+
+
+def test_s3_delete_is_an_idempotent_exact_key_operation():
+    organization_id = uuid.uuid4()
+    key = f"inputs/issuance/{organization_id}/{uuid.uuid4()}.bin"
+
+    class Client:
+        def __init__(self):
+            self.deleted = []
+
+        def delete_object(self, **kwargs):
+            self.deleted.append((kwargs["Bucket"], kwargs["Key"]))
+            return {}
+
+    client = Client()
+    storage = S3ObjectStorage(bucket="bucket", client=client)
+    storage.delete(key=key)
+    storage.delete(key=key)
+
+    assert client.deleted == [("bucket", key), ("bucket", key)]
 
 
 @override_settings(

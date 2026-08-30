@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
 from django.db.models import Q
+from django.utils import timezone
 
 from splitbind.access.models import (
     ValidatedOrganizationManager,
@@ -32,7 +33,8 @@ class PromotionStatus(models.TextChoices):
 class UploadRequestQuerySet(ValidatedOrganizationQuerySet):
     _IMMUTABLE_FIELDS = {
         "purpose", "object_key", "expected_sha256", "size_bytes", "expires_at",
-        "promotion_target_key", "promotion_status", "safe_error_code",
+        "promotion_target_key", "promotion_status", "promotion_status_changed_at",
+        "safe_error_code",
     }
 
     def update(self, **kwargs):
@@ -64,7 +66,8 @@ class UploadRequest(ValidatedOrganizationOwnedModel):
     objects = UploadRequestManager()
     _IMMUTABLE_FIELDS = (
         "purpose", "object_key", "expected_sha256", "size_bytes", "expires_at",
-        "promotion_target_key", "promotion_status", "safe_error_code",
+        "promotion_target_key", "promotion_status", "promotion_status_changed_at",
+        "safe_error_code",
     )
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     requested_by = models.ForeignKey(
@@ -92,6 +95,7 @@ class UploadRequest(ValidatedOrganizationOwnedModel):
     promotion_status = models.CharField(
         max_length=16, choices=PromotionStatus.choices, default=PromotionStatus.NONE,
     )
+    promotion_status_changed_at = models.DateTimeField(auto_now_add=True)
     safe_error_code = models.CharField(max_length=80, null=True, blank=True)
     promotion_target_deleted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -177,8 +181,13 @@ class UploadRequest(ValidatedOrganizationOwnedModel):
         super().save(*args, **kwargs)
 
     @transaction.atomic
-    def save_promotion(self, *, status: str, target_key: str | None, safe_error_code: str | None) -> None:
+    def save_promotion(
+        self, *, status: str, target_key: str | None, safe_error_code: str | None,
+    ) -> None:
         """The sole application path allowed to mutate durable promotion ownership."""
+        at = timezone.now()
+        if timezone.is_naive(at):
+            raise ValueError("promotion transition time must be timezone-aware")
         if status not in PromotionStatus.values:
             raise ValueError("promotion status is invalid")
         if (status == PromotionStatus.NONE) != (target_key is None):
@@ -189,7 +198,8 @@ class UploadRequest(ValidatedOrganizationOwnedModel):
             raise ValueError("only failed promotion may retain a safe error code")
 
         persisted = type(self)._base_manager.select_for_update().only(
-            "promotion_status", "promotion_target_key", "safe_error_code",
+            "promotion_status", "promotion_status_changed_at", "promotion_target_key",
+            "safe_error_code",
         ).get(pk=self.pk)
         if (
             status == persisted.promotion_status
@@ -222,6 +232,10 @@ class UploadRequest(ValidatedOrganizationOwnedModel):
             ):
                 raise ValueError("promotion target must identify this upload, organization, and purpose")
         self.promotion_status = status
+        self.promotion_status_changed_at = at
         self.promotion_target_key = target_key
         self.safe_error_code = safe_error_code
-        super().save(update_fields=["promotion_status", "promotion_target_key", "safe_error_code"])
+        super().save(update_fields=[
+            "promotion_status", "promotion_status_changed_at", "promotion_target_key",
+            "safe_error_code",
+        ])

@@ -1,14 +1,18 @@
+import threading
 import uuid
 from datetime import timedelta
+from types import SimpleNamespace
 
 import pytest
+from django.db import close_old_connections, connection
+from django.test import TransactionTestCase
 from django.utils import timezone
 
 from splitbind.access.models import Organization, Role, User
 from splitbind.access.models import Recipient
 from splitbind.audit.models import AuditEvent, AuditOutcome
 from splitbind.integrations.storage.fake import FakeObjectStorage
-from splitbind.jobs.models import JobStatus
+from splitbind.jobs.models import Job, JobKind, JobStatus
 from splitbind.jobs.services import create_issuance, create_verification
 from splitbind.documents.models import Document, Issuance
 from splitbind.retention.services import STALE_COPYING_AGE, cleanup_expired
@@ -38,9 +42,20 @@ def upload(org, actor, *, created_at, status=PromotionStatus.NONE, purpose=Uploa
     record.refresh_from_db()
     if status != PromotionStatus.NONE:
         target = f"inputs/issuance/{org.id}/{record.id}.bin"
-        record.save_promotion(status=PromotionStatus.COPYING, target_key=target, safe_error_code=None)
-        if status == PromotionStatus.FAILED:
-            record.save_promotion(status=PromotionStatus.FAILED, target_key=target, safe_error_code="PROMOTION_COPY_FAILED")
+        with pytest.MonkeyPatch.context() as patcher:
+            patcher.setattr(
+                "splitbind.uploads.models.timezone",
+                SimpleNamespace(now=lambda: created_at, is_naive=timezone.is_naive),
+            )
+            record.save_promotion(
+                status=PromotionStatus.COPYING, target_key=target,
+                safe_error_code=None,
+            )
+            if status == PromotionStatus.FAILED:
+                record.save_promotion(
+                    status=PromotionStatus.FAILED, target_key=target,
+                    safe_error_code="PROMOTION_COPY_FAILED",
+                )
     return record
 
 
@@ -84,6 +99,98 @@ def test_stale_promotion_deletes_recorded_target_but_preserves_ownership(status)
     assert record.promotion_target_key is not None
     assert record.promotion_status == status
     assert record.promotion_target_key not in storage.objects
+
+
+@pytest.mark.django_db
+def test_stale_promotion_age_starts_at_each_state_transition():
+    now = timezone.now()
+    org = Organization.objects.create(name="Transition age", slug=f"transition-age-{uuid.uuid4().hex[:8]}")
+    actor = User.objects.create_user(username="transition-age", password="test", organization=org, role=Role.ISSUER)
+    record = upload(org, actor, created_at=now - timedelta(days=2))
+    target = f"inputs/issuance/{org.id}/{record.id}.bin"
+    storage = FakeObjectStorage()
+    storage.inject_object(key=target, content_type="application/pdf", size_bytes=1, sha256=SHA256)
+
+    with pytest.MonkeyPatch.context() as patcher:
+        patcher.setattr(
+            "splitbind.uploads.models.timezone",
+            SimpleNamespace(now=lambda: now, is_naive=timezone.is_naive),
+        )
+        record.save_promotion(
+            status=PromotionStatus.COPYING, target_key=target, safe_error_code=None,
+        )
+    from django.db import connection
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "UPDATE uploads_uploadrequest SET orphan_deleted_at = %s WHERE id = %s",
+            [now, record.id.hex],
+        )
+    copying_at = record.promotion_status_changed_at
+
+    assert copying_at == now
+    assert cleanup_expired(now=now, storage=storage, batch_size=1) == 0
+    assert cleanup_expired(
+        now=now + STALE_COPYING_AGE - timedelta(seconds=1), storage=storage, batch_size=1,
+    ) == 0
+    assert cleanup_expired(
+        now=now + STALE_COPYING_AGE + timedelta(seconds=1), storage=storage, batch_size=1,
+    ) == 1
+
+
+@pytest.mark.django_db
+def test_every_promotion_state_transition_refreshes_durable_age():
+    start = timezone.now()
+    org = Organization.objects.create(name="Transition clock", slug=f"transition-clock-{uuid.uuid4().hex[:8]}")
+    actor = User.objects.create_user(username="transition-clock", password="test", organization=org, role=Role.ISSUER)
+    record = upload(org, actor, created_at=start - timedelta(days=2))
+    target = f"inputs/issuance/{org.id}/{record.id}.bin"
+
+    moments = iter(start + timedelta(minutes=index) for index in range(4))
+    with pytest.MonkeyPatch.context() as patcher:
+        patcher.setattr(
+            "splitbind.uploads.models.timezone",
+            SimpleNamespace(now=lambda: next(moments), is_naive=timezone.is_naive),
+        )
+        record.save_promotion(
+            status=PromotionStatus.COPYING, target_key=target, safe_error_code=None,
+        )
+        copying_at = record.promotion_status_changed_at
+        record.save_promotion(
+            status=PromotionStatus.FAILED, target_key=target,
+            safe_error_code="PROMOTION_COPY_FAILED",
+        )
+        failed_at = record.promotion_status_changed_at
+        record.save_promotion(
+            status=PromotionStatus.COPYING, target_key=target, safe_error_code=None,
+        )
+        retry_at = record.promotion_status_changed_at
+        record.save_promotion(
+            status=PromotionStatus.ATTACHED, target_key=target, safe_error_code=None,
+        )
+        attached_at = record.promotion_status_changed_at
+
+    assert copying_at < failed_at < retry_at < attached_at
+
+
+@pytest.mark.django_db
+def test_promotion_transition_clock_is_immutable_outside_transition_service():
+    now = timezone.now()
+    org = Organization.objects.create(name="Clock immutable", slug=f"clock-immutable-{uuid.uuid4().hex[:8]}")
+    actor = User.objects.create_user(username="clock-immutable", password="test", organization=org, role=Role.ISSUER)
+    record = upload(org, actor, created_at=now)
+    forged = now - timedelta(days=30)
+
+    record.promotion_status_changed_at = forged
+    with pytest.raises(ValueError, match="immutable"):
+        record.save(update_fields=["promotion_status_changed_at"])
+    with pytest.raises(ValueError, match="immutable"):
+        UploadRequest._base_manager.filter(pk=record.pk).update(
+            promotion_status_changed_at=forged,
+        )
+    record.refresh_from_db()
+    record.promotion_status_changed_at = forged
+    with pytest.raises(ValueError, match="immutable"):
+        UploadRequest.objects.bulk_update([record], ["promotion_status_changed_at"])
 
 
 @pytest.mark.django_db
@@ -167,6 +274,22 @@ def test_issuance_output_cleanup_is_bounded_and_preserves_key():
     )
     storage.inject_object(key=output_key, content_type="application/pdf", size_bytes=1, sha256=SHA256)
 
+    newest = Job.objects.create(
+        organization=org,
+        kind=JobKind.ISSUANCE,
+        status=JobStatus.PROCESSING,
+        issuance=issuance,
+        deadline_at=now + timedelta(minutes=10),
+        correlation_id=uuid.uuid4(),
+    )
+    assert cleanup_expired(now=now, storage=storage, batch_size=1) == 0
+    Job._base_manager.filter(pk=newest.pk).update(
+        status=JobStatus.FAILED, updated_at=now - timedelta(minutes=1),
+    )
+    assert cleanup_expired(now=now, storage=storage, batch_size=1) == 0
+    Job._base_manager.filter(pk=newest.pk).update(
+        updated_at=now - timedelta(days=31),
+    )
     assert cleanup_expired(now=now, storage=storage, batch_size=1) == 1
 
     issuance.refresh_from_db()
@@ -375,6 +498,67 @@ def test_success_timestamp_and_audit_are_one_database_transaction(monkeypatch):
 
     record.refresh_from_db()
     assert record.orphan_deleted_at is None
+    assert record.object_key not in storage.objects
+
+    unrelated = upload(org, actor, created_at=now - timedelta(hours=23))
+    storage.inject_object(
+        key=unrelated.object_key, content_type="application/pdf", size_bytes=1, sha256=SHA256,
+    )
+    monkeypatch.undo()
+
+    assert cleanup_expired(now=now, storage=storage, batch_size=1) == 1
+    record.refresh_from_db()
+    assert record.orphan_deleted_at is not None
+    assert record.object_key not in storage.objects
+    assert unrelated.object_key in storage.objects
+    assert AuditEvent.objects.filter(
+        action="object.orphan.deleted", target_id=str(record.id), outcome=AuditOutcome.SUCCEEDED,
+    ).count() == 1
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("purpose", [UploadPurpose.ISSUANCE, UploadPurpose.VERIFICATION])
+def test_attached_cleanup_waits_for_all_jobs_and_uses_latest_terminal_time(purpose):
+    now = timezone.now()
+    org = Organization.objects.create(name="Latest terminal", slug=f"latest-terminal-{purpose}-{uuid.uuid4().hex[:6]}")
+    role = Role.ISSUER if purpose == UploadPurpose.ISSUANCE else Role.VERIFIER
+    actor = User.objects.create_user(username=f"latest-terminal-{purpose}", password="test", organization=org, role=role)
+    record = upload(org, actor, created_at=now, purpose=purpose)
+    storage = FakeObjectStorage()
+    storage.inject_object(key=record.object_key, content_type="application/pdf", size_bytes=1, sha256=SHA256)
+    from django.test import override_settings
+    with override_settings(SPLITBIND_OBJECT_STORAGE=storage):
+        if purpose == UploadPurpose.ISSUANCE:
+            recipient = Recipient.objects.create(organization=org, external_reference="latest", display_name="Synthetic")
+            domain, old_job = create_issuance(actor, recipient.id, record.id, uuid.uuid4())
+            age = timedelta(days=8)
+            kind = JobKind.ISSUANCE
+        else:
+            domain, old_job = create_verification(actor, record.id, uuid.uuid4())
+            age = timedelta(hours=25)
+            kind = JobKind.VERIFICATION
+    Job._base_manager.filter(pk=old_job.pk).update(
+        status=JobStatus.SUCCEEDED, updated_at=now - age,
+    )
+    new_job = Job.objects.create(
+        organization=org,
+        kind=kind,
+        status=JobStatus.PROCESSING,
+        issuance=domain if purpose == UploadPurpose.ISSUANCE else None,
+        verification=domain if purpose == UploadPurpose.VERIFICATION else None,
+        deadline_at=now + timedelta(minutes=10),
+        correlation_id=uuid.uuid4(),
+    )
+
+    assert cleanup_expired(now=now, storage=storage, batch_size=10) == 0
+    Job._base_manager.filter(pk=new_job.pk).update(
+        status=JobStatus.FAILED, updated_at=now - timedelta(minutes=1),
+    )
+    assert cleanup_expired(now=now, storage=storage, batch_size=10) == 0
+    Job._base_manager.filter(pk=new_job.pk).update(
+        updated_at=now - age,
+    )
+    assert cleanup_expired(now=now, storage=storage, batch_size=10) == 1
 
 
 @pytest.mark.django_db
@@ -397,3 +581,55 @@ def test_issuance_deletion_evidence_cannot_be_forged_with_bulk_create():
 
     with pytest.raises(ValidationError, match="retention"):
         Issuance._base_manager.bulk_create([forged])
+
+
+class PromotionRetentionConcurrencyContractTests(TransactionTestCase):
+    def test_committed_retry_transition_wins_over_stale_cleanup_candidate(self):
+        if connection.vendor != "postgresql":
+            self.skipTest(
+                "SQLite cannot verify cross-transaction row-lock ordering; PostgreSQL runtime remains the P3 gate"
+            )
+        now = timezone.now()
+        org = Organization.objects.create(name="Promotion race", slug=f"promotion-race-{uuid.uuid4().hex[:8]}")
+        actor = User.objects.create_user(username="promotion-race", password="test", organization=org, role=Role.ISSUER)
+        record = upload(
+            org, actor, created_at=now - STALE_COPYING_AGE - timedelta(minutes=1),
+            status=PromotionStatus.FAILED,
+        )
+        storage = FakeObjectStorage()
+        storage.inject_object(
+            key=record.promotion_target_key,
+            content_type="application/pdf",
+            size_bytes=1,
+            sha256=SHA256,
+        )
+        transition_committed = threading.Event()
+        errors = []
+
+        def retry_transition():
+            close_old_connections()
+            try:
+                current = UploadRequest.objects.get(pk=record.pk)
+                current.save_promotion(
+                    status=PromotionStatus.COPYING,
+                    target_key=current.promotion_target_key,
+                    safe_error_code=None,
+                )
+            except Exception as error:
+                errors.append(error)
+            finally:
+                close_old_connections()
+                transition_committed.set()
+
+        thread = threading.Thread(target=retry_transition)
+        thread.start()
+        assert transition_committed.wait(timeout=5)
+        assert cleanup_expired(now=now, storage=storage, batch_size=1) == 0
+        thread.join(timeout=5)
+
+        record.refresh_from_db()
+        assert errors == []
+        assert not thread.is_alive()
+        assert record.promotion_status == PromotionStatus.COPYING
+        assert record.promotion_target_deleted_at is None
+        assert record.promotion_target_key in storage.objects

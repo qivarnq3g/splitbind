@@ -215,7 +215,7 @@ class SigningKeyStatus(models.TextChoices):
 class SigningKeyQuerySet(ValidatedOrganizationQuerySet):
     _VALIDATED_FIELDS = {
         "key_id", "algorithm", "public_key", "status", "valid_from",
-        "valid_until", "revoked_at", "metadata",
+        "valid_until", "revoked_at", "metadata", "created_at",
     }
 
     def update(self, **kwargs):
@@ -228,6 +228,11 @@ class SigningKeyQuerySet(ValidatedOrganizationQuerySet):
 
     def delete(self):
         raise ValidationError("signing-key evidence must be preserved")
+
+    def bulk_update(self, objs, fields, **kwargs):
+        if self._VALIDATED_FIELDS & set(fields):
+            raise ValidationError("signing-key historical evidence is immutable")
+        return super().bulk_update(objs, fields, **kwargs)
 
 
 class SigningKeyManager(ValidatedOrganizationManager.from_queryset(SigningKeyQuerySet)):
@@ -304,7 +309,7 @@ class SigningKey(ValidatedOrganizationOwnedModel):
         if not self._state.adding:
             fields = {
                 "key_id", "algorithm", "public_key", "status", "valid_from",
-                "valid_until", "revoked_at", "metadata",
+                "valid_until", "revoked_at", "metadata", "created_at",
             }
             persisted = type(self)._base_manager.only(*fields).get(pk=self.pk)
             changed = {name for name in fields if getattr(self, name) != getattr(persisted, name)}

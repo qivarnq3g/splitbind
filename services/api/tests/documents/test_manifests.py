@@ -291,6 +291,26 @@ def test_signing_key_history_is_immutable_except_validated_lifecycle_transition(
         key.save(update_fields=["key_id"])
     with pytest.raises(ValidationError, match="immutable"):
         SigningKey._base_manager.filter(pk=key.pk).update(metadata={"label": "changed"})
+    forged_created_at = now - timedelta(days=30)
+    key.created_at = forged_created_at
+    with pytest.raises(ValidationError, match="immutable"):
+        key.save(update_fields=["created_at"])
+    with pytest.raises(ValidationError, match="immutable"):
+        SigningKey.objects.filter(pk=key.pk).update(created_at=forged_created_at)
+    key.refresh_from_db()
+    key.created_at = forged_created_at
+    with pytest.raises(ValidationError, match="immutable"):
+        SigningKey.objects.bulk_update([key], ["created_at"])
+    bulk_key = SigningKey(
+        organization=org,
+        key_id="bulk-created-history-key",
+        public_key=pem,
+        valid_from=now,
+        created_at=forged_created_at,
+    )
+    SigningKey._base_manager.bulk_create([bulk_key])
+    bulk_key.refresh_from_db()
+    assert bulk_key.created_at != forged_created_at
     with pytest.raises(ValidationError, match="preserved"):
         key.delete()
 

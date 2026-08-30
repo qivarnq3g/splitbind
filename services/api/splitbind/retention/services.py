@@ -2,6 +2,7 @@ import uuid
 from datetime import timedelta
 
 from django.db import connection, transaction
+from django.db.models import Exists, OuterRef
 from django.utils import timezone
 
 from splitbind.audit.models import AuditOutcome
@@ -136,15 +137,24 @@ def _key_is_owned(record, category, key):
     return False
 
 
-def _terminal_job_before(record, category, deadline):
-    jobs = Job._base_manager.filter(status__in=TERMINAL_JOB_STATUSES, updated_at__lte=deadline)
+def _related_jobs(record, category):
     if category == "issuance_input":
-        return jobs.filter(issuance__document__upload_request_id=record.pk).exists()
+        return Job._base_manager.filter(issuance__document__upload_request_id=record.pk)
     if category == "verification_input":
-        return jobs.filter(verification__upload_request_id=record.pk).exists()
+        return Job._base_manager.filter(verification__upload_request_id=record.pk)
     if category == "issuance_output":
-        return jobs.filter(issuance_id=record.pk, status=JobStatus.SUCCEEDED).exists()
-    return False
+        return Job._base_manager.filter(issuance_id=record.pk)
+    return Job._base_manager.none()
+
+
+def _all_jobs_terminal_before(record, category, deadline):
+    jobs = _related_jobs(record, category)
+    if not jobs.exists() or jobs.exclude(status__in=TERMINAL_JOB_STATUSES).exists():
+        return False
+    if category == "issuance_output" and not jobs.filter(status=JobStatus.SUCCEEDED).exists():
+        return False
+    latest = jobs.order_by("-updated_at").values_list("updated_at", flat=True).first()
+    return latest is not None and latest <= deadline
 
 
 def _eligible_locked(record, category, now, expected_state=None):
@@ -152,22 +162,22 @@ def _eligible_locked(record, category, now, expected_state=None):
         return (
             record.promotion_status == expected_state
             and expected_state in {PromotionStatus.FAILED, PromotionStatus.COPYING}
-            and record.created_at <= now - STALE_COPYING_AGE
+            and record.promotion_status_changed_at <= now - STALE_COPYING_AGE
         )
     if category == "issuance_input":
         return (
             record.promotion_status == PromotionStatus.ATTACHED
             and record.purpose == UploadPurpose.ISSUANCE
-            and _terminal_job_before(record, category, now - _window("issuance_input", now))
+            and _all_jobs_terminal_before(record, category, now - _window("issuance_input", now))
         )
     if category == "verification_input":
         return (
             record.promotion_status == PromotionStatus.ATTACHED
             and record.purpose == UploadPurpose.VERIFICATION
-            and _terminal_job_before(record, category, now - _window("verification_input", now))
+            and _all_jobs_terminal_before(record, category, now - _window("verification_input", now))
         )
     if category == "issuance_output":
-        return _terminal_job_before(record, category, now - _window("issuance_output", now))
+        return _all_jobs_terminal_before(record, category, now - _window("issuance_output", now))
     if category == "orphan":
         return record.created_at <= now - _window("orphan_upload", now)
     return False
@@ -216,30 +226,61 @@ def cleanup_expired(*, now=None, storage=None, batch_size=DEFAULT_BATCH_SIZE) ->
             candidates.append((model, pk, key_field, timestamp_field, action, category, expected_state))
 
     stale = now - STALE_COPYING_AGE
+    terminal = list(TERMINAL_JOB_STATUSES)
+    nonterminal = list(set(JobStatus.values) - TERMINAL_JOB_STATUSES)
     for state in (PromotionStatus.FAILED, PromotionStatus.COPYING):
         add(UploadRequest._base_manager.filter(
             promotion_status=state, promotion_target_deleted_at__isnull=True,
-            promotion_target_key__isnull=False, created_at__lte=stale,
+            promotion_target_key__isnull=False, promotion_status_changed_at__lte=stale,
         ), UploadRequest, "promotion_target_key", "promotion_target_deleted_at",
             "object.promotion.deleted", "stale_promotion", expected_state=state)
-    terminal = list(TERMINAL_JOB_STATUSES)
+    issuance_deadline = now - _window("issuance_input", now)
+    issuance_jobs = Job._base_manager.filter(
+        issuance__document__upload_request_id=OuterRef("pk"),
+    )
     add(UploadRequest._base_manager.filter(
         promotion_status=PromotionStatus.ATTACHED, promotion_target_deleted_at__isnull=True,
-        purpose=UploadPurpose.ISSUANCE, document__issuances__jobs__status__in=terminal,
-        document__issuances__jobs__updated_at__lte=now - _window("issuance_input", now),
-    ).distinct(), UploadRequest, "promotion_target_key", "promotion_target_deleted_at",
+        purpose=UploadPurpose.ISSUANCE,
+    ).annotate(
+        has_terminal=Exists(issuance_jobs.filter(status__in=terminal)),
+        has_nonterminal=Exists(issuance_jobs.filter(status__in=nonterminal)),
+        has_recent_terminal=Exists(
+            issuance_jobs.filter(status__in=terminal, updated_at__gt=issuance_deadline)
+        ),
+    ).filter(
+        has_terminal=True, has_nonterminal=False, has_recent_terminal=False,
+    ), UploadRequest, "promotion_target_key", "promotion_target_deleted_at",
         "object.issuance_input.deleted", "issuance_input")
+    verification_deadline = now - _window("verification_input", now)
+    verification_jobs = Job._base_manager.filter(
+        verification__upload_request_id=OuterRef("pk"),
+    )
     add(UploadRequest._base_manager.filter(
         promotion_status=PromotionStatus.ATTACHED, promotion_target_deleted_at__isnull=True,
-        purpose=UploadPurpose.VERIFICATION, verification__jobs__status__in=terminal,
-        verification__jobs__updated_at__lte=now - _window("verification_input", now),
-    ).distinct(), UploadRequest, "promotion_target_key", "promotion_target_deleted_at",
+        purpose=UploadPurpose.VERIFICATION,
+    ).annotate(
+        has_terminal=Exists(verification_jobs.filter(status__in=terminal)),
+        has_nonterminal=Exists(verification_jobs.filter(status__in=nonterminal)),
+        has_recent_terminal=Exists(
+            verification_jobs.filter(status__in=terminal, updated_at__gt=verification_deadline)
+        ),
+    ).filter(
+        has_terminal=True, has_nonterminal=False, has_recent_terminal=False,
+    ), UploadRequest, "promotion_target_key", "promotion_target_deleted_at",
         "object.verification_input.deleted", "verification_input")
+    output_deadline = now - _window("issuance_output", now)
+    output_jobs = Job._base_manager.filter(issuance_id=OuterRef("pk"))
     add(Issuance._base_manager.filter(
         output_deleted_at__isnull=True, output_object_key__isnull=False,
-        jobs__status=JobStatus.SUCCEEDED,
-        jobs__updated_at__lte=now - _window("issuance_output", now),
-    ).distinct(), Issuance, "output_object_key", "output_deleted_at",
+    ).annotate(
+        has_success=Exists(output_jobs.filter(status=JobStatus.SUCCEEDED)),
+        has_nonterminal=Exists(output_jobs.filter(status__in=nonterminal)),
+        has_recent_terminal=Exists(
+            output_jobs.filter(status__in=terminal, updated_at__gt=output_deadline)
+        ),
+    ).filter(
+        has_success=True, has_nonterminal=False, has_recent_terminal=False,
+    ), Issuance, "output_object_key", "output_deleted_at",
         "object.issuance_output.deleted", "issuance_output", "issued_at")
     add(UploadRequest._base_manager.filter(
         orphan_deleted_at__isnull=True, created_at__lte=now - _window("orphan_upload", now),
