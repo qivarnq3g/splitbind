@@ -8,7 +8,12 @@ class InvalidJobTransition(ValueError):
 TRANSITIONS = {
     JobStatus.CREATED: {JobStatus.QUEUED, JobStatus.CANCELLED, JobStatus.FAILED},
     JobStatus.QUEUED: {JobStatus.PROCESSING, JobStatus.CANCELLED, JobStatus.FAILED, JobStatus.DEAD_LETTERED},
-    JobStatus.PROCESSING: {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.RETRYABLE_FAILED},
+    JobStatus.PROCESSING: {
+        JobStatus.SUCCEEDED,
+        JobStatus.FAILED,
+        JobStatus.RETRYABLE_FAILED,
+        JobStatus.CANCELLED,
+    },
     JobStatus.RETRYABLE_FAILED: {JobStatus.QUEUED, JobStatus.FAILED, JobStatus.DEAD_LETTERED, JobStatus.CANCELLED},
     JobStatus.SUCCEEDED: set(),
     JobStatus.FAILED: set(),

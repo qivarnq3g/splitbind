@@ -10,6 +10,7 @@ from splitbind.audit.models import AuditEvent
 from splitbind.documents.models import Verification
 from splitbind.jobs.models import Job, JobKind, JobStatus
 from splitbind.jobs.services import JobConflict, request_cancel
+from splitbind.jobs.state import transition_job
 from splitbind.uploads.models import UploadPurpose, UploadRequest
 
 
@@ -53,6 +54,11 @@ def test_processing_cancel_sets_request_without_illegal_transition(cancel_contex
     request_cancel(actor, job.id, uuid.uuid4())
     job.refresh_from_db()
     assert job.status == JobStatus.PROCESSING and job.cancel_requested_at is not None
+
+    transition_job(job, JobStatus.CANCELLED)
+    job.save(update_fields=["status", "updated_at"])
+    job.refresh_from_db()
+    assert job.status == JobStatus.CANCELLED
 
 
 @pytest.mark.django_db

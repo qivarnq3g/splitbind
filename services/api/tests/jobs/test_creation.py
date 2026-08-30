@@ -249,6 +249,28 @@ def test_copy_observation_size_mismatch_marks_failed_owner(workflow_context, mon
 
 
 @pytest.mark.django_db
+def test_copy_metadata_mismatch_retains_exact_target_and_source_for_owned_cleanup(workflow_context):
+    org, issuer, _, recipient, storage = workflow_context
+    upload = completed_upload(org, issuer, storage, UploadPurpose.ISSUANCE)
+    source = storage.objects[upload.object_key]
+    storage.objects[upload.object_key] = type(source)(
+        source.key, source.size_bytes, source.content_type, "b" * 64,
+    )
+
+    with override_settings(SPLITBIND_OBJECT_STORAGE=storage):
+        with pytest.raises(UploadRejected, match="STORAGE_COPY_MISMATCH"):
+            create_issuance(issuer, recipient.id, upload.id, uuid.uuid4())
+
+    upload.refresh_from_db()
+    assert upload.promotion_status == PromotionStatus.FAILED
+    assert upload.safe_error_code == "PROMOTION_COPY_FAILED"
+    assert upload.promotion_target_key in storage.objects
+    assert storage.objects[upload.promotion_target_key].client_sha256_metadata == "b" * 64
+    assert upload.object_key in storage.objects
+    assert not Document.objects.filter(upload_request=upload).exists()
+
+
+@pytest.mark.django_db
 def test_orphan_delete_failure_keeps_attached_workflow_and_safe_audit(workflow_context):
     org, issuer, _, recipient, storage = workflow_context
     upload = completed_upload(org, issuer, storage, UploadPurpose.ISSUANCE)
@@ -395,5 +417,126 @@ class B4MigrationContractTests(TransactionTestCase):
             assert migrated_upload.promotion_status == PromotionStatus.NONE
             assert migrated_upload.promotion_target_key is None
             assert migrated_document.expected_source_sha256 == SHA256
+        finally:
+            MigrationExecutor(connection).migrate(latest)
+
+    def test_reverse_document_migration_refuses_pending_page_count_before_schema_change(self):
+        latest = MigrationExecutor(connection).loader.graph.leaf_nodes()
+        executor = MigrationExecutor(connection)
+        executor.migrate(latest)
+        apps = executor.loader.project_state(latest).apps
+        Org = apps.get_model("access", "Organization")
+        Actor = apps.get_model("access", "User")
+        Upload = apps.get_model("uploads", "UploadRequest")
+        CurrentDocument = apps.get_model("documents", "Document")
+        org = Org.objects.create(name="Pending rollback", slug=f"pending-{uuid.uuid4().hex[:8]}")
+        actor = Actor.objects.create(
+            username=f"pending-{uuid.uuid4().hex[:8]}", password="unusable",
+            organization_id=org.id, role=Role.ISSUER, is_active=True,
+            is_staff=False, is_superuser=False, date_joined=timezone.now(),
+        )
+        upload = Upload.objects.create(
+            organization_id=org.id, requested_by_id=actor.id,
+            purpose=UploadPurpose.ISSUANCE,
+            object_key=f"uploads/orphan/issuance_input/{org.id}/{uuid.uuid4().hex}.bin",
+            expected_sha256=SHA256, size_bytes=1, expires_at=timezone.now(),
+        )
+        document = CurrentDocument.objects.create(
+            organization_id=org.id, created_by_id=actor.id, upload_request_id=upload.id,
+            source_object_key=f"inputs/issuance/{org.id}/{upload.id}.bin",
+            expected_source_sha256=SHA256, page_count=None,
+        )
+        old_target = [("documents", "0002_verification_verification_status_stable")]
+        try:
+            with self.assertRaisesRegex(RuntimeError, "populate page_count"):
+                MigrationExecutor(connection).migrate(old_target)
+            preserved = Document._base_manager.get(pk=document.pk)
+            self.assertIsNone(preserved.page_count)
+            self.assertEqual(preserved.expected_source_sha256, SHA256)
+
+            CurrentDocument.objects.filter(pk=document.pk).update(page_count=1)
+            reverse_executor = MigrationExecutor(connection)
+            reverse_executor.migrate(old_target)
+            old_apps = reverse_executor.loader.project_state(old_target).apps
+            OldDocument = old_apps.get_model("documents", "Document")
+            rolled_back = OldDocument.objects.get(pk=document.pk)
+            self.assertEqual(rolled_back.page_count, 1)
+            self.assertEqual(rolled_back.source_sha256, SHA256)
+
+            MigrationExecutor(connection).migrate(latest)
+            restored = Document._base_manager.get(pk=document.pk)
+            self.assertEqual(restored.page_count, 1)
+            self.assertEqual(restored.expected_source_sha256, SHA256)
+        finally:
+            MigrationExecutor(connection).migrate(latest)
+
+    def test_reverse_upload_migration_refuses_owned_promotions_then_allows_clean_state(self):
+        latest = MigrationExecutor(connection).loader.graph.leaf_nodes()
+        executor = MigrationExecutor(connection)
+        executor.migrate(latest)
+        apps = executor.loader.project_state(latest).apps
+        Org = apps.get_model("access", "Organization")
+        Actor = apps.get_model("access", "User")
+        Upload = apps.get_model("uploads", "UploadRequest")
+        org = Org.objects.create(name="Promotion rollback", slug=f"promotion-{uuid.uuid4().hex[:8]}")
+        actor = Actor.objects.create(
+            username=f"promotion-{uuid.uuid4().hex[:8]}", password="unusable",
+            organization_id=org.id, role=Role.ISSUER, is_active=True,
+            is_staff=False, is_superuser=False, date_joined=timezone.now(),
+        )
+        records = []
+        for status in (PromotionStatus.COPYING, PromotionStatus.FAILED, PromotionStatus.ATTACHED):
+            upload_id = uuid.uuid4()
+            records.append(Upload.objects.create(
+                id=upload_id, organization_id=org.id, requested_by_id=actor.id,
+                purpose=UploadPurpose.ISSUANCE,
+                object_key=f"uploads/orphan/issuance_input/{org.id}/{uuid.uuid4().hex}.bin",
+                expected_sha256=SHA256, size_bytes=1, expires_at=timezone.now(),
+                promotion_status=status,
+                promotion_target_key=f"inputs/issuance/{org.id}/{upload_id}.bin",
+                safe_error_code="PROMOTION_COPY_FAILED" if status == PromotionStatus.FAILED else None,
+            ))
+        clean = Upload.objects.create(
+            organization_id=org.id, requested_by_id=actor.id,
+            purpose=UploadPurpose.ISSUANCE,
+            object_key=f"uploads/orphan/issuance_input/{org.id}/{uuid.uuid4().hex}.bin",
+            expected_sha256=SHA256, size_bytes=1, expires_at=timezone.now(),
+        )
+        old_target = [("uploads", "0003_harden_upload_expectations")]
+        try:
+            with self.assertRaisesRegex(RuntimeError, "resolve promotion cleanup ownership"):
+                MigrationExecutor(connection).migrate(old_target)
+            preserved = {
+                row.id: (row.promotion_status, row.promotion_target_key, row.safe_error_code)
+                for row in Upload.objects.filter(pk__in=[record.pk for record in records])
+            }
+            for record in records:
+                self.assertEqual(
+                    preserved[record.pk],
+                    (record.promotion_status, record.promotion_target_key, record.safe_error_code),
+                )
+
+            Upload.objects.filter(pk__in=[record.pk for record in records]).update(
+                promotion_status=PromotionStatus.NONE,
+                promotion_target_key=None,
+                safe_error_code=None,
+            )
+            reverse_executor = MigrationExecutor(connection)
+            reverse_executor.migrate(old_target)
+            old_apps = reverse_executor.loader.project_state(old_target).apps
+            OldUpload = old_apps.get_model("uploads", "UploadRequest")
+            self.assertEqual(OldUpload.objects.filter(pk__in=[record.pk for record in records]).count(), 3)
+            self.assertTrue(OldUpload.objects.filter(pk=clean.pk).exists())
+
+            MigrationExecutor(connection).migrate(latest)
+            self.assertFalse(
+                UploadRequest._base_manager.filter(
+                    pk__in=[record.pk for record in records],
+                ).exclude(
+                    promotion_status=PromotionStatus.NONE,
+                    promotion_target_key__isnull=True,
+                    safe_error_code__isnull=True,
+                ).exists()
+            )
         finally:
             MigrationExecutor(connection).migrate(latest)

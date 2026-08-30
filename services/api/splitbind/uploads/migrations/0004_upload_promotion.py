@@ -1,6 +1,20 @@
 from django.db import migrations, models
 
 
+def refuse_owned_promotion_rollback(apps, schema_editor):
+    UploadRequest = apps.get_model("uploads", "UploadRequest")
+    unsafe = UploadRequest.objects.using(schema_editor.connection.alias).exclude(
+        promotion_status="none",
+        promotion_target_key__isnull=True,
+        safe_error_code__isnull=True,
+    )
+    if unsafe.exists():
+        raise RuntimeError(
+            "Cannot reverse uploads.0004 while promotion cleanup ownership exists; "
+            "resolve promotion cleanup ownership and reset all promotion fields before retrying rollback."
+        )
+
+
 class Migration(migrations.Migration):
     dependencies = [("uploads", "0003_harden_upload_expectations")]
 
@@ -54,5 +68,9 @@ class Migration(migrations.Migration):
                 | models.Q(safe_error_code__isnull=False),
                 name="upload_failed_has_safe_code",
             ),
+        ),
+        migrations.RunPython(
+            migrations.RunPython.noop,
+            reverse_code=refuse_owned_promotion_rollback,
         ),
     ]

@@ -93,8 +93,7 @@ class FakeObjectStorage:
         validate_checksum(sha256)
         self._maybe_fail("copy_verified")
         original = self.objects.get(source)
-        if original is None or original.client_sha256_metadata != sha256:
-            self.objects.pop(destination, None)
+        if original is None:
             raise UploadRejected("STORAGE_COPY_MISMATCH")
         copied = ObjectMetadata(
             destination,
@@ -103,6 +102,8 @@ class FakeObjectStorage:
             original.client_sha256_metadata,
         )
         self.objects[destination] = copied
+        if copied.client_sha256_metadata != sha256:
+            raise UploadRejected("STORAGE_COPY_MISMATCH")
         return copied
 
     def delete(self, *, key):

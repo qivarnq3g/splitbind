@@ -134,10 +134,6 @@ class S3ObjectStorage:
         self._call("copy_object", Bucket=self.bucket, Key=destination, CopySource={"Bucket": self.bucket, "Key": source}, MetadataDirective="COPY")
         copied = self.head(key=destination)
         if copied is None or copied.client_sha256_metadata != sha256:
-            try:
-                self.delete(key=destination)
-            except StorageUnavailable:
-                pass
             raise UploadRejected("STORAGE_COPY_MISMATCH")
         return copied
 

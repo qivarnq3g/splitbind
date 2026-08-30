@@ -297,7 +297,7 @@ def test_fake_storage_enforces_orphan_to_promoted_copy_boundary():
         storage.presign_get(key="uploads/orphan/../secret", expires=timedelta(minutes=1))
 
 
-def test_fake_storage_rejects_invalid_copy_without_leaving_destination():
+def test_fake_storage_rejects_metadata_mismatch_but_retains_destination_for_cleanup():
     storage = FakeObjectStorage()
     source = f"uploads/orphan/issuance_input/{uuid.uuid4()}/{uuid.uuid4().hex}.bin"
     organization_id = source.split("/")[3]
@@ -305,7 +305,40 @@ def test_fake_storage_rejects_invalid_copy_without_leaving_destination():
     storage.put_object(key=source, content_type="application/pdf", size_bytes=1, sha256=SHA256)
     with pytest.raises(UploadRejected, match="STORAGE_COPY_MISMATCH"):
         storage.copy_verified(source=source, destination=destination, sha256="b" * 64)
-    assert storage.head(key=destination) is None
+    retained = storage.head(key=destination)
+    assert retained is not None
+    assert retained.key == destination
+    assert retained.client_sha256_metadata == SHA256
+
+
+def test_s3_storage_rejects_metadata_mismatch_but_never_deletes_promoted_destination():
+    organization_id = uuid.uuid4()
+    source = f"uploads/orphan/issuance_input/{organization_id}/{uuid.uuid4().hex}.bin"
+    destination = f"inputs/issuance/{organization_id}/{uuid.uuid4()}.bin"
+
+    class Client:
+        def __init__(self):
+            self.deleted = []
+
+        def copy_object(self, **kwargs):
+            return {}
+
+        def head_object(self, **kwargs):
+            return {
+                "ContentLength": 1,
+                "ContentType": "application/pdf",
+                "Metadata": {"sha256": "b" * 64},
+            }
+
+        def delete_object(self, **kwargs):
+            self.deleted.append(kwargs["Key"])
+            return {}
+
+    client = Client()
+    storage = S3ObjectStorage(bucket="bucket", client=client)
+    with pytest.raises(UploadRejected, match="STORAGE_COPY_MISMATCH"):
+        storage.copy_verified(source=source, destination=destination, sha256=SHA256)
+    assert client.deleted == []
 
 
 @override_settings(

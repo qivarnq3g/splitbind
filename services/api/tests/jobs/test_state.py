@@ -18,6 +18,7 @@ class MutableJob:
         (JobStatus.QUEUED, JobStatus.PROCESSING),
         (JobStatus.PROCESSING, JobStatus.SUCCEEDED),
         (JobStatus.PROCESSING, JobStatus.RETRYABLE_FAILED),
+        (JobStatus.PROCESSING, JobStatus.CANCELLED),
         (JobStatus.RETRYABLE_FAILED, JobStatus.QUEUED),
         (JobStatus.RETRYABLE_FAILED, JobStatus.DEAD_LETTERED),
     ],
@@ -32,7 +33,6 @@ def test_transition_table_accepts_declared_edges(source, target):
     ("source", "target"),
     [
         (JobStatus.CREATED, JobStatus.PROCESSING),
-        (JobStatus.PROCESSING, JobStatus.CANCELLED),
         (JobStatus.SUCCEEDED, JobStatus.FAILED),
         (JobStatus.CANCELLED, JobStatus.QUEUED),
     ],
