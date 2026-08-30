@@ -70,7 +70,9 @@ export function createApiClient(options: ApiClientOptions = {}) {
   const client = createClient<BrowserPaths>({
     baseUrl: resolveBaseUrl(options.baseUrl),
     credentials: "same-origin",
-    fetch: options.fetch ?? globalThis.fetch,
+    fetch:
+      options.fetch ??
+      ((input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init)),
   });
 
   client.use({

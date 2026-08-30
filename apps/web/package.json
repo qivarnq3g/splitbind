@@ -8,6 +8,8 @@
     "npm": ">=12 <13"
   },
   "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
     "generate:api": "node scripts/generate-client.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
