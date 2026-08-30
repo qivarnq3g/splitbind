@@ -1,4 +1,5 @@
 import json
+import uuid
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -31,6 +32,58 @@ def csrf_headers(client):
     response = client.get("/api/v1/auth/session")
     assert response.status_code == 200
     return {"HTTP_X_CSRFTOKEN": response.json()["csrf_token"]}
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("path", "authenticated", "payload"),
+    [
+        (
+            "/api/v1/auth/login",
+            False,
+            {"username": "any-user", "password": "any-password"},
+        ),
+        (
+            "/api/v1/uploads",
+            True,
+            {
+                "kind": "issuance_input",
+                "filename": "input.pdf",
+                "content_type": "application/pdf",
+                "size_bytes": 1,
+                "sha256": "a" * 64,
+            },
+        ),
+        (
+            f"/api/v1/jobs/{uuid.UUID('00000000-0000-4000-8000-000000000001')}/cancel",
+            True,
+            {"correlation_id": str(uuid.UUID("00000000-0000-4000-8000-000000000002"))},
+        ),
+    ],
+)
+@pytest.mark.parametrize("csrf_state", ["missing", "invalid"])
+def test_csrf_failures_are_stable_safe_json(path, authenticated, payload, csrf_state, issuer):
+    client = Client(enforce_csrf_checks=True)
+    if authenticated:
+        client.force_login(issuer)
+    headers = {}
+    if csrf_state == "invalid":
+        client.cookies["csrftoken"] = "a" * 32
+        headers["HTTP_X_CSRFTOKEN"] = "b" * 32
+
+    response = client.post(
+        path,
+        data=json.dumps(payload),
+        content_type="application/json",
+        **headers,
+    )
+
+    assert response.status_code == 403
+    assert response.headers["Content-Type"].startswith("application/json")
+    assert response.json() == {"detail": "CSRF validation failed."}
+    serialized = response.content.decode().lower()
+    for forbidden in ("reason", "csrf cookie", "incorrect", "traceback"):
+        assert forbidden not in serialized
 
 
 @pytest.mark.django_db

@@ -81,6 +81,79 @@ class RepositoryContractTest(unittest.TestCase):
                         ],
                     },
                     {
+                        "name": "api-environment",
+                        "argv": [
+                            "{python}",
+                            "-m",
+                            "pip",
+                            "install",
+                            "-c",
+                            "services/api/constraints-py311.txt",
+                            "./services/api[test]",
+                        ],
+                    },
+                    {
+                        "name": "api-tests",
+                        "argv": [
+                            "{python}",
+                            "-m",
+                            "pytest",
+                            "services/api/tests",
+                            "-v",
+                        ],
+                    },
+                    {
+                        "name": "openapi-validate",
+                        "argv": [
+                            "{python}",
+                            "services/api/manage.py",
+                            "spectacular",
+                            "--format",
+                            "openapi-json",
+                            "--file",
+                            "contracts/openapi/schema.json",
+                            "--validate",
+                            "--fail-on-warn",
+                            "--settings",
+                            "config.settings_test",
+                        ],
+                    },
+                    {
+                        "name": "web-generate-api",
+                        "argv": [
+                            "npm",
+                            "run",
+                            "generate:api",
+                            "--workspace",
+                            "@splitbind/web",
+                        ],
+                    },
+                    {
+                        "name": "contract-drift",
+                        "argv": [
+                            "git",
+                            "diff",
+                            "--exit-code",
+                            "--",
+                            "contracts/openapi/schema.json",
+                            "apps/web/src/api/generated/schema.d.ts",
+                        ],
+                    },
+                    {
+                        "name": "web-tests",
+                        "argv": ["npm", "test", "--workspace", "@splitbind/web"],
+                    },
+                    {
+                        "name": "web-typecheck",
+                        "argv": [
+                            "npm",
+                            "run",
+                            "typecheck",
+                            "--workspace",
+                            "@splitbind/web",
+                        ],
+                    },
+                    {
                         "name": "platform-tests",
                         "argv": [
                             "{python}",
@@ -107,6 +180,12 @@ class RepositoryContractTest(unittest.TestCase):
                 ],
             },
         )
+
+    def test_ci_invokes_the_shared_smoke_plan(self):
+        workflow = (ROOT / ".github/workflows/smoke.yaml").read_text(encoding="utf-8")
+
+        self.assertIn("run: python infra/scripts/run_smoke.py", workflow)
+        self.assertNotIn("run_smoke.py --dry-run", workflow)
 
     def test_smoke_runner_propagates_the_first_failure_and_stops(self):
         program = """

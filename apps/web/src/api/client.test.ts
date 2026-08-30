@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createApiClient } from "./client";
+import { api as browserApi, createApiClient } from "./client";
 
 const JOB_ID = "00000000-0000-4000-8000-000000000001";
 const CORRELATION_ID = "00000000-0000-4000-8000-000000000002";
@@ -13,12 +13,13 @@ describe("typed API client", () => {
 
   beforeEach(() => {
     fetchMock.mockClear();
-    api = createApiClient(fetchMock);
+    api = createApiClient({ fetch: fetchMock });
     document.cookie = "csrftoken=token%2Bwith%2Fencoding";
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("uses same-origin credentials and a decoded CSRF cookie on mutations", async () => {
@@ -67,5 +68,14 @@ describe("typed API client", () => {
     expect(warn).not.toHaveBeenCalled();
     expect(error).not.toHaveBeenCalled();
     expect(debug).not.toHaveBeenCalled();
+  });
+
+  it("exposes a same-origin browser singleton", async () => {
+    vi.stubGlobal("fetch", fetchMock);
+
+    await browserApi.GET("/health/live", {});
+
+    const request = fetchMock.mock.calls[0]?.[0] as Request;
+    expect(new URL(request.url).origin).toBe(window.location.origin);
   });
 });

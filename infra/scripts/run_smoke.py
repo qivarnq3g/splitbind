@@ -26,6 +26,79 @@ COMMANDS = [
         ],
     },
     {
+        "name": "api-environment",
+        "argv": [
+            "{python}",
+            "-m",
+            "pip",
+            "install",
+            "-c",
+            "services/api/constraints-py311.txt",
+            "./services/api[test]",
+        ],
+    },
+    {
+        "name": "api-tests",
+        "argv": [
+            "{python}",
+            "-m",
+            "pytest",
+            "services/api/tests",
+            "-v",
+        ],
+    },
+    {
+        "name": "openapi-validate",
+        "argv": [
+            "{python}",
+            "services/api/manage.py",
+            "spectacular",
+            "--format",
+            "openapi-json",
+            "--file",
+            "contracts/openapi/schema.json",
+            "--validate",
+            "--fail-on-warn",
+            "--settings",
+            "config.settings_test",
+        ],
+    },
+    {
+        "name": "web-generate-api",
+        "argv": [
+            "npm",
+            "run",
+            "generate:api",
+            "--workspace",
+            "@splitbind/web",
+        ],
+    },
+    {
+        "name": "contract-drift",
+        "argv": [
+            "git",
+            "diff",
+            "--exit-code",
+            "--",
+            "contracts/openapi/schema.json",
+            "apps/web/src/api/generated/schema.d.ts",
+        ],
+    },
+    {
+        "name": "web-tests",
+        "argv": ["npm", "test", "--workspace", "@splitbind/web"],
+    },
+    {
+        "name": "web-typecheck",
+        "argv": [
+            "npm",
+            "run",
+            "typecheck",
+            "--workspace",
+            "@splitbind/web",
+        ],
+    },
+    {
         "name": "platform-tests",
         "argv": [
             "{python}",

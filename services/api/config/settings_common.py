@@ -78,6 +78,7 @@ SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SECURE = True
+CSRF_FAILURE_VIEW = "splitbind.access.csrf.csrf_failure"
 
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "production")
 globals().update(load_runtime_limits(ENVIRONMENT, os.environ))
