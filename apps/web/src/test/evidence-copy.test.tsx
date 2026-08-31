@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { EvidenceSummary } from "../features/evidence/EvidenceSummary";
@@ -43,5 +43,12 @@ describe("verification evidence language", () => {
     render(<EvidenceSummary status="INVALID_MANIFEST" evidence={{ limitations: ["private.backend.detail"] }} />);
     expect(screen.queryByText("private.backend.detail")).not.toBeInTheDocument();
     expect(screen.getByText("Kết quả có thêm giới hạn kỹ thuật chưa được giao diện mô tả chi tiết.")).toBeVisible();
+  });
+
+  it("does not turn an omitted suspicious-region field into a zero count", () => {
+    render(<EvidenceSummary status="NO_WATERMARK" evidence={{}} />);
+    const fact = screen.getByText("Số vùng nghi vấn").parentElement!;
+    expect(within(fact).getByText("API chưa cung cấp")).toBeVisible();
+    expect(within(fact).queryByText("0")).not.toBeInTheDocument();
   });
 });

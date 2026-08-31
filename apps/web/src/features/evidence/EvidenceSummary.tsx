@@ -26,7 +26,7 @@ export function EvidenceSummary({ status, evidence }: { status: VerificationStat
   const knownLimitations = (evidence.limitations ?? []).filter((id) => id in LIMITATION_COPY);
   const limitationIds = Array.from(new Set([...STATUS_LIMITATIONS[status], ...knownLimitations]));
   const unknownLimitationCount = (evidence.limitations?.length ?? 0) - knownLimitations.length;
-  const regions = evidence.suspicious_regions ?? [];
+  const regions = evidence.suspicious_regions;
 
   return (
     <article className="evidence-summary">
@@ -37,7 +37,7 @@ export function EvidenceSummary({ status, evidence }: { status: VerificationStat
           <div><dt>Hash tệp chính xác</dt><dd>{hashLabel(evidence.exact_file_hash_match)}</dd></div>
           <div><dt>Số trang đã phân tích</dt><dd>{evidence.analyzed_page_count ?? "API chưa cung cấp"}</dd></div>
           <div><dt>Số phiếu hợp lệ</dt><dd>{evidence.valid_vote_count ?? "API chưa cung cấp"}</dd></div>
-          <div><dt>Số vùng nghi vấn</dt><dd>{regions.length}</dd></div>
+          <div><dt>Số vùng nghi vấn</dt><dd>{regions ? regions.length : "API chưa cung cấp"}</dd></div>
         </dl>
         <p className="evidence-absence">API không công khai mã người nhận hoặc danh tính người được phát hiện trong kết quả này.</p>
       </section>

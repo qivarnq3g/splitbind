@@ -22,7 +22,7 @@ test("authorization prevents an issuer from creating or reading verification rec
   });
   await page.goto("/verify");
   await expect(page.getByRole("heading", { name: "Không có quyền tạo kiểm chứng" })).toBeVisible();
-  await expect(page.getByLabel("Tệp PDF cần kiểm chứng")).toHaveCount(0);
+  await expect(page.getByLabel("Tệp cần kiểm chứng")).toHaveCount(0);
   await page.goto(`/verifications/${VERIFICATION_ID}`);
   await expect(page.getByRole("heading", { name: "Không có quyền xem kiểm chứng" })).toBeVisible();
   expect(verificationRequests).toEqual([]);

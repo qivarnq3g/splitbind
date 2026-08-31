@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 
 import { canCreateVerification, useSession } from "../features/auth/session";
 import { SafeApiError } from "../features/shared/apiError";
-import { type UploadStage, uploadVerificationPdf, validatePdf } from "../features/uploads/uploadIssuance";
+import { type UploadStage, uploadVerificationPdf, validateVerificationFile } from "../features/uploads/uploadIssuance";
 import { createVerification } from "../features/verifications/verifications";
 
 const STAGE_STEP: Record<UploadStage, number> = { hashing: 1, intent: 2, uploading: 3, finalizing: 4 };
@@ -27,8 +27,8 @@ export function VerifyDocumentPage() {
 
   const verification = useMutation({
     mutationFn: async () => {
-      if (!file) throw new SafeApiError("Chưa có tệp PDF. Chọn một tệp rồi thử lại.");
-      validatePdf(file);
+      if (!file) throw new SafeApiError("Chưa có tệp. Chọn một tệp rồi thử lại.");
+      validateVerificationFile(file);
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -48,7 +48,7 @@ export function VerifyDocumentPage() {
       <main className="workspace-page">
         <header className="page-heading">
           <h1>Không có quyền tạo kiểm chứng</h1>
-          <p>Chỉ vai trò verifier được tải tài liệu và bắt đầu một công việc kiểm chứng mới.</p>
+          <p>Chỉ vai trò administrator hoặc verifier được tải tài liệu và bắt đầu một công việc kiểm chứng mới.</p>
         </header>
       </main>
     );
@@ -62,7 +62,7 @@ export function VerifyDocumentPage() {
       return;
     }
     try {
-      validatePdf(selected);
+      validateVerificationFile(selected);
       setFile(selected);
     } catch (error) {
       setFile(selected);
@@ -82,22 +82,22 @@ export function VerifyDocumentPage() {
     <main className="workspace-page">
       <header className="page-heading">
         <h1>Xác minh tài liệu</h1>
-        <p>Tải một PDF nghi vấn để kiểm tra dấu vân tay, manifest và tín hiệu toàn vẹn trong phạm vi hệ thống cung cấp.</p>
+        <p>Tải một PDF, PNG hoặc JPEG nghi vấn để kiểm tra dấu vân tay, manifest và tín hiệu toàn vẹn trong phạm vi hệ thống cung cấp.</p>
       </header>
       <section className="workbench" aria-labelledby="verification-form-heading">
         <div className="workbench-caption">
           <h2 id="verification-form-heading">Tài liệu cần kiểm chứng</h2>
-          <p>Trình duyệt giới hạn tệp ở 10 MiB. Máy chủ và worker vẫn phải xác minh lại nội dung thực tế.</p>
+          <p>Trình duyệt giới hạn tệp ở 10 MiB. Máy chủ và worker vẫn phải xác minh lại định dạng, số trang hoặc kích thước ảnh.</p>
         </div>
         <form className="form-stack" onSubmit={submit} aria-busy={verification.isPending}>
           <div className="field" data-state={validationError ? "error" : file ? "success" : "default"}>
-            <label htmlFor="verification-pdf">Tệp PDF cần kiểm chứng</label>
+            <label htmlFor="verification-pdf">Tệp cần kiểm chứng</label>
             <input
               className="file-control"
               id="verification-pdf"
               name="verification-pdf"
               type="file"
-              accept="application/pdf,.pdf"
+              accept="application/pdf,image/png,image/jpeg,.pdf,.png,.jpg,.jpeg"
               required
               disabled={verification.isPending}
               aria-invalid={Boolean(validationError)}
@@ -105,7 +105,7 @@ export function VerifyDocumentPage() {
               onChange={(event) => selectFile(event.target.files?.[0])}
             />
             <p className={validationError ? "field-help field-help-error" : "field-help"} id="verification-pdf-help">
-              {validationError ?? (file ? `${file.name} · ${Math.max(1, Math.ceil(file.size / 1024))} KiB` : "PDF tối đa 10 MiB và 50 trang; worker xác minh định dạng thực tế.")}
+              {validationError ?? (file ? `${file.name} · ${Math.max(1, Math.ceil(file.size / 1024))} KiB` : "PDF, PNG hoặc JPEG tối đa 10 MiB; worker giới hạn PDF ở 50 trang và ảnh ở 40 megapixel.")}
             </p>
           </div>
           <div className="progress-slot" aria-live="polite">

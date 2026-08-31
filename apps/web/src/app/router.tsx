@@ -10,7 +10,7 @@ import { VerifyDocumentPage } from "../pages/VerifyDocumentPage";
 
 function RoleHome() {
   const session = useSession();
-  return <Navigate to={canCreateVerification(session.data?.user?.role) ? "/verify" : "/issue"} replace />;
+  return <Navigate to={canCreateIssuance(session.data?.user?.role) ? "/issue" : "/verify"} replace />;
 }
 
 function SessionBoundary() {
@@ -31,7 +31,7 @@ function AppShell() {
   return (
     <div className="app-shell">
       <nav className="side-rail" aria-label="Điều hướng chính">
-        <NavLink className="side-brand" to={canCreateVerification(user?.role) ? "/verify" : "/issue"} aria-label="SplitBind — trang làm việc">SplitBind</NavLink>
+        <NavLink className="side-brand" to={canCreateIssuance(user?.role) ? "/issue" : "/verify"} aria-label="SplitBind — trang làm việc">SplitBind</NavLink>
         <div className="rail-links">
           {canCreateIssuance(user?.role) ? <NavLink to="/issue">Cấp phát</NavLink> : null}
           {canCreateVerification(user?.role) ? <NavLink to="/verify">Xác minh</NavLink> : null}

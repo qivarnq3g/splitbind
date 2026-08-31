@@ -48,7 +48,7 @@ export function canCreateIssuance(role: string | undefined): boolean {
 }
 
 export function canCreateVerification(role: string | undefined): boolean {
-  return role === "verifier";
+  return role === "administrator" || role === "verifier";
 }
 
 export function canViewVerification(role: string | undefined): boolean {

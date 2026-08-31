@@ -10,14 +10,39 @@ export type UploadReady = {
   sha256: string;
 };
 
-export function validatePdf(file: File): void {
+type UploadKind = "issuance_input" | "verification_input";
+
+function validateSize(file: File): void {
   if (file.size > MAX_PDF_BYTES) {
-    throw new SafeApiError("Tệp vượt quá giới hạn 10 MiB. Chọn tệp PDF nhỏ hơn rồi thử lại.");
+    throw new SafeApiError("Tệp vượt quá giới hạn 10 MiB. Chọn tệp nhỏ hơn rồi thử lại.");
   }
-  const pdfName = file.name.toLocaleLowerCase().endsWith(".pdf");
-  const pdfType = file.type === "" || file.type === "application/pdf";
-  if (!pdfName || !pdfType) {
+}
+
+function normalizedContentType(file: File, kind: UploadKind): string | null {
+  const name = file.name.toLocaleLowerCase();
+  const candidates = kind === "issuance_input"
+    ? [{ suffixes: [".pdf"], type: "application/pdf" }]
+    : [
+        { suffixes: [".pdf"], type: "application/pdf" },
+        { suffixes: [".png"], type: "image/png" },
+        { suffixes: [".jpg", ".jpeg"], type: "image/jpeg" },
+      ];
+  const candidate = candidates.find(({ suffixes }) => suffixes.some((suffix) => name.endsWith(suffix)));
+  if (!candidate || (file.type !== "" && file.type !== candidate.type)) return null;
+  return candidate.type;
+}
+
+export function validatePdf(file: File): void {
+  validateSize(file);
+  if (!normalizedContentType(file, "issuance_input")) {
     throw new SafeApiError("Tệp đã chọn không phải PDF. Chọn tệp có định dạng PDF rồi thử lại.");
+  }
+}
+
+export function validateVerificationFile(file: File): void {
+  validateSize(file);
+  if (!normalizedContentType(file, "verification_input")) {
+    throw new SafeApiError("Tệp chưa đúng định dạng. Chọn tệp PDF, PNG hoặc JPEG rồi thử lại.");
   }
 }
 
@@ -28,11 +53,13 @@ export async function sha256(file: File): Promise<string> {
 
 export async function uploadPdf(
   file: File,
-  kind: "issuance_input" | "verification_input",
+  kind: UploadKind,
   onStage: (stage: UploadStage) => void,
   signal?: AbortSignal,
 ): Promise<UploadReady> {
-  validatePdf(file);
+  if (kind === "issuance_input") validatePdf(file);
+  else validateVerificationFile(file);
+  const contentType = normalizedContentType(file, kind)!;
   onStage("hashing");
   const checksum = await sha256(file);
 
@@ -41,7 +68,7 @@ export async function uploadPdf(
     body: {
       kind,
       filename: file.name,
-      content_type: file.type || "application/pdf",
+      content_type: contentType,
       size_bytes: file.size,
       sha256: checksum,
     },

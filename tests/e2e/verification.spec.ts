@@ -68,7 +68,7 @@ test("verification browser contract journey supports keyboard submission", async
     await route.fulfill({ status: 200, body: "" });
   });
   await page.goto("/verify");
-  await page.getByLabel("Tệp PDF cần kiểm chứng").setInputFiles({ name: "suspect.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4\n%%EOF") });
+  await page.getByLabel("Tệp cần kiểm chứng").setInputFiles({ name: "suspect.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4\n%%EOF") });
   const submit = page.getByRole("button", { name: "Bắt đầu xác minh" });
   await submit.focus();
   await page.keyboard.press("Enter");
@@ -85,7 +85,7 @@ test("verification evidence keeps facts, confidence, limits, and inference separ
   for (const heading of ["Sự kiện", "Độ tin cậy", "Giới hạn", "Suy luận thận trọng"]) {
     await expect(page.getByRole("heading", { name: heading })).toBeVisible();
   }
-  await expect(page.getByText("API chưa cung cấp số trang và hình học trang", { exact: false })).toBeVisible();
+  await expect(page.getByText("API chưa cung cấp trang tương ứng và hình học từng trang", { exact: false })).toBeVisible();
   await expect(page.getByText("không chứng minh người nhận đã sửa, làm rò rỉ hoặc phát tán", { exact: false })).toBeVisible();
   await expect(page.getByText(/^Mã người nhận$/i)).toHaveCount(0);
   await expect(page.locator("svg[aria-label='Bản đồ các vùng toàn vẹn nghi vấn']")).toHaveCount(0);

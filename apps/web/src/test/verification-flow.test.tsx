@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { appRoutes } from "../app/router";
 import { createQueryClient } from "../app/queryClient";
+import { validatePdf, validateVerificationFile } from "../features/uploads/uploadIssuance";
 
 const USER_ID = "00000000-0000-4000-8000-000000000001";
 const ORGANIZATION_ID = "00000000-0000-4000-8000-000000000002";
@@ -79,7 +80,7 @@ describe("verification browser workflow", () => {
     }));
 
     renderApp();
-    fireEvent.change(await screen.findByLabelText("Tệp PDF cần kiểm chứng"), {
+    fireEvent.change(await screen.findByLabelText("Tệp cần kiểm chứng"), {
       target: { files: [new File(["%PDF-1.4\n%%EOF"], "suspect.pdf", { type: "application/pdf" })] },
     });
     fireEvent.submit(screen.getByRole("button", { name: "Bắt đầu xác minh" }).closest("form")!);
@@ -97,13 +98,27 @@ describe("verification browser workflow", () => {
     expect(workflow[3]?.body).toEqual({ upload_id: UPLOAD_ID, correlation_id: expect.stringMatching(/^[0-9a-f-]{36}$/) });
   });
 
-  it.each(["administrator", "issuer", "auditor"] as const)("does not let %s create a verification", async (role) => {
+  it.each(["issuer", "auditor"] as const)("does not let %s create a verification", async (role) => {
     const fetchMock = vi.fn<typeof globalThis.fetch>(async () => json(session(role)));
     vi.stubGlobal("fetch", fetchMock);
     renderApp();
     expect(await screen.findByRole("heading", { name: "Không có quyền tạo kiểm chứng" })).toBeVisible();
-    expect(screen.queryByLabelText("Tệp PDF cần kiểm chứng")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Tệp cần kiểm chứng")).not.toBeInTheDocument();
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("lets an administrator create a verification, matching the backend policy", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async () => json(session("administrator"))));
+    renderApp();
+    expect(await screen.findByLabelText("Tệp cần kiểm chứng")).toBeVisible();
+  });
+
+  it("accepts PDF, PNG, and JPEG verification inputs without weakening issuance validation", () => {
+    expect(() => validateVerificationFile(new File(["pdf"], "sample.pdf", { type: "application/pdf" }))).not.toThrow();
+    expect(() => validateVerificationFile(new File(["png"], "sample.png", { type: "image/png" }))).not.toThrow();
+    expect(() => validateVerificationFile(new File(["jpg"], "sample.jpg", { type: "image/jpeg" }))).not.toThrow();
+    expect(() => validateVerificationFile(new File(["gif"], "sample.gif", { type: "image/gif" }))).toThrow(/PDF, PNG hoặc JPEG/);
+    expect(() => validatePdf(new File(["png"], "sample.png", { type: "image/png" }))).toThrow(/không phải PDF/);
   });
 
   it("renders contract facts without recipient disclosure or invented geometry", async () => {
@@ -124,7 +139,7 @@ describe("verification browser workflow", () => {
     renderApp(`/verifications/${VERIFICATION_ID}`);
     expect(await screen.findByRole("heading", { name: "Khớp nguồn, có dấu hiệu thay đổi" })).toBeVisible();
     expect(screen.getByText("0,75")).toBeVisible();
-    expect(screen.getByText("API chưa cung cấp số trang và hình học trang", { exact: false })).toBeVisible();
+    expect(screen.getByText("API chưa cung cấp trang tương ứng và hình học từng trang", { exact: false })).toBeVisible();
     expect(screen.queryByText("private.backend.id")).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/mã người nhận:\s*[0-9a-f-]{36}/i);
   });
@@ -151,5 +166,23 @@ describe("verification browser workflow", () => {
     expect(await screen.findByRole("heading", { name: label })).toBeVisible();
     expect(screen.getByRole("link", { name: "Mở hồ sơ kiểm chứng" })).toHaveAttribute("href", `/verifications/${VERIFICATION_ID}`);
     if (errorCode) expect(screen.getByRole("alert")).toHaveTextContent(errorCode);
+  });
+
+  it.each([
+    ["failed", "Công việc xử lý thất bại nên không có bằng chứng kiểm chứng."],
+    ["dead_lettered", "Công việc xử lý thất bại nên không có bằng chứng kiểm chứng."],
+    ["cancelled", "Công việc đã bị hủy nên không có kết quả kiểm chứng."],
+  ] as const)("does not call a terminal %s verification pending", async (jobStatus, expected) => {
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async (input) => {
+      const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
+      if (path === "/api/v1/auth/session") return json(session("verifier"));
+      return json({
+        id: VERIFICATION_ID, job_id: JOB_ID, job_status: jobStatus, status: null,
+        created_at: "2026-08-30T12:01:00Z", completed_at: null, evidence: {}, metrics: {},
+      });
+    }));
+    renderApp(`/verifications/${VERIFICATION_ID}`);
+    expect(await screen.findByText(expected)).toBeVisible();
+    expect(screen.queryByText(/Bằng chứng sẽ xuất hiện/)).not.toBeInTheDocument();
   });
 });
