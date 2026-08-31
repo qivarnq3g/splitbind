@@ -305,8 +305,13 @@ def test_align_uses_direct_bounded_pilot_at_exact_40_megapixels(
     assert observed_templates[0].spatial.shape == (1280, 2048)
 
 
-def test_direct_bounded_pilot_preserves_inter_area_amplitude(profile):
-    canonical_shape = (1001, 3001)
+@pytest.mark.parametrize(
+    "canonical_shape",
+    [(1001, 3001), (17, 3001), (3001, 17), (7, 2053)],
+)
+def test_direct_bounded_pilot_preserves_inter_area_amplitude(
+    profile, canonical_shape
+):
     sample_scale = synchronization_v2._geometry_sample_scale(
         canonical_shape, canonical_shape
     )
@@ -330,6 +335,88 @@ def test_direct_bounded_pilot_preserves_inter_area_amplitude(profile):
 
     assert direct_rms == pytest.approx(resized_rms, rel=1e-6, abs=1e-9)
     assert correlation >= 0.999999
+
+
+@pytest.mark.parametrize(
+    ("source_length", "output_length"),
+    [(1001, 1000), (2049, 2048)],
+)
+def test_bounded_axis_matches_inter_area_at_edge_coefficient_cutoff(
+    source_length, output_length
+):
+    frequency = 0.137531
+    source_axis = np.arange(source_length, dtype=np.float64)
+    source_wave = np.exp(2j * np.pi * frequency * source_axis)
+    expected = cv2.resize(
+        source_wave.real[None, :],
+        (output_length, 1),
+        interpolation=cv2.INTER_AREA,
+    ).reshape(-1) + 1j * cv2.resize(
+        source_wave.imag[None, :],
+        (output_length, 1),
+        interpolation=cv2.INTER_AREA,
+    ).reshape(-1)
+
+    actual = synchronization_v2._inter_area_sinusoid_axis(
+        source_length, output_length, frequency
+    )
+
+    assert np.allclose(actual, expected, rtol=1e-7, atol=1e-7)
+
+
+@pytest.mark.parametrize("canonical_shape", [(1, 40_000_000), (40_000_000, 1)])
+def test_direct_bounded_pilot_never_allocates_canonical_length_axes(
+    profile, canonical_shape, monkeypatch
+):
+    real_arange = np.arange
+    real_empty = np.empty
+    real_zeros = np.zeros
+    real_array = np.array
+    real_asarray = np.asarray
+
+    def assert_bounded_shape(shape):
+        dimensions = (shape,) if isinstance(shape, int) else tuple(shape)
+        assert all(int(dimension) <= 2048 for dimension in dimensions), (
+            "canonical-length allocation"
+        )
+
+    def bounded_arange(stop, *args, **kwargs):
+        assert int(stop) <= 2048, "canonical-length axis allocation"
+        return real_arange(stop, *args, **kwargs)
+
+    def bounded_empty(shape, *args, **kwargs):
+        assert_bounded_shape(shape)
+        return real_empty(shape, *args, **kwargs)
+
+    def bounded_zeros(shape, *args, **kwargs):
+        assert_bounded_shape(shape)
+        return real_zeros(shape, *args, **kwargs)
+
+    def bounded_array(values, *args, **kwargs):
+        result = real_array(values, *args, **kwargs)
+        assert_bounded_shape(result.shape)
+        return result
+
+    def bounded_asarray(values, *args, **kwargs):
+        result = real_asarray(values, *args, **kwargs)
+        assert_bounded_shape(result.shape)
+        return result
+
+    monkeypatch.setattr(synchronization_v2.np, "arange", bounded_arange)
+    monkeypatch.setattr(synchronization_v2.np, "empty", bounded_empty)
+    monkeypatch.setattr(synchronization_v2.np, "zeros", bounded_zeros)
+    monkeypatch.setattr(synchronization_v2.np, "array", bounded_array)
+    monkeypatch.setattr(synchronization_v2.np, "asarray", bounded_asarray)
+    sample_scale = synchronization_v2._geometry_sample_scale(
+        canonical_shape, canonical_shape
+    )
+
+    direct = synchronization_v2._synthesize_geometry_pilot_v2(
+        canonical_shape, sample_scale, KEY, 0, profile
+    )
+
+    assert max(direct.spatial.shape) <= 2048
+    assert np.isfinite(direct.spatial).all()
 
 
 def test_align_rejects_canonical_shape_over_40_megapixels_before_synthesis(

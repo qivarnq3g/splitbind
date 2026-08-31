@@ -33,6 +33,7 @@ _FFT_LONG_EDGE_MAX = 2048
 _SEED_DOMAIN = b"splitbind-v2-sync-pilot\x00"
 _STREAM_DOMAIN = b"splitbind-v2-sync-pilot-stream\x00"
 _SYNTHESIS_ROW_CHUNK = 256
+_INTER_AREA_EDGE_EPSILON = 1e-3
 _LOG_POLAR_SIZE = (512, 720)
 _LOG_POLAR_SPECTRUM_SIDE = 512
 _LOG_POLAR_RADIUS_MIN = 0.04
@@ -1425,20 +1426,21 @@ def _synthesize_inter_area_view(
 
     source_height, source_width = source_shape
     output_height, output_width = output_shape
-    source_x = np.arange(source_width, dtype=np.float64)
-    source_y = np.arange(source_height, dtype=np.float64)
     spatial = np.zeros((output_height, output_width), dtype=np.float64)
-    two_pi = 2.0 * math.pi
 
     for (frequency_x, frequency_y), phase, amplitude in zip(
         frequencies, phases, amplitudes, strict=True
     ):
-        angle_x = two_pi * frequency_x * source_x
-        angle_y = two_pi * frequency_y * source_y
-        cosine_x = _resize_axis_inter_area(np.cos(angle_x), output_width, row=True)
-        sine_x = _resize_axis_inter_area(np.sin(angle_x), output_width, row=True)
-        cosine_y = _resize_axis_inter_area(np.cos(angle_y), output_height, row=False)
-        sine_y = _resize_axis_inter_area(np.sin(angle_y), output_height, row=False)
+        wave_x = _inter_area_sinusoid_axis(
+            source_width, output_width, float(frequency_x)
+        )
+        wave_y = _inter_area_sinusoid_axis(
+            source_height, output_height, float(frequency_y)
+        )
+        cosine_x = wave_x.real
+        sine_x = wave_x.imag
+        cosine_y = wave_y.real
+        sine_y = wave_y.imag
         cosine_phase = math.cos(float(phase))
         sine_phase = math.sin(float(phase))
 
@@ -1460,12 +1462,58 @@ def _synthesize_inter_area_view(
     return spatial
 
 
-def _resize_axis_inter_area(
-    values: NDArray[np.float64], output_length: int, *, row: bool
-) -> NDArray[np.float64]:
-    source = values[None, :] if row else values[:, None]
-    size = (output_length, 1) if row else (1, output_length)
-    return cv2.resize(source, size, interpolation=cv2.INTER_AREA).reshape(-1)
+def _inter_area_sinusoid_axis(
+    source_length: int, output_length: int, frequency: float
+) -> NDArray[np.complex128]:
+    """Area-resample one discrete complex sinusoid with O(output) memory.
+
+    Destination sample ``j`` averages source pixels over OpenCV's area cell.
+    The edge construction deliberately follows OpenCV's floating-point
+    ``fsx1 = j * scale`` then ``fsx2 = fsx1 + scale`` sequence: its strict
+    1e-3 cutoff can differ from exact rational arithmetic at an endpoint.
+    The fully covered interior is a finite geometric sum, so no
+    canonical-length vector is materialized.
+    """
+
+    if source_length < output_length:
+        raise ValueError("geometry pilot area view must not upsample")
+    values = np.empty(output_length, dtype=np.complex128)
+    two_pi = 2.0 * math.pi
+    scale = source_length / output_length
+    for output_index in range(output_length):
+        left = output_index * scale
+        right = left + scale
+        cell_width = min(scale, source_length - left)
+        first_interior = min(math.ceil(left), math.floor(right))
+        right_boundary = min(math.floor(right), source_length - 1)
+        first_interior = min(first_interior, right_boundary)
+        weighted_sum = 0.0j
+        if first_interior - left > _INTER_AREA_EDGE_EPSILON:
+            weighted_sum = ((first_interior - left) / cell_width) * np.exp(
+                1j * two_pi * frequency * (first_interior - 1)
+            )
+        interior_start = first_interior
+        interior_count = max(0, right_boundary - first_interior)
+        weighted_sum += _finite_exponential_sum(
+            interior_start, interior_count, frequency
+        ) / cell_width
+        if right - right_boundary > _INTER_AREA_EDGE_EPSILON:
+            right_weight = min(min(right - right_boundary, 1.0), cell_width)
+            weighted_sum += (right_weight / cell_width) * np.exp(
+                1j * two_pi * frequency * right_boundary
+            )
+        values[output_index] = weighted_sum
+    return values
+
+
+def _finite_exponential_sum(start: int, count: int, frequency: float) -> complex:
+    if count <= 0:
+        return 0.0j
+    return (
+        count
+        * _finite_exponential_mean(count, frequency)
+        * np.exp(2j * math.pi * frequency * start)
+    )
 
 
 def _canonical_spatial_statistics(
