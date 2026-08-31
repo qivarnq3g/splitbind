@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from copy import deepcopy
 from functools import cache
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,46 @@ def fingerprint_candidates() -> dict[str, Any]:
     """Load the frozen version-1 fingerprint candidate grid."""
 
     return _load_algorithm_contract("fingerprint-candidates.v1.json")
+
+
+def fingerprint_candidates_v2() -> dict[str, Any]:
+    """Load a defensive copy of the strict version-2 fingerprint contract."""
+
+    return deepcopy(_fingerprint_candidates_v2_cached()[0])
+
+
+def fingerprint_candidates_v2_bytes() -> bytes:
+    """Return the exact committed UTF-8 bytes of the version-2 contract."""
+
+    return bytes(_fingerprint_candidates_v2_cached()[1])
+
+
+@cache
+def _fingerprint_candidates_v2_cached() -> tuple[dict[str, Any], bytes]:
+    contract_path = _algorithm_contracts_root() / "fingerprint-candidates.v2.json"
+    try:
+        raw = contract_path.read_bytes()
+    except OSError as error:
+        raise RuntimeError(
+            f"unable to read SplitBind algorithm contract {contract_path}; "
+            f"set {CONTRACT_ROOT_ENV} to the directory containing the V2 algorithm JSON files"
+        ) from error
+    try:
+        parsed = json.loads(raw.decode("utf-8"), object_pairs_hook=_reject_duplicate_keys)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError(f"invalid V2 fingerprint candidate contract {contract_path}") from error
+    if not isinstance(parsed, dict):
+        raise ValueError("V2 fingerprint candidate contract must be a JSON object")
+    return parsed, raw
+
+
+def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key {key!r} in V2 fingerprint candidate contract")
+        result[key] = value
+    return result
 
 
 def _load_algorithm_contract(filename: str) -> dict[str, Any]:
