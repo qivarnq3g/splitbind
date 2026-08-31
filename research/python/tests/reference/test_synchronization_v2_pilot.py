@@ -113,6 +113,23 @@ def test_wrong_key_page_and_profile_remain_below_pilot_threshold(profile, gradie
     )
 
 
+def test_first_128_wrong_pages_remain_below_pilot_threshold(profile, gradient):
+    template = synthesize_pilot_v2(gradient.shape, KEY, 0, profile)
+    embedded = embed_pilot_v2(gradient, template, profile.pilot_strength_rms)
+    wrong_page_scores = {
+        page_index: score_pilot_v2(
+            embedded,
+            synthesize_pilot_v2(gradient.shape, KEY, page_index, profile),
+        )
+        for page_index in range(1, 129)
+    }
+    worst_page, worst_score = max(
+        wrong_page_scores.items(), key=lambda item: item[1]
+    )
+
+    assert worst_score < profile.pilot_score_min, (worst_page, worst_score)
+
+
 def test_embedding_is_additive_float64_finite_and_does_not_mutate_input(profile):
     luminance = np.arange(96 * 128, dtype=np.uint8).reshape(96, 128)
     original = luminance.copy()

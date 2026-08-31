@@ -132,25 +132,18 @@ def score_pilot_v2(
     if not np.isfinite(luminance).all():
         raise ValueError("luminance must contain only finite values")
 
-    scoring_view, template_view = _bounded_scoring_views(luminance, template.spatial)
+    scoring_view, template_view, sample_scale = _bounded_scoring_views(
+        luminance, template.spatial
+    )
     signal_fft = _windowed_rfft(scoring_view)
     template_fft = _windowed_rfft(template_view)
-    template_power = np.abs(template_fft) ** 2
-    signal_power = np.abs(signal_fft) ** 2
-    if not np.isfinite(template_power).all() or not np.isfinite(signal_power).all():
+    pilot_band = _pilot_band_mask(scoring_view.shape, sample_scale)
+    if not np.any(pilot_band):
         return 0.0
-
-    flat_template_power = template_power.ravel()
-    if flat_template_power.size <= 1:
+    template_values = template_fft[pilot_band]
+    signal_values = signal_fft[pilot_band]
+    if not np.isfinite(template_values).all() or not np.isfinite(signal_values).all():
         return 0.0
-    flat_template_power = flat_template_power.copy()
-    flat_template_power[0] = 0.0
-    selected_count = min(_PILOT_PAIR_COUNT * 9, flat_template_power.size - 1)
-    if selected_count <= 0 or float(flat_template_power.max()) <= 0.0:
-        return 0.0
-    selected = np.argpartition(flat_template_power, -selected_count)[-selected_count:]
-    template_values = template_fft.ravel()[selected]
-    signal_values = signal_fft.ravel()[selected]
     template_energy = float(np.vdot(template_values, template_values).real)
     signal_energy = float(np.vdot(signal_values, signal_values).real)
     if template_energy <= 0.0 or signal_energy <= 0.0:
@@ -260,13 +253,14 @@ def _synthesize_spatial(
 
 def _bounded_scoring_views(
     luminance: NDArray[np.generic], spatial: NDArray[np.float64]
-) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+) -> tuple[NDArray[np.float64], NDArray[np.float64], float]:
     height, width = luminance.shape
     long_edge = max(height, width)
     if long_edge <= _FFT_LONG_EDGE_MAX:
         return (
             np.ascontiguousarray(luminance, dtype=np.float64),
             np.ascontiguousarray(spatial, dtype=np.float64),
+            1.0,
         )
     scale = _FFT_LONG_EDGE_MAX / long_edge
     resized_width = max(1, int(round(width * scale)))
@@ -279,7 +273,16 @@ def _bounded_scoring_views(
     return (
         np.ascontiguousarray(scoring_view, dtype=np.float64),
         np.ascontiguousarray(template_view, dtype=np.float64),
+        scale,
     )
+
+
+def _pilot_band_mask(shape: tuple[int, int], sample_scale: float) -> NDArray[np.bool_]:
+    height, width = shape
+    frequency_y = np.fft.fftfreq(height)[:, None]
+    frequency_x = np.fft.rfftfreq(width)[None, :]
+    original_radius = np.hypot(frequency_x, frequency_y) * sample_scale
+    return (original_radius >= _RADIUS_MIN) & (original_radius <= _RADIUS_MAX)
 
 
 def _windowed_rfft(values: NDArray[np.float64]) -> NDArray[np.complex128]:
