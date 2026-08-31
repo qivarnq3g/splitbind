@@ -54,6 +54,27 @@ _MAX_CORNER_AREA_RATIO = 5.0
 _CORNER_MARGIN_FRACTION = 0.65
 
 
+class AlignmentV2RuntimeError(RuntimeError):
+    """Typed boundary for runtime failures that are not evidence rejection."""
+
+    def __init__(
+        self,
+        stage: Literal[
+            "pilot_estimation",
+            "orb_estimation",
+            "geometry_validation",
+            "canonical_warp",
+        ],
+        hypothesis_count: int,
+    ) -> None:
+        self.stage = stage
+        self.hypothesis_count = hypothesis_count
+        super().__init__(
+            f"V2 alignment runtime failure during {stage} "
+            f"after {hypothesis_count} hypotheses"
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class GeometryHypothesisV2:
     homography: NDArray[np.float64]
@@ -111,6 +132,16 @@ class PilotTemplateV2:
         object.__setattr__(self, "spatial", spatial_copy)
 
 
+@dataclass(frozen=True, slots=True)
+class _PilotGeometryTemplateV2:
+    """Direct bounded rendering of a canonical pilot for geometry only."""
+
+    page_shape: tuple[int, int]
+    frequency_pairs: NDArray[np.float64]
+    spatial: NDArray[np.float64]
+    sample_scale: float
+
+
 def align_page_v2(
     page_bgr: NDArray[np.uint8],
     key: bytes,
@@ -133,20 +164,33 @@ def align_page_v2(
         if validated_orb.page_shape != (canonical_height, canonical_width):
             raise ValueError("orb_template page_shape must match canonical_shape")
 
-    template = synthesize_pilot_v2(
-        (canonical_height, canonical_width), key, page_index, profile
-    )
     try:
+        sample_scale = _geometry_sample_scale(
+            page.shape[:2], (canonical_height, canonical_width)
+        )
+        pilot_page = _bounded_geometry_page(page, sample_scale)
+        template = _synthesize_geometry_pilot_v2(
+            (canonical_height, canonical_width),
+            sample_scale,
+            key,
+            page_index,
+            profile,
+        )
         pilot_hypotheses = list(
-            _pilot_hypotheses_v2(_to_gray(page), template, profile)
+            _pilot_hypotheses_v2(_to_gray(pilot_page), template, profile)
         )[:_MAX_PILOT_HYPOTHESES]
+    except cv2.error as error:
+        raise AlignmentV2RuntimeError("pilot_estimation", 0) from error
+    try:
         orb_hypothesis = (
             _orb_hypothesis_v2(page, validated_orb)
             if validated_orb is not None
             else None
         )
-    except cv2.error:
-        return AlignmentV2Result(None, None, 0.0, 0, "geometry_rejected")
+    except cv2.error as error:
+        raise AlignmentV2RuntimeError(
+            "orb_estimation", len(pilot_hypotheses)
+        ) from error
 
     hypotheses = pilot_hypotheses.copy()
     if orb_hypothesis is not None:
@@ -179,15 +223,20 @@ def align_page_v2(
             "insufficient_sync_evidence",
         )
 
-    safe = [
-        hypothesis
-        for hypothesis in eligible
-        if _geometry_is_acceptable_v2(
-            hypothesis.homography,
-            page.shape[:2],
-            (canonical_height, canonical_width),
-        )
-    ]
+    try:
+        safe = [
+            hypothesis
+            for hypothesis in eligible
+            if _geometry_is_acceptable_v2(
+                hypothesis.homography,
+                page.shape[:2],
+                (canonical_height, canonical_width),
+            )
+        ]
+    except cv2.error as error:
+        raise AlignmentV2RuntimeError(
+            "geometry_validation", hypothesis_count
+        ) from error
     if not safe:
         return AlignmentV2Result(None, None, 0.0, hypothesis_count, "geometry_rejected")
 
@@ -210,10 +259,10 @@ def align_page_v2(
             flags=cv2.INTER_LINEAR,
             borderMode=cv2.BORDER_REFLECT_101,
         )
-    except cv2.error:
-        return AlignmentV2Result(
-            None, None, 0.0, hypothesis_count, "geometry_rejected"
-        )
+    except cv2.error as error:
+        raise AlignmentV2RuntimeError(
+            "canonical_warp", hypothesis_count
+        ) from error
     return AlignmentV2Result(
         image=np.ascontiguousarray(aligned, dtype=np.uint8),
         homography=np.ascontiguousarray(matrix, dtype=np.float64),
@@ -237,11 +286,9 @@ def synthesize_pilot_v2(
     _validate_page_index(page_index)
     _validate_profile(profile)
 
-    domain = _SEED_DOMAIN + page_index.to_bytes(4, "big")
-    seed = hmac.new(
-        key, domain + candidate_identifier_v2(profile), hashlib.sha256
-    ).digest()
-    frequencies, phases, amplitudes = _derive_constellation(_HmacByteStream(seed))
+    frequencies, phases, amplitudes = _derive_pilot_components(
+        key, page_index, profile
+    )
     spatial = _synthesize_spatial(
         height, width, frequencies, phases, amplitudes
     )
@@ -315,14 +362,120 @@ def score_pilot_v2(
     return float(np.clip(score, -1.0, 1.0))
 
 
+def _derive_pilot_components(
+    key: bytes, page_index: int, profile: FingerprintV2Profile
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
+    domain = _SEED_DOMAIN + page_index.to_bytes(4, "big")
+    seed = hmac.new(
+        key, domain + candidate_identifier_v2(profile), hashlib.sha256
+    ).digest()
+    return _derive_constellation(_HmacByteStream(seed))
+
+
+def _geometry_sample_scale(
+    source_shape: tuple[int, int], canonical_shape: tuple[int, int]
+) -> float:
+    long_edge = max(*source_shape, *canonical_shape)
+    return min(1.0, _FFT_LONG_EDGE_MAX / long_edge)
+
+
+def _scaled_geometry_shape(
+    shape: tuple[int, int], sample_scale: float
+) -> tuple[int, int]:
+    height, width = shape
+    return (
+        max(1, int(round(height * sample_scale))),
+        max(1, int(round(width * sample_scale))),
+    )
+
+
+def _bounded_geometry_page(
+    page: NDArray[np.uint8], sample_scale: float
+) -> NDArray[np.uint8]:
+    if sample_scale == 1.0:
+        return page
+    height, width = _scaled_geometry_shape(page.shape[:2], sample_scale)
+    return np.ascontiguousarray(
+        cv2.resize(page, (width, height), interpolation=cv2.INTER_AREA),
+        dtype=np.uint8,
+    )
+
+
+def _synthesize_geometry_pilot_v2(
+    canonical_shape: tuple[int, int],
+    sample_scale: float,
+    key: bytes,
+    page_index: int,
+    profile: FingerprintV2Profile,
+) -> _PilotGeometryTemplateV2:
+    canonical_height, canonical_width = canonical_shape
+    working_height, working_width = _scaled_geometry_shape(
+        canonical_shape, sample_scale
+    )
+    frequencies, phases, amplitudes = _derive_pilot_components(
+        key, page_index, profile
+    )
+    if sample_scale == 1.0:
+        sampled_frequencies = frequencies
+        sampled_phases = phases
+        sampled_amplitudes = amplitudes
+    else:
+        scale_x = working_width / canonical_width
+        scale_y = working_height / canonical_height
+        unwrapped_frequencies = frequencies / np.asarray(
+            (scale_x, scale_y), dtype=np.float64
+        )
+        sampled_frequencies = (unwrapped_frequencies + 0.5) % 1.0 - 0.5
+        source_center_offset = np.asarray(
+            (0.5 / scale_x - 0.5, 0.5 / scale_y - 0.5),
+            dtype=np.float64,
+        )
+        sampled_phases = phases + 2.0 * math.pi * (
+            frequencies @ source_center_offset
+        )
+        sampled_amplitudes = amplitudes * np.sinc(unwrapped_frequencies[:, 0])
+        sampled_amplitudes *= np.sinc(unwrapped_frequencies[:, 1])
+    spatial = _synthesize_spatial(
+        working_height,
+        working_width,
+        sampled_frequencies,
+        sampled_phases,
+        sampled_amplitudes,
+    )
+    return _PilotGeometryTemplateV2(
+        page_shape=canonical_shape,
+        frequency_pairs=np.ascontiguousarray(
+            sampled_frequencies, dtype=np.float64
+        ),
+        spatial=np.ascontiguousarray(spatial, dtype=np.float64),
+        sample_scale=sample_scale,
+    )
+
+
+def _working_frequency_pairs(
+    template: PilotTemplateV2 | _PilotGeometryTemplateV2,
+    sample_scale: float,
+) -> NDArray[np.float64]:
+    if isinstance(template, _PilotGeometryTemplateV2):
+        return template.frequency_pairs
+    return template.frequency_pairs / sample_scale
+
+
 def _pilot_hypotheses_v2(
     luminance: NDArray[np.uint8],
-    template: PilotTemplateV2,
+    template: PilotTemplateV2 | _PilotGeometryTemplateV2,
     profile: FingerprintV2Profile,
 ) -> tuple[GeometryHypothesisV2, ...]:
     """Estimate bounded similarity candidates from log-polar pilot evidence."""
 
-    geometry_views = _bounded_geometry_views(luminance, template.spatial)
+    if isinstance(template, _PilotGeometryTemplateV2):
+        geometry_views = (
+            np.ascontiguousarray(luminance, dtype=np.float64),
+            template.spatial,
+            template.sample_scale,
+        )
+    else:
+        geometry_views = _bounded_geometry_views(luminance, template.spatial)
     signal_view, template_view, _ = geometry_views
     log_template, log_radius_scale = _log_polar_magnitude(template_view)
     log_signal, _ = _log_polar_magnitude(signal_view)
@@ -352,17 +505,16 @@ def _pilot_hypotheses_v2(
     for refined_scale, refined_rotation, _ in _nms_similarity_candidates(
         refined_candidates
     ):
-        hypothesis = _translation_and_score_hypothesis(
-            luminance,
-            template,
-            refined_scale,
-            refined_rotation,
-            geometry_views=geometry_views,
+        hypotheses.extend(
+            _translation_and_score_hypotheses(
+                luminance,
+                template,
+                refined_scale,
+                refined_rotation,
+                geometry_views=geometry_views,
+            )
         )
-        if hypothesis is not None:
-            hypotheses.append(hypothesis)
-    hypotheses.sort(key=lambda hypothesis: hypothesis.pilot_score, reverse=True)
-    return tuple(hypotheses[:_MAX_PILOT_HYPOTHESES])
+    return _nms_pilot_hypotheses(hypotheses, template.page_shape)
 
 
 def _log_polar_similarity_candidates(
@@ -509,7 +661,7 @@ def _nms_similarity_candidates(
 
 def _refine_similarity_from_pilot_peaks(
     luminance: NDArray[np.uint8],
-    template: PilotTemplateV2,
+    template: PilotTemplateV2 | _PilotGeometryTemplateV2,
     initial_scale: float,
     initial_rotation: float,
     *,
@@ -529,7 +681,7 @@ def _refine_similarity_from_pilot_peaks(
     frequency_linear = np.linalg.inv(forward_linear).T
     expected: list[NDArray[np.float64]] = []
     observed: list[NDArray[np.float64]] = []
-    sampled_frequencies = template.frequency_pairs / sample_scale
+    sampled_frequencies = _working_frequency_pairs(template, sample_scale)
     for frequency in sampled_frequencies:
         predicted = frequency_linear @ frequency
         peak = _local_frequency_peak(magnitude, predicted)
@@ -609,9 +761,9 @@ def _quadratic_peak_offset(samples: NDArray[np.float64]) -> float:
     return float(np.clip(offset, -1.0, 1.0))
 
 
-def _translation_and_score_hypothesis(
+def _translation_and_score_hypotheses(
     luminance: NDArray[np.uint8],
-    template: PilotTemplateV2,
+    template: PilotTemplateV2 | _PilotGeometryTemplateV2,
     scale: float,
     rotation: float,
     *,
@@ -619,7 +771,7 @@ def _translation_and_score_hypothesis(
         NDArray[np.float64], NDArray[np.float64], float
     ]
     | None = None,
-) -> GeometryHypothesisV2 | None:
+) -> tuple[GeometryHypothesisV2, ...]:
     if geometry_views is None:
         geometry_views = _bounded_geometry_views(luminance, template.spatial)
     signal_view, template_view, sample_scale = geometry_views
@@ -640,49 +792,192 @@ def _translation_and_score_hypothesis(
     frequency_linear = np.linalg.inv(forward_linear).T
     mask = _transformed_pilot_mask(
         (height, width),
-        template.frequency_pairs / sample_scale,
+        _working_frequency_pairs(template, sample_scale),
         frequency_linear,
         radius=_PILOT_FREQUENCY_RADIUS / sample_scale,
     )
     predicted_energy = float(np.sum(np.abs(predicted_fft[mask]) ** 2))
     signal_energy = float(np.sum(np.abs(signal_fft[mask]) ** 2))
     if predicted_energy <= 0.0 or signal_energy <= 0.0:
-        return None
+        return ()
     cross_spectrum = np.zeros((height, width), dtype=np.complex128)
     cross_spectrum[mask] = signal_fft[mask] * np.conj(predicted_fft[mask])
     correlation = np.fft.ifft2(cross_spectrum).real
     peak_y, peak_x = np.unravel_index(int(np.argmax(correlation)), correlation.shape)
-    peak_value = float(correlation[peak_y, peak_x])
-    denominator = math.sqrt(predicted_energy * signal_energy)
-    score = peak_value * height * width / denominator
-    if not math.isfinite(score):
-        return None
-
-    sampled_translation_x = _signed_cyclic_coordinate(
+    base_translation_x = _signed_cyclic_coordinate(
         peak_x + _cyclic_quadratic_offset(correlation[peak_y], peak_x), width
     )
-    sampled_translation_y = _signed_cyclic_coordinate(
+    base_translation_y = _signed_cyclic_coordinate(
         peak_y + _cyclic_quadratic_offset(correlation[:, peak_x], peak_y), height
     )
-    translation_x = sampled_translation_x / sample_scale
-    translation_y = sampled_translation_y / sample_scale
-    forward = np.array(
-        [
-            [forward_linear[0, 0], forward_linear[0, 1], translation_x],
-            [forward_linear[1, 0], forward_linear[1, 1], translation_y],
-            [0.0, 0.0, 1.0],
-        ],
+    translation_bound_x = (
+        _TRANSLATION_FRACTION_MAX * template.page_shape[1] * sample_scale
+    )
+    translation_bound_y = (
+        _TRANSLATION_FRACTION_MAX * template.page_shape[0] * sample_scale
+    )
+    aliases_x = _bounded_translation_aliases(
+        base_translation_x, width, translation_bound_x
+    )
+    aliases_y = _bounded_translation_aliases(
+        base_translation_y, height, translation_bound_y
+    )
+
+    signal_band = np.fft.ifft2(signal_fft * mask).real
+    predicted_band = np.fft.ifft2(predicted_fft * mask).real
+    denominator = math.sqrt(
+        float(np.sum(signal_band * signal_band))
+        * float(np.sum(predicted_band * predicted_band))
+    )
+    if not math.isfinite(denominator) or denominator <= 0.0:
+        return ()
+
+    hypotheses: list[GeometryHypothesisV2] = []
+    for sampled_translation_x in aliases_x:
+        for sampled_translation_y in aliases_y:
+            slices = _noncyclic_overlap_slices(
+                sampled_translation_x,
+                sampled_translation_y,
+                width,
+                height,
+            )
+            if slices is None:
+                continue
+            signal_y, signal_x, predicted_y, predicted_x = slices
+            numerator = float(
+                np.sum(
+                    signal_band[signal_y, signal_x]
+                    * predicted_band[predicted_y, predicted_x]
+                )
+            )
+            score = numerator / denominator
+            if not math.isfinite(score):
+                continue
+            translation_x = sampled_translation_x / sample_scale
+            translation_y = sampled_translation_y / sample_scale
+            forward = np.array(
+                [
+                    [
+                        forward_linear[0, 0],
+                        forward_linear[0, 1],
+                        translation_x,
+                    ],
+                    [
+                        forward_linear[1, 0],
+                        forward_linear[1, 1],
+                        translation_y,
+                    ],
+                    [0.0, 0.0, 1.0],
+                ],
+                dtype=np.float64,
+            )
+            try:
+                homography = np.linalg.inv(forward)
+            except np.linalg.LinAlgError:
+                continue
+            hypotheses.append(
+                GeometryHypothesisV2(
+                    np.ascontiguousarray(homography, dtype=np.float64),
+                    float(np.clip(score, -1.0, 1.0)),
+                    "pilot",
+                )
+            )
+    return tuple(hypotheses)
+
+
+def _translation_and_score_hypothesis(
+    luminance: NDArray[np.uint8],
+    template: PilotTemplateV2 | _PilotGeometryTemplateV2,
+    scale: float,
+    rotation: float,
+    *,
+    geometry_views: tuple[
+        NDArray[np.float64], NDArray[np.float64], float
+    ]
+    | None = None,
+) -> GeometryHypothesisV2 | None:
+    """Compatibility wrapper returning the strongest bounded translation alias."""
+
+    hypotheses = _translation_and_score_hypotheses(
+        luminance,
+        template,
+        scale,
+        rotation,
+        geometry_views=geometry_views,
+    )
+    return max(hypotheses, key=lambda item: item.pilot_score, default=None)
+
+
+def _bounded_translation_aliases(
+    base: float, period: int, bound: float
+) -> tuple[float, ...]:
+    if not all(math.isfinite(value) for value in (base, bound)) or period <= 0:
+        return ()
+    overlap_bound = min(bound, math.nextafter(float(period), 0.0))
+    first = math.ceil((-overlap_bound - base) / period)
+    last = math.floor((overlap_bound - base) / period)
+    return tuple(base + offset * period for offset in range(first, last + 1))
+
+
+def _noncyclic_overlap_slices(
+    translation_x: float,
+    translation_y: float,
+    width: int,
+    height: int,
+) -> tuple[slice, slice, slice, slice] | None:
+    offset_x = int(round(translation_x))
+    offset_y = int(round(translation_y))
+    if abs(offset_x) >= width or abs(offset_y) >= height:
+        return None
+    if offset_x >= 0:
+        signal_x = slice(offset_x, width)
+        predicted_x = slice(0, width - offset_x)
+    else:
+        signal_x = slice(0, width + offset_x)
+        predicted_x = slice(-offset_x, width)
+    if offset_y >= 0:
+        signal_y = slice(offset_y, height)
+        predicted_y = slice(0, height - offset_y)
+    else:
+        signal_y = slice(0, height + offset_y)
+        predicted_y = slice(-offset_y, height)
+    return signal_y, signal_x, predicted_y, predicted_x
+
+
+def _nms_pilot_hypotheses(
+    hypotheses: list[GeometryHypothesisV2], canonical_shape: tuple[int, int]
+) -> tuple[GeometryHypothesisV2, ...]:
+    height, width = canonical_shape
+    corners = np.asarray(
+        (
+            ((0.0, 0.0),),
+            ((width - 1.0, 0.0),),
+            ((width - 1.0, height - 1.0),),
+            ((0.0, height - 1.0),),
+        ),
         dtype=np.float64,
     )
-    try:
-        homography = np.linalg.inv(forward)
-    except np.linalg.LinAlgError:
-        return None
-    return GeometryHypothesisV2(
-        np.ascontiguousarray(homography, dtype=np.float64),
-        float(np.clip(score, -1.0, 1.0)),
-        "pilot",
-    )
+    accepted: list[GeometryHypothesisV2] = []
+    accepted_corners: list[NDArray[np.float64]] = []
+    for hypothesis in sorted(
+        hypotheses, key=lambda item: item.pilot_score, reverse=True
+    ):
+        try:
+            forward = np.linalg.inv(hypothesis.homography)
+        except np.linalg.LinAlgError:
+            continue
+        projected = cv2.perspectiveTransform(corners, forward)
+        if any(
+            float(np.sqrt(np.mean(np.sum((projected - previous) ** 2, axis=2))))
+            <= _MAX_SIMILARITY_REPROJECTION_RMSE_PX
+            for previous in accepted_corners
+        ):
+            continue
+        accepted.append(hypothesis)
+        accepted_corners.append(projected)
+        if len(accepted) == _MAX_PILOT_HYPOTHESES:
+            break
+    return tuple(accepted)
 
 
 def _bounded_geometry_views(
@@ -897,10 +1192,7 @@ def _geometry_is_acceptable_v2(
         ],
         dtype=np.float64,
     )
-    try:
-        projected_grid = cv2.perspectiveTransform(target_grid, forward).reshape(-1, 2)
-    except cv2.error:
-        return False
+    projected_grid = cv2.perspectiveTransform(target_grid, forward).reshape(-1, 2)
     if not np.all(np.isfinite(projected_grid)):
         return False
     similarity, reprojection_rmse = _fit_similarity_v2(
@@ -937,10 +1229,7 @@ def _geometry_is_acceptable_v2(
         ],
         dtype=np.float64,
     )
-    try:
-        target_corners = cv2.perspectiveTransform(source_corners, matrix).reshape(-1, 2)
-    except cv2.error:
-        return False
+    target_corners = cv2.perspectiveTransform(source_corners, matrix).reshape(-1, 2)
     if not np.all(np.isfinite(target_corners)):
         return False
     return _v2_corners_are_plausible(target_corners, target_shape)
@@ -1011,12 +1300,9 @@ def _v2_corners_are_plausible(
         ),
         dtype=np.float32,
     )
-    try:
-        intersection_area, _ = cv2.intersectConvexConvex(
-            corners.astype(np.float32), target_polygon
-        )
-    except cv2.error:
-        return False
+    intersection_area, _ = cv2.intersectConvexConvex(
+        corners.astype(np.float32), target_polygon
+    )
     source_footprint_area = signed_area
     source_coverage = float(intersection_area) / max(1.0, source_footprint_area)
     target_coverage = float(intersection_area) / target_area

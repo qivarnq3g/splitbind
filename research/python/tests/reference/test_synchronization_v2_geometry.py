@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 import splitbind_ref.synchronization_v2 as synchronization_v2
+from splitbind_attack.attacks import AttackCase, apply_attack
 from splitbind_ref.fingerprint_v2_profile import load_v2_profiles
 from splitbind_ref.synchronization import SyncTemplate
 from splitbind_ref.synchronization_v2 import (
@@ -105,9 +106,14 @@ def test_pilot_recovers_bounded_similarity_transform(
 
 def test_pilot_recovers_centered_crop_25(embedded_gradient, profile):
     height, width = embedded_gradient.shape[:2]
-    crop_y = height // 8
-    crop_x = width // 8
-    attacked = embedded_gradient[crop_y : height - crop_y, crop_x : width - crop_x]
+    artifact = apply_attack(
+        embedded_gradient,
+        AttackCase("crop-25", "crop", {"fraction": 0.25}),
+        np.random.default_rng(20260831),
+    )
+    attacked = artifact.image
+    crop_y = (height - attacked.shape[0]) // 2
+    crop_x = (width - attacked.shape[1]) // 2
     expected = np.array(
         [[1.0, 0.0, crop_x], [0.0, 1.0, crop_y], [0.0, 0.0, 1.0]],
         dtype=np.float64,
@@ -118,6 +124,39 @@ def test_pilot_recovers_centered_crop_25(embedded_gradient, profile):
     assert result.reason == "aligned"
     assert result.homography is not None
     assert _corner_rmse(result.homography, expected, attacked.shape[:2]) <= 3.0
+    assert artifact.removed_area_fraction == pytest.approx(0.25, abs=0.005)
+
+
+@pytest.mark.parametrize(
+    ("tx_fraction", "ty_fraction"),
+    [
+        (0.51, 0.0),
+        (-0.51, 0.0),
+        (0.60, 0.0),
+        (-0.60, 0.0),
+        (0.0, 0.60),
+        (0.0, -0.60),
+    ],
+)
+def test_pilot_recovers_translation_beyond_cyclic_half_period(
+    embedded_gradient, profile, tx_fraction, ty_fraction
+):
+    height, width = embedded_gradient.shape[:2]
+    attacked, expected_inverse = _warp_seeded(
+        embedded_gradient,
+        1.0,
+        0.0,
+        tx_fraction * width,
+        ty_fraction * height,
+    )
+
+    result = align_page_v2(
+        attacked, KEY, 0, profile, embedded_gradient.shape[:2]
+    )
+
+    assert result.reason == "aligned"
+    assert result.homography is not None
+    assert _corner_rmse(result.homography, expected_inverse, attacked.shape[:2]) <= 3.0
 
 
 def test_pilot_recovers_jpeg_70_plus_resize_75(embedded_gradient, profile):
@@ -218,6 +257,71 @@ def test_all_geometry_fft_inputs_obey_2048_long_edge(profile, monkeypatch):
 
     assert observed_shapes
     assert all(max(shape) <= 2048 for shape in observed_shapes)
+
+
+def test_align_uses_direct_bounded_pilot_at_exact_40_megapixels(
+    profile, monkeypatch
+):
+    canonical_shape = (5000, 8000)
+    rendered_shapes = []
+    observed_templates = []
+
+    def forbid_full_canonical_synthesis(*_args, **_kwargs):
+        raise AssertionError("alignment must not synthesize a full canonical pilot")
+
+    def record_bounded_synthesis(height, width, *_args, **_kwargs):
+        rendered_shapes.append((height, width))
+        assert max(height, width) <= 2048
+        return np.zeros((height, width), dtype=np.float64)
+
+    def no_hypotheses(_luminance, template, _profile):
+        observed_templates.append(template)
+        return ()
+
+    monkeypatch.setattr(
+        synchronization_v2, "synthesize_pilot_v2", forbid_full_canonical_synthesis
+    )
+    monkeypatch.setattr(
+        synchronization_v2, "_synthesize_spatial", record_bounded_synthesis
+    )
+    monkeypatch.setattr(
+        synchronization_v2, "_pilot_hypotheses_v2", no_hypotheses
+    )
+
+    result = align_page_v2(
+        np.zeros((1, 1, 3), dtype=np.uint8),
+        KEY,
+        0,
+        profile,
+        canonical_shape,
+    )
+
+    assert result.reason == "insufficient_sync_evidence"
+    assert rendered_shapes == [(1280, 2048)]
+    assert len(observed_templates) == 1
+    assert observed_templates[0].page_shape == canonical_shape
+    assert observed_templates[0].spatial.shape == (1280, 2048)
+
+
+def test_align_rejects_canonical_shape_over_40_megapixels_before_synthesis(
+    profile, monkeypatch
+):
+    monkeypatch.setattr(
+        synchronization_v2,
+        "synthesize_pilot_v2",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("oversized canonical shape reached pilot synthesis")
+        ),
+    )
+
+    with pytest.raises(ValueError, match="40-megapixel"):
+        align_page_v2(
+            np.zeros((1, 1, 3), dtype=np.uint8),
+            KEY,
+            0,
+            profile,
+            (5000, 8001),
+        )
 
 
 @pytest.mark.parametrize(
@@ -435,9 +539,15 @@ def test_alignment_caps_hypotheses_and_warps_only_one_winner(
 
 
 @pytest.mark.parametrize(
-    ("failure_stage", "expected_hypothesis_count"), [("pilot", 0), ("warp", 1)]
+    ("failure_stage", "expected_hypothesis_count"),
+    [
+        ("pilot_estimation", 0),
+        ("orb_estimation", 1),
+        ("geometry_validation", 1),
+        ("canonical_warp", 1),
+    ],
 )
-def test_opencv_exceptions_fail_closed(
+def test_opencv_runtime_failures_raise_typed_alignment_error(
     embedded_gradient,
     profile,
     monkeypatch,
@@ -447,25 +557,75 @@ def test_opencv_exceptions_fail_closed(
     def fail(*_args, **_kwargs):
         raise cv2.error(f"{failure_stage} failure")
 
-    if failure_stage == "pilot":
+    valid = GeometryHypothesisV2(np.eye(3), 1.0, "pilot")
+    orb_template = None
+    if failure_stage == "pilot_estimation":
         monkeypatch.setattr(synchronization_v2, "_pilot_hypotheses_v2", fail)
     else:
-        valid = GeometryHypothesisV2(np.eye(3), 1.0, "pilot")
         monkeypatch.setattr(
             synchronization_v2,
             "_pilot_hypotheses_v2",
             lambda *_args, **_kwargs: [valid],
         )
-        monkeypatch.setattr(cv2, "warpPerspective", fail)
+        if failure_stage == "orb_estimation":
+            orb_template = SyncTemplate(
+                embedded_gradient.shape[:2],
+                np.array(
+                    [[0, 0], [511, 0], [511, 383], [0, 383]], dtype=np.float32
+                ),
+                np.zeros((4, 32), dtype=np.uint8),
+            )
+            monkeypatch.setattr(synchronization_v2, "_orb_hypothesis_v2", fail)
+        elif failure_stage == "geometry_validation":
+            monkeypatch.setattr(
+                synchronization_v2, "_geometry_is_acceptable_v2", fail
+            )
+        else:
+            monkeypatch.setattr(cv2, "warpPerspective", fail)
+
+    runtime_error_type = getattr(
+        synchronization_v2, "AlignmentV2RuntimeError", None
+    )
+    assert runtime_error_type is not None
+    with pytest.raises(runtime_error_type) as captured:
+        align_page_v2(
+            embedded_gradient,
+            KEY,
+            0,
+            profile,
+            embedded_gradient.shape[:2],
+            orb_template=orb_template,
+        )
+
+    assert captured.value.stage == failure_stage
+    assert captured.value.hypothesis_count == expected_hypothesis_count
+    assert isinstance(captured.value.__cause__, cv2.error)
+
+
+def test_missing_orb_features_remain_ordinary_insufficient_evidence(
+    embedded_gradient, profile, monkeypatch
+):
+    monkeypatch.setattr(
+        synchronization_v2, "_pilot_hypotheses_v2", lambda *_args, **_kwargs: []
+    )
+    monkeypatch.setattr(
+        synchronization_v2, "_orb_hypothesis_v2", lambda *_args, **_kwargs: None
+    )
+    template = SyncTemplate(
+        embedded_gradient.shape[:2],
+        np.array([[0, 0], [511, 0], [511, 383], [0, 383]], dtype=np.float32),
+        np.zeros((4, 32), dtype=np.uint8),
+    )
 
     result = align_page_v2(
-        embedded_gradient, KEY, 0, profile, embedded_gradient.shape[:2]
+        embedded_gradient,
+        KEY,
+        0,
+        profile,
+        embedded_gradient.shape[:2],
+        orb_template=template,
     )
 
     assert result == AlignmentV2Result(
-        None,
-        None,
-        0.0,
-        expected_hypothesis_count,
-        "geometry_rejected",
+        None, None, 0.0, 0, "insufficient_sync_evidence"
     )
