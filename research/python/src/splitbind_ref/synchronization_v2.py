@@ -417,8 +417,13 @@ def _synthesize_geometry_pilot_v2(
     )
     if sample_scale == 1.0:
         sampled_frequencies = frequencies
-        sampled_phases = phases
-        sampled_amplitudes = amplitudes
+        spatial = _synthesize_spatial(
+            working_height,
+            working_width,
+            frequencies,
+            phases,
+            amplitudes,
+        )
     else:
         scale_x = working_width / canonical_width
         scale_y = working_height / canonical_height
@@ -426,22 +431,14 @@ def _synthesize_geometry_pilot_v2(
             (scale_x, scale_y), dtype=np.float64
         )
         sampled_frequencies = (unwrapped_frequencies + 0.5) % 1.0 - 0.5
-        source_center_offset = np.asarray(
-            (0.5 / scale_x - 0.5, 0.5 / scale_y - 0.5),
-            dtype=np.float64,
+        spatial = _synthesize_spatial(
+            working_height,
+            working_width,
+            frequencies,
+            phases,
+            amplitudes,
+            source_shape=canonical_shape,
         )
-        sampled_phases = phases + 2.0 * math.pi * (
-            frequencies @ source_center_offset
-        )
-        sampled_amplitudes = amplitudes * np.sinc(unwrapped_frequencies[:, 0])
-        sampled_amplitudes *= np.sinc(unwrapped_frequencies[:, 1])
-    spatial = _synthesize_spatial(
-        working_height,
-        working_width,
-        sampled_frequencies,
-        sampled_phases,
-        sampled_amplitudes,
-    )
     return _PilotGeometryTemplateV2(
         page_shape=canonical_shape,
         frequency_pairs=np.ascontiguousarray(
@@ -1385,7 +1382,18 @@ def _synthesize_spatial(
     frequencies: NDArray[np.float64],
     phases: NDArray[np.float64],
     amplitudes: NDArray[np.float64],
+    *,
+    source_shape: tuple[int, int] | None = None,
 ) -> NDArray[np.float64]:
+    if source_shape is not None:
+        return _synthesize_inter_area_view(
+            source_shape,
+            (height, width),
+            frequencies,
+            phases,
+            amplitudes,
+        )
+
     x = np.arange(width, dtype=np.float64)
     spatial = np.zeros((height, width), dtype=np.float64)
     two_pi = 2.0 * math.pi
@@ -1404,6 +1412,115 @@ def _synthesize_spatial(
         raise ValueError("derived pilot has zero or non-finite energy")
     spatial /= rms
     return spatial
+
+
+def _synthesize_inter_area_view(
+    source_shape: tuple[int, int],
+    output_shape: tuple[int, int],
+    frequencies: NDArray[np.float64],
+    phases: NDArray[np.float64],
+    amplitudes: NDArray[np.float64],
+) -> NDArray[np.float64]:
+    """Render the exact separable INTER_AREA view without a source raster."""
+
+    source_height, source_width = source_shape
+    output_height, output_width = output_shape
+    source_x = np.arange(source_width, dtype=np.float64)
+    source_y = np.arange(source_height, dtype=np.float64)
+    spatial = np.zeros((output_height, output_width), dtype=np.float64)
+    two_pi = 2.0 * math.pi
+
+    for (frequency_x, frequency_y), phase, amplitude in zip(
+        frequencies, phases, amplitudes, strict=True
+    ):
+        angle_x = two_pi * frequency_x * source_x
+        angle_y = two_pi * frequency_y * source_y
+        cosine_x = _resize_axis_inter_area(np.cos(angle_x), output_width, row=True)
+        sine_x = _resize_axis_inter_area(np.sin(angle_x), output_width, row=True)
+        cosine_y = _resize_axis_inter_area(np.cos(angle_y), output_height, row=False)
+        sine_y = _resize_axis_inter_area(np.sin(angle_y), output_height, row=False)
+        cosine_phase = math.cos(float(phase))
+        sine_phase = math.sin(float(phase))
+
+        for start in range(0, output_height, _SYNTHESIS_ROW_CHUNK):
+            stop = min(output_height, start + _SYNTHESIS_ROW_CHUNK)
+            cosine_sum = cosine_y[start:stop, None] * cosine_x[None, :]
+            cosine_sum -= sine_y[start:stop, None] * sine_x[None, :]
+            sine_sum = sine_y[start:stop, None] * cosine_x[None, :]
+            sine_sum += cosine_y[start:stop, None] * sine_x[None, :]
+            spatial[start:stop] += float(amplitude) * (
+                cosine_phase * cosine_sum - sine_phase * sine_sum
+            )
+
+    canonical_mean, canonical_rms = _canonical_spatial_statistics(
+        source_shape, frequencies, phases, amplitudes
+    )
+    spatial -= canonical_mean
+    spatial /= canonical_rms
+    return spatial
+
+
+def _resize_axis_inter_area(
+    values: NDArray[np.float64], output_length: int, *, row: bool
+) -> NDArray[np.float64]:
+    source = values[None, :] if row else values[:, None]
+    size = (output_length, 1) if row else (1, output_length)
+    return cv2.resize(source, size, interpolation=cv2.INTER_AREA).reshape(-1)
+
+
+def _canonical_spatial_statistics(
+    shape: tuple[int, int],
+    frequencies: NDArray[np.float64],
+    phases: NDArray[np.float64],
+    amplitudes: NDArray[np.float64],
+) -> tuple[float, float]:
+    """Return the exact discrete mean and centered RMS of the source pilot."""
+
+    height, width = shape
+
+    def complex_mean(frequency_x: float, frequency_y: float, phase: float) -> complex:
+        return (
+            np.exp(1j * phase)
+            * _finite_exponential_mean(width, frequency_x)
+            * _finite_exponential_mean(height, frequency_y)
+        )
+
+    mean = 0.0
+    mean_square = 0.0
+    for frequency_i, phase_i, amplitude_i in zip(
+        frequencies, phases, amplitudes, strict=True
+    ):
+        mean += float(amplitude_i) * complex_mean(
+            float(frequency_i[0]), float(frequency_i[1]), float(phase_i)
+        ).real
+        for frequency_j, phase_j, amplitude_j in zip(
+            frequencies, phases, amplitudes, strict=True
+        ):
+            difference = complex_mean(
+                float(frequency_i[0] - frequency_j[0]),
+                float(frequency_i[1] - frequency_j[1]),
+                float(phase_i - phase_j),
+            ).real
+            total = complex_mean(
+                float(frequency_i[0] + frequency_j[0]),
+                float(frequency_i[1] + frequency_j[1]),
+                float(phase_i + phase_j),
+            ).real
+            mean_square += (
+                0.5 * float(amplitude_i) * float(amplitude_j) * (difference + total)
+            )
+
+    variance = mean_square - mean * mean
+    rms = math.sqrt(max(0.0, variance))
+    if not math.isfinite(rms) or rms <= 0.0:
+        raise ValueError("derived pilot has zero or non-finite energy")
+    return mean, rms
+
+
+def _finite_exponential_mean(length: int, frequency: float) -> complex:
+    amplitude = np.sinc(length * frequency) / np.sinc(frequency)
+    phase = math.pi * frequency * (length - 1)
+    return complex(amplitude * np.exp(1j * phase))
 
 
 def _bounded_scoring_views(

@@ -132,6 +132,8 @@ def test_pilot_recovers_centered_crop_25(embedded_gradient, profile):
     [
         (0.51, 0.0),
         (-0.51, 0.0),
+        (0.0, 0.51),
+        (0.0, -0.51),
         (0.60, 0.0),
         (-0.60, 0.0),
         (0.0, 0.60),
@@ -301,6 +303,33 @@ def test_align_uses_direct_bounded_pilot_at_exact_40_megapixels(
     assert len(observed_templates) == 1
     assert observed_templates[0].page_shape == canonical_shape
     assert observed_templates[0].spatial.shape == (1280, 2048)
+
+
+def test_direct_bounded_pilot_preserves_inter_area_amplitude(profile):
+    canonical_shape = (1001, 3001)
+    sample_scale = synchronization_v2._geometry_sample_scale(
+        canonical_shape, canonical_shape
+    )
+    canonical = synthesize_pilot_v2(canonical_shape, KEY, 0, profile)
+    direct = synchronization_v2._synthesize_geometry_pilot_v2(
+        canonical_shape, sample_scale, KEY, 0, profile
+    )
+    resized = cv2.resize(
+        canonical.spatial,
+        (direct.spatial.shape[1], direct.spatial.shape[0]),
+        interpolation=cv2.INTER_AREA,
+    )
+
+    resized_rms = float(np.sqrt(np.mean(resized * resized, dtype=np.float64)))
+    direct_rms = float(
+        np.sqrt(np.mean(direct.spatial * direct.spatial, dtype=np.float64))
+    )
+    correlation = float(
+        np.corrcoef(resized.reshape(-1), direct.spatial.reshape(-1))[0, 1]
+    )
+
+    assert direct_rms == pytest.approx(resized_rms, rel=1e-6, abs=1e-9)
+    assert correlation >= 0.999999
 
 
 def test_align_rejects_canonical_shape_over_40_megapixels_before_synthesis(
