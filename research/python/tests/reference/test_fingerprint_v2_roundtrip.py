@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from uuid import UUID
 
 import numpy as np
@@ -57,7 +58,9 @@ def test_v2_roundtrip_on_gradient_has_no_orb_dependency(gradient_page, profile):
         profile,
     )
 
-    decoded = decode_fingerprint_v2(embedded.image, KEY, PAGE_INDEX, (profile,))
+    decoded = decode_fingerprint_v2(
+        embedded.image, KEY, PAGE_INDEX, gradient_page.shape[:2], (profile,)
+    )
 
     assert decoded.status == "decoded"
     assert decoded.issuance_id == ISSUANCE_ID
@@ -76,7 +79,9 @@ def test_every_v2_candidate_has_a_clean_public_roundtrip(
         profile,
     )
 
-    decoded = decode_fingerprint_v2(embedded.image, KEY, PAGE_INDEX, (profile,))
+    decoded = decode_fingerprint_v2(
+        embedded.image, KEY, PAGE_INDEX, all_candidate_page.shape[:2], (profile,)
+    )
 
     assert decoded.status == "decoded"
     assert decoded.issuance_id == ISSUANCE_ID
@@ -110,7 +115,9 @@ def test_embedding_and_decoding_do_not_mutate_their_uint8_inputs(gradient_page, 
     )
     embedded_before_decode = embedded.image.copy()
 
-    decode_fingerprint_v2(embedded.image, KEY, PAGE_INDEX, (profile,))
+    decode_fingerprint_v2(
+        embedded.image, KEY, PAGE_INDEX, gradient_page.shape[:2], (profile,)
+    )
 
     np.testing.assert_array_equal(gradient_page, original)
     np.testing.assert_array_equal(embedded.image, embedded_before_decode)
@@ -128,9 +135,15 @@ def test_wrong_key_page_and_profile_never_attribute(gradient_page, profile):
     profiles = load_v2_profiles()
 
     decisions = (
-        decode_fingerprint_v2(embedded.image, b"w" * 32, PAGE_INDEX, (profile,)),
-        decode_fingerprint_v2(embedded.image, KEY, PAGE_INDEX + 1, (profile,)),
-        decode_fingerprint_v2(embedded.image, KEY, PAGE_INDEX, (profiles[4],)),
+        decode_fingerprint_v2(
+            embedded.image, b"w" * 32, PAGE_INDEX, gradient_page.shape[:2], (profile,)
+        ),
+        decode_fingerprint_v2(
+            embedded.image, KEY, PAGE_INDEX + 1, gradient_page.shape[:2], (profile,)
+        ),
+        decode_fingerprint_v2(
+            embedded.image, KEY, PAGE_INDEX, gradient_page.shape[:2], (profiles[4],)
+        ),
     )
 
     assert all(decision.issuance_id is None for decision in decisions)
@@ -140,7 +153,9 @@ def test_wrong_key_page_and_profile_never_attribute(gradient_page, profile):
 def test_non_decoded_clean_negative_never_exposes_an_issuance_id(gradient_page, profile):
     negative = np.zeros_like(gradient_page)
 
-    decision = decode_fingerprint_v2(negative, KEY, PAGE_INDEX, (profile,))
+    decision = decode_fingerprint_v2(
+        negative, KEY, PAGE_INDEX, gradient_page.shape[:2], (profile,)
+    )
 
     assert decision.status == "insufficient_sync_evidence"
     assert decision.issuance_id is None
@@ -160,4 +175,91 @@ def test_public_v2_facade_rejects_non_uint8_bgr_pages(page, profile):
             page,
             FingerprintV2Context(ISSUANCE_ID, KEY, PAGE_INDEX),
             profile,
+        )
+
+
+@pytest.mark.parametrize(
+    "canonical_shape",
+    ((0, 2304), (1536, 0), (5000, 8001), (True, 2304)),
+)
+def test_decode_rejects_invalid_canonical_canvas_metadata(
+    gradient_page, profile, canonical_shape
+):
+    with pytest.raises(ValueError, match="canonical_shape"):
+        decode_fingerprint_v2(
+            gradient_page, KEY, PAGE_INDEX, canonical_shape, (profile,)
+        )
+
+
+def test_wrong_canonical_canvas_never_attributes_or_mutates_input(gradient_page, profile):
+    original = gradient_page.copy()
+    embedded = embed_fingerprint_v2(
+        gradient_page,
+        FingerprintV2Context(ISSUANCE_ID, KEY, PAGE_INDEX),
+        profile,
+    )
+    before_decode = embedded.image.copy()
+
+    decision = decode_fingerprint_v2(
+        embedded.image, KEY, PAGE_INDEX, (1536, 3072), (profile,)
+    )
+
+    assert decision.issuance_id is None
+    assert decision.status != "decoded"
+    np.testing.assert_array_equal(gradient_page, original)
+    np.testing.assert_array_equal(embedded.image, before_decode)
+
+
+@pytest.mark.parametrize(
+    "mutated",
+    (
+        lambda profile: replace(profile, bit_confidence_min=0.61),
+        lambda profile: replace(profile, pilot_score_min=0.21),
+    ),
+)
+def test_decode_rejects_noncanonical_profile_before_alignment(
+    gradient_page, profile, mutated, monkeypatch
+):
+    def forbidden_alignment(*_args, **_kwargs):
+        raise AssertionError("noncanonical profiles must fail before alignment")
+
+    monkeypatch.setattr("splitbind_ref.fingerprint_v2.align_page_v2", forbidden_alignment)
+
+    with pytest.raises(ValueError, match="frozen V2 grid"):
+        decode_fingerprint_v2(
+            gradient_page,
+            KEY,
+            PAGE_INDEX,
+            gradient_page.shape[:2],
+            (mutated(profile),),
+        )
+
+
+def test_noncanonical_profile_is_rejected_before_page_contiguity_allocation(
+    gradient_page, profile, monkeypatch
+):
+    noncanonical = replace(profile, bit_confidence_min=0.61)
+    noncontiguous = gradient_page[:, ::2, :]
+
+    def forbidden_contiguous_copy(*_args, **_kwargs):
+        raise AssertionError("noncanonical profile reached page allocation")
+
+    monkeypatch.setattr(
+        "splitbind_ref.fingerprint_v2.np.ascontiguousarray",
+        forbidden_contiguous_copy,
+    )
+
+    with pytest.raises(ValueError, match="frozen V2 grid"):
+        embed_fingerprint_v2(
+            noncontiguous,
+            FingerprintV2Context(ISSUANCE_ID, KEY, PAGE_INDEX),
+            noncanonical,
+        )
+    with pytest.raises(ValueError, match="frozen V2 grid"):
+        decode_fingerprint_v2(
+            noncontiguous,
+            KEY,
+            PAGE_INDEX,
+            gradient_page.shape[:2],
+            (noncanonical,),
         )

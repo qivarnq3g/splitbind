@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 from dataclasses import dataclass
+from itertools import islice
 from typing import Iterable, Literal
 from uuid import UUID
 
@@ -15,7 +16,11 @@ from splitbind_bench.metrics import compute_quality_metrics
 
 from .ecc import EccDecodeError, decode_ecc_with_erasures, encode_ecc
 from .fingerprint_v2_codec import CodewordEvidence, embed_codeword_v2, extract_codeword_v2
-from .fingerprint_v2_profile import FingerprintV2Profile, candidate_identifier_v2
+from .fingerprint_v2_profile import (
+    FingerprintV2Profile,
+    candidate_identifier_v2,
+    load_v2_profiles,
+)
 from .payload import decode_payload, encode_payload
 from .synchronization_v2 import align_page_v2, embed_pilot_v2, synthesize_pilot_v2
 from .tile_layout_v2 import derive_tiles_v2
@@ -72,9 +77,9 @@ def embed_fingerprint_v2(
 ) -> EmbeddedPageV2:
     """Embed the V2 pilot then replicated payload with one final BT.601 raster pass."""
 
-    page = _validate_page(page_bgr)
     validated_context = _validate_context(context)
-    _validate_profile(profile)
+    _validate_canonical_profile(profile)
+    page = _validate_page(page_bgr)
     tiles = derive_tiles_v2(
         page.shape[:2],
         validated_context.fingerprint_key,
@@ -120,6 +125,7 @@ def decode_fingerprint_v2(
     page_bgr: NDArray[np.uint8],
     key: bytes,
     page_index: int,
+    canonical_shape: tuple[int, int],
     profiles: Iterable[FingerprintV2Profile],
 ) -> DecodeV2Decision:
     """Return attribution only after candidate-local CRC-valid tile quorum.
@@ -129,10 +135,11 @@ def decode_fingerprint_v2(
     ``execution_error`` rows.
     """
 
-    page = _validate_page(page_bgr)
     _validate_key(key)
     _validate_page_index(page_index)
+    canonical_canvas = _validate_canonical_shape(canonical_shape)
     candidates = _validate_profiles(profiles)
+    page = _validate_page(page_bgr)
 
     votes: list[_PayloadVoteV2] = []
     geometry_scores: list[float] = []
@@ -140,9 +147,7 @@ def decode_fingerprint_v2(
     saw_geometry_rejection = False
 
     for profile in candidates:
-        alignment = align_page_v2(
-            page, key, page_index, profile, page.shape[:2]
-        )
+        alignment = align_page_v2(page, key, page_index, profile, canonical_canvas)
         geometry_scores.append(alignment.pilot_score)
         if alignment.reason == "geometry_rejected":
             saw_geometry_rejection = True
@@ -222,6 +227,17 @@ def _decide_payload_votes(
             if len(supporting) >= 2 and support >= _CANDIDATE_SUPPORT_THRESHOLD:
                 eligible.append(group)
 
+    observed_issuances = {vote.issuance_id for vote in unique.values()}
+    if len(observed_issuances) != 1:
+        strongest = max(support_groups, key=lambda group: (group[2], len(group[3])))
+        return DecodeV2Decision(
+            None,
+            strongest[2],
+            len(strongest[3]),
+            _mean_bit_error_rate(strongest[3]),
+            "partial_payload_evidence",
+        )
+
     if not eligible:
         strongest = max(support_groups, key=lambda group: (group[2], len(group[3])))
         return DecodeV2Decision(
@@ -232,18 +248,7 @@ def _decide_payload_votes(
             "partial_payload_evidence",
         )
 
-    eligible_issuances = {group[1] for group in eligible}
-    if len(eligible_issuances) != 1:
-        strongest = max(eligible, key=lambda group: (group[2], len(group[3])))
-        return DecodeV2Decision(
-            None,
-            strongest[2],
-            len(strongest[3]),
-            _mean_bit_error_rate(strongest[3]),
-            "partial_payload_evidence",
-        )
-
-    issuance_id = next(iter(eligible_issuances))
+    issuance_id = next(iter(observed_issuances))
     winning = [group for group in eligible if group[1] == issuance_id]
     winner = max(winning, key=lambda group: (group[2], len(group[3])))
     return DecodeV2Decision(
@@ -327,13 +332,13 @@ def _validate_context(context: object) -> FingerprintV2Context:
 
 
 def _validate_profiles(profiles: Iterable[FingerprintV2Profile]) -> tuple[FingerprintV2Profile, ...]:
-    supplied = tuple(profiles)
+    supplied = tuple(islice(profiles, _MAX_PROFILES + 1))
     if not supplied:
         raise ValueError("profiles must contain at least one V2 candidate")
     if len(supplied) > _MAX_PROFILES:
         raise ValueError("profiles must contain at most 16 V2 candidates")
     for profile in supplied:
-        _validate_profile(profile)
+        _validate_canonical_profile(profile)
     identifiers = [candidate_identifier_v2(profile) for profile in supplied]
     if len(set(identifiers)) != len(identifiers):
         raise ValueError("profiles contain a duplicate candidate identifier")
@@ -355,6 +360,30 @@ def _validate_profile(profile: object) -> None:
     if profile.payload_repetitions <= 0 or profile.payload_repetitions > profile.tiles_per_page:
         raise ValueError("profile payload_repetitions must fit tiles_per_page")
     candidate_identifier_v2(profile)
+
+
+def _validate_canonical_profile(profile: object) -> None:
+    _validate_profile(profile)
+    if profile not in load_v2_profiles():
+        raise ValueError("profile must be an exact profile from the frozen V2 grid")
+
+
+def _validate_canonical_shape(canonical_shape: object) -> tuple[int, int]:
+    if not isinstance(canonical_shape, (tuple, list)) or len(canonical_shape) != 2:
+        raise ValueError("canonical_shape must contain positive (height, width) integers")
+    height, width = canonical_shape
+    if (
+        isinstance(height, bool)
+        or isinstance(width, bool)
+        or not isinstance(height, (int, np.integer))
+        or not isinstance(width, (int, np.integer))
+        or height <= 0
+        or width <= 0
+    ):
+        raise ValueError("canonical_shape must contain positive (height, width) integers")
+    if height * width > _MAX_PAGE_PIXELS:
+        raise ValueError("canonical_shape exceeds the 40-megapixel processing ceiling")
+    return int(height), int(width)
 
 
 def _validate_key(key: object) -> None:

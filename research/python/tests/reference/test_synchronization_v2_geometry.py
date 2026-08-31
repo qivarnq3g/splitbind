@@ -535,6 +535,30 @@ def test_geometry_gate_accepts_small_projective_residual_within_three_pixels():
     )
 
 
+def test_pure_resize_snap_never_discards_a_projective_residual():
+    source_shape = (300, 400)
+    canonical_shape = (600, 800)
+    exact_resize = np.array(
+        [[2.0, 0.0, 0.5], [0.0, 2.0, 0.5], [0.0, 0.0, 1.0]],
+        dtype=np.float64,
+    )
+    projective_resize = exact_resize.copy()
+    projective_resize[2, 0] = 1e-6
+
+    np.testing.assert_array_equal(
+        synchronization_v2._snap_pure_resize_homography(
+            exact_resize, source_shape, canonical_shape
+        ),
+        exact_resize,
+    )
+    np.testing.assert_array_equal(
+        synchronization_v2._snap_pure_resize_homography(
+            projective_resize, source_shape, canonical_shape
+        ),
+        projective_resize,
+    )
+
+
 @pytest.mark.parametrize(
     "matrix",
     [
@@ -652,6 +676,41 @@ def test_alignment_caps_hypotheses_and_warps_only_one_winner(
     assert result.reason == "aligned"
     assert result.hypothesis_count == 4
     assert warp_calls == 1
+
+
+def test_orb_hypothesis_never_receives_the_pure_resize_snap(
+    embedded_gradient, profile, monkeypatch
+):
+    attacked = cv2.resize(embedded_gradient, (256, 192), interpolation=cv2.INTER_AREA)
+    near_resize = np.array(
+        [[1.9996, 0.0, 0.5], [0.0, 1.9996, 0.5], [0.0, 0.0, 1.0]],
+        dtype=np.float64,
+    )
+    orb = GeometryHypothesisV2(near_resize, 1.0, "orb")
+    template = SyncTemplate(
+        embedded_gradient.shape[:2],
+        np.array([[0, 0], [511, 0], [511, 383], [0, 383]], dtype=np.float32),
+        np.zeros((4, 32), dtype=np.uint8),
+    )
+    monkeypatch.setattr(
+        synchronization_v2, "_pilot_hypotheses_v2", lambda *_args, **_kwargs: []
+    )
+    monkeypatch.setattr(
+        synchronization_v2, "_orb_hypothesis_v2", lambda *_args, **_kwargs: orb
+    )
+
+    result = align_page_v2(
+        attacked,
+        KEY,
+        0,
+        profile,
+        embedded_gradient.shape[:2],
+        orb_template=template,
+    )
+
+    assert result.reason == "aligned"
+    assert result.homography is not None
+    np.testing.assert_array_equal(result.homography, near_resize)
 
 
 @pytest.mark.parametrize(

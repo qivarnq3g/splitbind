@@ -53,6 +53,10 @@ _MAX_SIMILARITY_REPROJECTION_RMSE_PX = 3.0
 _MIN_CORNER_COVERAGE = 0.20
 _MAX_CORNER_AREA_RATIO = 5.0
 _CORNER_MARGIN_FRACTION = 0.65
+_PURE_RESIZE_SCALE_TOLERANCE = 5e-4
+_PURE_RESIZE_SHEAR_TOLERANCE = 1e-4
+_PURE_RESIZE_TRANSLATION_TOLERANCE_PX = 0.5
+_PURE_RESIZE_PERSPECTIVE_TOLERANCE = 1e-12
 
 
 class AlignmentV2RuntimeError(RuntimeError):
@@ -252,6 +256,10 @@ def align_page_v2(
     if not math.isfinite(divisor) or abs(divisor) <= 1e-12:
         return AlignmentV2Result(None, None, 0.0, hypothesis_count, "geometry_rejected")
     matrix = matrix / divisor
+    if winner.source == "pilot":
+        matrix = _snap_pure_resize_homography(
+            matrix, page.shape[:2], (canonical_height, canonical_width)
+        )
     try:
         aligned = cv2.warpPerspective(
             page,
@@ -271,6 +279,47 @@ def align_page_v2(
         hypothesis_count=hypothesis_count,
         reason="aligned",
     )
+
+
+def _snap_pure_resize_homography(
+    homography: NDArray[np.float64],
+    source_shape: tuple[int, int],
+    canonical_shape: tuple[int, int],
+) -> NDArray[np.float64]:
+    """Use the exact OpenCV pixel-center inverse for a pilot-confirmed resize."""
+
+    source_height, source_width = source_shape
+    canonical_height, canonical_width = canonical_shape
+    scale_x = canonical_width / source_width
+    scale_y = canonical_height / source_height
+    if (
+        source_shape == canonical_shape
+        or not math.isclose(scale_x, scale_y, rel_tol=1e-12, abs_tol=0.0)
+    ):
+        return homography
+
+    expected = np.array(
+        [
+            [scale_x, 0.0, (scale_x - 1.0) / 2.0],
+            [0.0, scale_y, (scale_y - 1.0) / 2.0],
+            [0.0, 0.0, 1.0],
+        ],
+        dtype=np.float64,
+    )
+    if (
+        abs(float(homography[0, 0]) - scale_x) > _PURE_RESIZE_SCALE_TOLERANCE
+        or abs(float(homography[1, 1]) - scale_y) > _PURE_RESIZE_SCALE_TOLERANCE
+        or abs(float(homography[0, 1])) > _PURE_RESIZE_SHEAR_TOLERANCE
+        or abs(float(homography[1, 0])) > _PURE_RESIZE_SHEAR_TOLERANCE
+        or abs(float(homography[2, 0])) > _PURE_RESIZE_PERSPECTIVE_TOLERANCE
+        or abs(float(homography[2, 1])) > _PURE_RESIZE_PERSPECTIVE_TOLERANCE
+        or abs(float(homography[0, 2]) - expected[0, 2])
+        > _PURE_RESIZE_TRANSLATION_TOLERANCE_PX
+        or abs(float(homography[1, 2]) - expected[1, 2])
+        > _PURE_RESIZE_TRANSLATION_TOLERANCE_PX
+    ):
+        return homography
+    return expected
 
 
 def synthesize_pilot_v2(

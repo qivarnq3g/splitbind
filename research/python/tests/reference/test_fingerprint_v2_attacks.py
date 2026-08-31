@@ -71,16 +71,17 @@ def test_real_v2_attack_paths_never_make_a_false_attribution(
 ):
     artifact = apply_attack(embedded_gradient.image, attack, np.random.default_rng(20260831))
 
-    decision = decode_fingerprint_v2(artifact.image, KEY, PAGE_INDEX, (profile,))
+    decision = decode_fingerprint_v2(
+        artifact.image,
+        KEY,
+        PAGE_INDEX,
+        embedded_gradient.image.shape[:2],
+        (profile,),
+    )
 
-    assert decision.issuance_id in (None, ISSUANCE_ID)
-    assert decision.status in {
-        "decoded",
-        "partial_payload_evidence",
-        "payload_not_detected",
-        "insufficient_sync_evidence",
-        "geometry_rejected",
-    }
+    assert decision.status == "decoded"
+    assert decision.issuance_id == ISSUANCE_ID
+    assert decision.valid_votes >= 2
 
 
 def _identity_alignment(page, *_args, **_kwargs):
@@ -97,7 +98,9 @@ def test_aligned_negative_with_no_crc_valid_payload_is_not_detected(profile, mon
     monkeypatch.setattr(fingerprint_v2, "align_page_v2", _identity_alignment)
     page = _gradient_page()
 
-    decision = decode_fingerprint_v2(page, KEY, PAGE_INDEX, (profile,))
+    decision = decode_fingerprint_v2(
+        page, KEY, PAGE_INDEX, page.shape[:2], (profile,)
+    )
 
     assert decision == fingerprint_v2.DecodeV2Decision(
         issuance_id=None,
@@ -125,7 +128,10 @@ def test_one_crc_valid_tile_is_partial_payload_evidence(profile, monkeypatch):
 
     monkeypatch.setattr(fingerprint_v2, "extract_codeword_v2", extract_one_valid)
 
-    decision = decode_fingerprint_v2(_gradient_page(), KEY, PAGE_INDEX, (profile,))
+    page = _gradient_page()
+    decision = decode_fingerprint_v2(
+        page, KEY, PAGE_INDEX, page.shape[:2], (profile,)
+    )
 
     assert decision.status == "partial_payload_evidence"
     assert decision.issuance_id is None
@@ -144,7 +150,10 @@ def test_conflicting_candidate_local_quorums_fail_closed(monkeypatch):
 
     monkeypatch.setattr(fingerprint_v2, "extract_codeword_v2", extract_conflicting)
 
-    decision = decode_fingerprint_v2(_gradient_page(), KEY, PAGE_INDEX, (first, second))
+    page = _gradient_page()
+    decision = decode_fingerprint_v2(
+        page, KEY, PAGE_INDEX, page.shape[:2], (first, second)
+    )
 
     assert decision.status == "partial_payload_evidence"
     assert decision.issuance_id is None
@@ -157,7 +166,10 @@ def test_geometry_rejection_is_the_only_safety_rejection_status(profile, monkeyp
 
     monkeypatch.setattr(fingerprint_v2, "align_page_v2", rejected)
 
-    decision = decode_fingerprint_v2(_gradient_page(), KEY, PAGE_INDEX, (profile,))
+    page = _gradient_page()
+    decision = decode_fingerprint_v2(
+        page, KEY, PAGE_INDEX, page.shape[:2], (profile,)
+    )
 
     assert decision.status == "geometry_rejected"
     assert decision.issuance_id is None
@@ -171,7 +183,8 @@ def test_alignment_runtime_errors_propagate_for_execution_error_mapping(profile,
     monkeypatch.setattr(fingerprint_v2, "align_page_v2", runtime_failure)
 
     with pytest.raises(AlignmentV2RuntimeError, match="canonical_warp"):
-        decode_fingerprint_v2(_gradient_page(), KEY, PAGE_INDEX, (profile,))
+        page = _gradient_page()
+        decode_fingerprint_v2(page, KEY, PAGE_INDEX, page.shape[:2], (profile,))
 
 
 def test_decoder_aligns_once_per_unique_candidate_and_honors_repetition_cap(
@@ -192,7 +205,10 @@ def test_decoder_aligns_once_per_unique_candidate_and_honors_repetition_cap(
     monkeypatch.setattr(fingerprint_v2, "align_page_v2", record_alignment)
     monkeypatch.setattr(fingerprint_v2, "extract_codeword_v2", record_extraction)
 
-    decision = decode_fingerprint_v2(_gradient_page(), KEY, PAGE_INDEX, (profile, second))
+    page = _gradient_page()
+    decision = decode_fingerprint_v2(
+        page, KEY, PAGE_INDEX, page.shape[:2], (profile, second)
+    )
 
     assert decision.status == "payload_not_detected"
     assert alignments == [profile, second]
@@ -205,6 +221,110 @@ def test_decoder_rejects_duplicate_or_more_than_sixteen_profiles(profile):
     page = np.zeros((384, 512, 3), dtype=np.uint8)
 
     with pytest.raises(ValueError, match="duplicate candidate"):
-        decode_fingerprint_v2(page, KEY, PAGE_INDEX, (profile, profile))
+        decode_fingerprint_v2(page, KEY, PAGE_INDEX, page.shape[:2], (profile, profile))
     with pytest.raises(ValueError, match="at most 16"):
-        decode_fingerprint_v2(page, KEY, PAGE_INDEX, (*load_v2_profiles(), profile))
+        decode_fingerprint_v2(
+            page, KEY, PAGE_INDEX, page.shape[:2], (*load_v2_profiles(), profile)
+        )
+
+
+def test_conflicting_crc_valid_votes_within_one_candidate_fail_closed(profile, monkeypatch):
+    codewords = (
+        encode_ecc(encode_payload(ISSUANCE_ID)),
+        encode_ecc(encode_payload(ISSUANCE_ID)),
+        encode_ecc(encode_payload(OTHER_ISSUANCE_ID)),
+    )
+    calls = 0
+    monkeypatch.setattr(fingerprint_v2, "align_page_v2", _identity_alignment)
+
+    def extract_conflict_within_candidate(*_args, **_kwargs):
+        nonlocal calls
+        codeword = codewords[calls]
+        calls += 1
+        return CodewordEvidence(codeword, (), 0.8, 0.1)
+
+    monkeypatch.setattr(
+        fingerprint_v2, "extract_codeword_v2", extract_conflict_within_candidate
+    )
+    page = _gradient_page()
+
+    decision = decode_fingerprint_v2(
+        page, KEY, PAGE_INDEX, page.shape[:2], (profile,)
+    )
+
+    assert decision.status == "partial_payload_evidence"
+    assert decision.issuance_id is None
+    assert decision.valid_votes == 2
+
+
+def test_minority_conflict_across_candidates_fails_closed(monkeypatch):
+    first, second = load_v2_profiles()[0], load_v2_profiles()[4]
+    first_codeword = encode_ecc(encode_payload(ISSUANCE_ID))
+    second_codeword = encode_ecc(encode_payload(OTHER_ISSUANCE_ID))
+    calls: Counter[object] = Counter()
+    monkeypatch.setattr(fingerprint_v2, "align_page_v2", _identity_alignment)
+
+    def extract_minority_conflict(_tile, _key, _page_index, profile):
+        calls[profile] += 1
+        if profile == first:
+            return CodewordEvidence(first_codeword, (), 0.8, 0.1)
+        if calls[profile] == 1:
+            return CodewordEvidence(second_codeword, (), 0.8, 0.1)
+        return CodewordEvidence(bytes(39), (), 0.8, 0.1)
+
+    monkeypatch.setattr(fingerprint_v2, "extract_codeword_v2", extract_minority_conflict)
+    page = _gradient_page()
+
+    decision = decode_fingerprint_v2(
+        page, KEY, PAGE_INDEX, page.shape[:2], (first, second)
+    )
+
+    assert decision.status == "partial_payload_evidence"
+    assert decision.issuance_id is None
+    assert decision.valid_votes == first.payload_repetitions
+
+
+def test_decoder_bounded_infinite_profile_iterator_stops_after_seventeen_values(profile):
+    page = np.zeros((384, 512, 3), dtype=np.uint8)
+    yielded = 0
+
+    def infinite_profiles():
+        nonlocal yielded
+        while True:
+            yielded += 1
+            yield profile
+
+    with pytest.raises(ValueError, match="at most 16"):
+        decode_fingerprint_v2(page, KEY, PAGE_INDEX, page.shape[:2], infinite_profiles())
+    assert yielded == 17
+
+
+def test_exact_full_canonical_grid_aligns_once_and_keeps_votes_candidate_local(
+    monkeypatch,
+):
+    profiles = load_v2_profiles()
+    codeword = encode_ecc(encode_payload(ISSUANCE_ID))
+    aligned: list[object] = []
+
+    def record_alignment(page, _key, _page_index, profile, canonical_shape):
+        aligned.append(profile)
+        return _identity_alignment(page)
+
+    def only_first_candidate_votes(_tile, _key, _page_index, profile):
+        payload = codeword if profile == profiles[0] else bytes(39)
+        return CodewordEvidence(payload, (), 0.8, 0.1)
+
+    monkeypatch.setattr(fingerprint_v2, "align_page_v2", record_alignment)
+    monkeypatch.setattr(
+        fingerprint_v2, "extract_codeword_v2", only_first_candidate_votes
+    )
+    page = np.zeros((1536, 3072, 3), dtype=np.uint8)
+
+    decision = decode_fingerprint_v2(
+        page, KEY, PAGE_INDEX, page.shape[:2], profiles
+    )
+
+    assert decision.status == "decoded"
+    assert decision.issuance_id == ISSUANCE_ID
+    assert decision.valid_votes == profiles[0].payload_repetitions
+    assert aligned == list(profiles)
