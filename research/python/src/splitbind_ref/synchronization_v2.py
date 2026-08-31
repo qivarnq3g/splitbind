@@ -6,12 +6,21 @@ import hashlib
 import hmac
 import math
 from dataclasses import dataclass
+from typing import Literal
 
 import cv2
 import numpy as np
 from numpy.typing import NDArray
 
 from .fingerprint_v2_profile import FingerprintV2Profile, candidate_identifier_v2
+from .synchronization import (
+    SyncTemplate,
+    _detect,
+    _geometry_is_acceptable,
+    _to_gray,
+    _validate_page,
+    validate_sync_template,
+)
 
 
 _MAX_PAGE_PIXELS = 40_000_000
@@ -24,6 +33,43 @@ _FFT_LONG_EDGE_MAX = 2048
 _SEED_DOMAIN = b"splitbind-v2-sync-pilot\x00"
 _STREAM_DOMAIN = b"splitbind-v2-sync-pilot-stream\x00"
 _SYNTHESIS_ROW_CHUNK = 256
+_LOG_POLAR_SIZE = (512, 720)
+_LOG_POLAR_SPECTRUM_SIDE = 512
+_LOG_POLAR_RADIUS_MIN = 0.04
+_LOG_POLAR_RADIUS_MAX = 0.30
+_LOG_POLAR_PEAK_LIMIT = 32
+_LOG_POLAR_NMS_RADIUS_PX = 2
+_PILOT_FREQUENCY_RADIUS = 0.02
+_FREQUENCY_PEAK_RADIUS_PX = 5
+_SCALE_MIN = 0.45
+_SCALE_MAX = 1.60
+_ROTATION_MIN_DEGREES = -8.0
+_ROTATION_MAX_DEGREES = 8.0
+_TRANSLATION_FRACTION_MAX = 0.60
+_MAX_PILOT_HYPOTHESES = 3
+_MAX_HOMOGRAPHY_CONDITION = 100.0
+_MAX_SIMILARITY_REPROJECTION_RMSE_PX = 3.0
+_MIN_CORNER_COVERAGE = 0.20
+_MAX_CORNER_AREA_RATIO = 5.0
+_CORNER_MARGIN_FRACTION = 0.65
+
+
+@dataclass(frozen=True, slots=True)
+class GeometryHypothesisV2:
+    homography: NDArray[np.float64]
+    pilot_score: float
+    source: Literal["pilot", "orb"]
+
+
+@dataclass(frozen=True, slots=True)
+class AlignmentV2Result:
+    image: NDArray[np.uint8] | None
+    homography: NDArray[np.float64] | None
+    pilot_score: float
+    hypothesis_count: int
+    reason: Literal[
+        "aligned", "insufficient_sync_evidence", "geometry_rejected"
+    ]
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +109,118 @@ class PilotTemplateV2:
         object.__setattr__(self, "page_shape", (height, width))
         object.__setattr__(self, "frequency_pairs", frequency_copy)
         object.__setattr__(self, "spatial", spatial_copy)
+
+
+def align_page_v2(
+    page_bgr: NDArray[np.uint8],
+    key: bytes,
+    page_index: int,
+    profile: FingerprintV2Profile,
+    canonical_shape: tuple[int, int],
+    orb_template: SyncTemplate | None = None,
+) -> AlignmentV2Result:
+    """Map one attacked page to the canonical V2 canvas using bounded evidence."""
+
+    page = _validate_page(page_bgr)
+    canonical_height, canonical_width = _validate_page_shape(canonical_shape)
+    _validate_pixel_ceiling(canonical_height, canonical_width)
+    _validate_key(key)
+    _validate_page_index(page_index)
+    _validate_profile(profile)
+    validated_orb = None
+    if orb_template is not None:
+        validated_orb = validate_sync_template(orb_template)
+        if validated_orb.page_shape != (canonical_height, canonical_width):
+            raise ValueError("orb_template page_shape must match canonical_shape")
+
+    template = synthesize_pilot_v2(
+        (canonical_height, canonical_width), key, page_index, profile
+    )
+    try:
+        pilot_hypotheses = list(
+            _pilot_hypotheses_v2(_to_gray(page), template, profile)
+        )[:_MAX_PILOT_HYPOTHESES]
+        orb_hypothesis = (
+            _orb_hypothesis_v2(page, validated_orb)
+            if validated_orb is not None
+            else None
+        )
+    except cv2.error:
+        return AlignmentV2Result(None, None, 0.0, 0, "geometry_rejected")
+
+    hypotheses = pilot_hypotheses.copy()
+    if orb_hypothesis is not None:
+        hypotheses.append(orb_hypothesis)
+    hypothesis_count = len(hypotheses)
+
+    eligible = [
+        hypothesis
+        for hypothesis in hypotheses
+        if hypothesis.source == "orb"
+        or (
+            math.isfinite(float(hypothesis.pilot_score))
+            and float(hypothesis.pilot_score) >= profile.pilot_score_min
+        )
+    ]
+    if not eligible:
+        best_score = max(
+            (
+                float(hypothesis.pilot_score)
+                for hypothesis in pilot_hypotheses
+                if math.isfinite(float(hypothesis.pilot_score))
+            ),
+            default=0.0,
+        )
+        return AlignmentV2Result(
+            None,
+            None,
+            float(np.clip(best_score, -1.0, 1.0)),
+            hypothesis_count,
+            "insufficient_sync_evidence",
+        )
+
+    safe = [
+        hypothesis
+        for hypothesis in eligible
+        if _geometry_is_acceptable_v2(
+            hypothesis.homography,
+            page.shape[:2],
+            (canonical_height, canonical_width),
+        )
+    ]
+    if not safe:
+        return AlignmentV2Result(None, None, 0.0, hypothesis_count, "geometry_rejected")
+
+    winner = max(
+        safe,
+        key=lambda hypothesis: (
+            float(hypothesis.pilot_score), hypothesis.source == "pilot"
+        ),
+    )
+    matrix = np.asarray(winner.homography, dtype=np.float64)
+    divisor = float(matrix[2, 2])
+    if not math.isfinite(divisor) or abs(divisor) <= 1e-12:
+        return AlignmentV2Result(None, None, 0.0, hypothesis_count, "geometry_rejected")
+    matrix = matrix / divisor
+    try:
+        aligned = cv2.warpPerspective(
+            page,
+            matrix,
+            (canonical_width, canonical_height),
+            flags=cv2.INTER_LINEAR,
+            borderMode=cv2.BORDER_REFLECT_101,
+        )
+    except cv2.error:
+        return AlignmentV2Result(
+            None, None, 0.0, hypothesis_count, "geometry_rejected"
+        )
+    return AlignmentV2Result(
+        image=np.ascontiguousarray(aligned, dtype=np.uint8),
+        homography=np.ascontiguousarray(matrix, dtype=np.float64),
+        pilot_score=float(np.clip(winner.pilot_score, -1.0, 1.0)),
+        hypothesis_count=hypothesis_count,
+        reason="aligned",
+    )
 
 
 def synthesize_pilot_v2(
@@ -155,6 +313,717 @@ def score_pilot_v2(
     if not math.isfinite(score):
         return 0.0
     return float(np.clip(score, -1.0, 1.0))
+
+
+def _pilot_hypotheses_v2(
+    luminance: NDArray[np.uint8],
+    template: PilotTemplateV2,
+    profile: FingerprintV2Profile,
+) -> tuple[GeometryHypothesisV2, ...]:
+    """Estimate bounded similarity candidates from log-polar pilot evidence."""
+
+    geometry_views = _bounded_geometry_views(luminance, template.spatial)
+    signal_view, template_view, _ = geometry_views
+    log_template, log_radius_scale = _log_polar_magnitude(template_view)
+    log_signal, _ = _log_polar_magnitude(signal_view)
+    candidates = _log_polar_similarity_candidates(
+        log_template, log_signal, log_radius_scale
+    )
+
+    refined_candidates: list[tuple[float, float, float]] = []
+    for initial_scale, initial_rotation, response in candidates:
+        refined_scale, refined_rotation = _refine_similarity_from_pilot_peaks(
+            luminance,
+            template,
+            initial_scale,
+            initial_rotation,
+            geometry_views=geometry_views,
+        )
+        if not (
+            _SCALE_MIN <= refined_scale <= _SCALE_MAX
+            and _ROTATION_MIN_DEGREES
+            <= refined_rotation
+            <= _ROTATION_MAX_DEGREES
+        ):
+            continue
+        refined_candidates.append((refined_scale, refined_rotation, response))
+
+    hypotheses: list[GeometryHypothesisV2] = []
+    for refined_scale, refined_rotation, _ in _nms_similarity_candidates(
+        refined_candidates
+    ):
+        hypothesis = _translation_and_score_hypothesis(
+            luminance,
+            template,
+            refined_scale,
+            refined_rotation,
+            geometry_views=geometry_views,
+        )
+        if hypothesis is not None:
+            hypotheses.append(hypothesis)
+    hypotheses.sort(key=lambda hypothesis: hypothesis.pilot_score, reverse=True)
+    return tuple(hypotheses[:_MAX_PILOT_HYPOTHESES])
+
+
+def _log_polar_similarity_candidates(
+    log_template: NDArray[np.float32],
+    log_signal: NDArray[np.float32],
+    log_radius_scale: float,
+) -> tuple[tuple[float, float, float], ...]:
+    reference_fft = np.fft.fft2(log_template.astype(np.float64, copy=False))
+    signal_fft = np.fft.fft2(log_signal.astype(np.float64, copy=False))
+    cross_power = signal_fft * np.conj(reference_fft)
+    magnitude = np.abs(cross_power)
+    usable = np.isfinite(magnitude) & (magnitude > 1e-12)
+    if not np.any(usable):
+        return ()
+    normalized = np.zeros_like(cross_power)
+    normalized[usable] = cross_power[usable] / magnitude[usable]
+    surface = np.fft.ifft2(normalized).real
+    if not np.isfinite(surface).all():
+        return ()
+
+    candidates: list[tuple[float, float, float]] = []
+    height, width = surface.shape
+    for peak_x, peak_y, response in _cyclic_nms_peaks(
+        surface,
+        maximum=_LOG_POLAR_PEAK_LIMIT,
+        radius_x=_LOG_POLAR_NMS_RADIUS_PX,
+        radius_y=_LOG_POLAR_NMS_RADIUS_PX,
+    ):
+        shift_x = _signed_cyclic_coordinate(
+            peak_x + _cyclic_quadratic_offset(surface[peak_y], peak_x), width
+        )
+        shift_y = _signed_cyclic_coordinate(
+            peak_y + _cyclic_quadratic_offset(surface[:, peak_x], peak_y), height
+        )
+        scale = math.exp(-shift_x / log_radius_scale)
+        rotation = _wrap_degrees(-shift_y * 360.0 / height)
+        candidates.append((scale, rotation, response))
+    return _nms_similarity_candidates(candidates)
+
+
+def _cyclic_nms_peaks(
+    surface: NDArray[np.float64],
+    *,
+    maximum: int,
+    radius_x: int,
+    radius_y: int,
+) -> tuple[tuple[int, int, float], ...]:
+    """Select separated maxima while treating opposite FFT edges as adjacent."""
+
+    if surface.ndim != 2 or maximum <= 0:
+        return ()
+    working = np.asarray(surface, dtype=np.float64).copy()
+    working[~np.isfinite(working)] = -math.inf
+    height, width = working.shape
+    x_coordinates = np.arange(width)
+    y_coordinates = np.arange(height)
+    peaks: list[tuple[int, int, float]] = []
+    for _ in range(maximum):
+        flat_index = int(np.argmax(working))
+        response = float(working.flat[flat_index])
+        if not math.isfinite(response):
+            break
+        peak_y, peak_x = np.unravel_index(flat_index, working.shape)
+        peaks.append((int(peak_x), int(peak_y), response))
+        x_distance = np.abs(x_coordinates - peak_x)
+        y_distance = np.abs(y_coordinates - peak_y)
+        x_near = np.minimum(x_distance, width - x_distance) <= radius_x
+        y_near = np.minimum(y_distance, height - y_distance) <= radius_y
+        working[np.ix_(y_near, x_near)] = -math.inf
+    return tuple(peaks)
+
+
+def _log_polar_magnitude(
+    values: NDArray[np.generic],
+) -> tuple[NDArray[np.float32], float]:
+    bounded = _bounded_fft_view(values)
+    centered = bounded - float(np.mean(bounded, dtype=np.float64))
+    window = np.outer(np.hanning(centered.shape[0]), np.hanning(centered.shape[1]))
+    spectrum = np.log1p(
+        np.abs(np.fft.fftshift(np.fft.fft2(centered * window)))
+    ).astype(np.float32)
+    normalized = cv2.resize(
+        spectrum,
+        (_LOG_POLAR_SPECTRUM_SIDE, _LOG_POLAR_SPECTRUM_SIDE),
+        interpolation=cv2.INTER_LINEAR,
+    )
+    center = (_LOG_POLAR_SPECTRUM_SIDE - 1.0) / 2.0
+    y, x = np.indices(normalized.shape, dtype=np.float64)
+    radius = np.hypot(x - center, y - center) / _LOG_POLAR_SPECTRUM_SIDE
+    normalized[
+        (radius < _LOG_POLAR_RADIUS_MIN) | (radius > _LOG_POLAR_RADIUS_MAX)
+    ] = 0.0
+    maximum_radius = center
+    log_polar = cv2.warpPolar(
+        normalized,
+        _LOG_POLAR_SIZE,
+        (center, center),
+        maximum_radius,
+        cv2.WARP_POLAR_LOG | cv2.INTER_LINEAR | cv2.WARP_FILL_OUTLIERS,
+    )
+    log_radius_scale = _LOG_POLAR_SIZE[0] / math.log(maximum_radius)
+    return np.ascontiguousarray(log_polar, dtype=np.float32), log_radius_scale
+
+
+def _bounded_fft_view(values: NDArray[np.generic]) -> NDArray[np.float64]:
+    height, width = values.shape
+    long_edge = max(height, width)
+    if long_edge <= _FFT_LONG_EDGE_MAX:
+        return np.ascontiguousarray(values, dtype=np.float64)
+    ratio = _FFT_LONG_EDGE_MAX / long_edge
+    resized = cv2.resize(
+        values.astype(np.float64, copy=False),
+        (max(1, round(width * ratio)), max(1, round(height * ratio))),
+        interpolation=cv2.INTER_AREA,
+    )
+    return np.ascontiguousarray(resized, dtype=np.float64)
+
+
+def _nms_similarity_candidates(
+    candidates: list[tuple[float, float, float]],
+) -> tuple[tuple[float, float, float], ...]:
+    accepted: list[tuple[float, float, float]] = []
+    for scale, rotation, response in sorted(
+        candidates, key=lambda candidate: candidate[2], reverse=True
+    ):
+        if not all(math.isfinite(value) for value in (scale, rotation, response)):
+            continue
+        if not (
+            _SCALE_MIN <= scale <= _SCALE_MAX
+            and _ROTATION_MIN_DEGREES <= rotation <= _ROTATION_MAX_DEGREES
+        ):
+            continue
+        if any(
+            abs(math.log(scale / previous_scale)) < 0.01
+            and abs(rotation - previous_rotation) < 0.25
+            for previous_scale, previous_rotation, _ in accepted
+        ):
+            continue
+        accepted.append((scale, rotation, response))
+        if len(accepted) == _MAX_PILOT_HYPOTHESES:
+            break
+    return tuple(accepted)
+
+
+def _refine_similarity_from_pilot_peaks(
+    luminance: NDArray[np.uint8],
+    template: PilotTemplateV2,
+    initial_scale: float,
+    initial_rotation: float,
+    *,
+    geometry_views: tuple[
+        NDArray[np.float64], NDArray[np.float64], float
+    ]
+    | None = None,
+) -> tuple[float, float]:
+    if geometry_views is None:
+        geometry_views = _bounded_geometry_views(luminance, template.spatial)
+    signal_view, _, sample_scale = geometry_views
+    height, width = signal_view.shape
+    centered = signal_view - float(np.mean(signal_view))
+    centered *= np.outer(np.hanning(height), np.hanning(width))
+    magnitude = np.abs(np.fft.fftshift(np.fft.fft2(centered)))
+    forward_linear = _similarity_linear(initial_scale, initial_rotation)
+    frequency_linear = np.linalg.inv(forward_linear).T
+    expected: list[NDArray[np.float64]] = []
+    observed: list[NDArray[np.float64]] = []
+    sampled_frequencies = template.frequency_pairs / sample_scale
+    for frequency in sampled_frequencies:
+        predicted = frequency_linear @ frequency
+        peak = _local_frequency_peak(magnitude, predicted)
+        if peak is not None:
+            expected.append(frequency)
+            observed.append(peak)
+    if len(expected) < 6:
+        return initial_scale, initial_rotation
+
+    cv2.setRNGSeed(0)
+    fitted, inliers = cv2.estimateAffinePartial2D(
+        np.asarray(expected, dtype=np.float64),
+        np.asarray(observed, dtype=np.float64),
+        method=cv2.RANSAC,
+        ransacReprojThreshold=0.002,
+        maxIters=2000,
+        confidence=0.999,
+        refineIters=10,
+    )
+    if fitted is None or inliers is None or int(np.count_nonzero(inliers)) < 6:
+        return initial_scale, initial_rotation
+    fitted_frequency = np.asarray(fitted[:, :2], dtype=np.float64)
+    if not np.isfinite(fitted_frequency).all():
+        return initial_scale, initial_rotation
+    try:
+        fitted_forward = np.linalg.inv(fitted_frequency.T)
+    except np.linalg.LinAlgError:
+        return initial_scale, initial_rotation
+    determinant = float(np.linalg.det(fitted_forward))
+    if not math.isfinite(determinant) or determinant <= 0.0:
+        return initial_scale, initial_rotation
+    scale = math.sqrt(determinant)
+    rotation = _wrap_degrees(
+        math.degrees(math.atan2(fitted_forward[0, 1], fitted_forward[0, 0]))
+    )
+    return scale, rotation
+
+
+def _local_frequency_peak(
+    magnitude: NDArray[np.float64], frequency: NDArray[np.float64]
+) -> NDArray[np.float64] | None:
+    height, width = magnitude.shape
+    center_x = width // 2
+    center_y = height // 2
+    predicted_x = int(round(float(frequency[0]) * width + center_x))
+    predicted_y = int(round(float(frequency[1]) * height + center_y))
+    radius = _FREQUENCY_PEAK_RADIUS_PX
+    if not (
+        radius <= predicted_x < width - radius
+        and radius <= predicted_y < height - radius
+    ):
+        return None
+    patch = magnitude[
+        predicted_y - radius : predicted_y + radius + 1,
+        predicted_x - radius : predicted_x + radius + 1,
+    ]
+    offset_y, offset_x = np.unravel_index(int(np.argmax(patch)), patch.shape)
+    peak_x = predicted_x - radius + int(offset_x)
+    peak_y = predicted_y - radius + int(offset_y)
+    subpixel_x = _quadratic_peak_offset(magnitude[peak_y, peak_x - 1 : peak_x + 2])
+    subpixel_y = _quadratic_peak_offset(magnitude[peak_y - 1 : peak_y + 2, peak_x])
+    return np.asarray(
+        (
+            (peak_x + subpixel_x - center_x) / width,
+            (peak_y + subpixel_y - center_y) / height,
+        ),
+        dtype=np.float64,
+    )
+
+
+def _quadratic_peak_offset(samples: NDArray[np.float64]) -> float:
+    left, center, right = np.log1p(samples.astype(np.float64))
+    divisor = float(left - 2.0 * center + right)
+    if not math.isfinite(divisor) or abs(divisor) <= 1e-12:
+        return 0.0
+    offset = 0.5 * float(left - right) / divisor
+    return float(np.clip(offset, -1.0, 1.0))
+
+
+def _translation_and_score_hypothesis(
+    luminance: NDArray[np.uint8],
+    template: PilotTemplateV2,
+    scale: float,
+    rotation: float,
+    *,
+    geometry_views: tuple[
+        NDArray[np.float64], NDArray[np.float64], float
+    ]
+    | None = None,
+) -> GeometryHypothesisV2 | None:
+    if geometry_views is None:
+        geometry_views = _bounded_geometry_views(luminance, template.spatial)
+    signal_view, template_view, sample_scale = geometry_views
+    height, width = signal_view.shape
+    forward_linear = _similarity_linear(scale, rotation)
+    affine = np.column_stack((forward_linear, np.zeros(2, dtype=np.float64)))
+    predicted = cv2.warpAffine(
+        template_view,
+        affine,
+        (width, height),
+        flags=cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=0.0,
+    )
+    predicted_fft = np.fft.fft2(predicted)
+    centered = signal_view - float(np.mean(signal_view))
+    signal_fft = np.fft.fft2(centered)
+    frequency_linear = np.linalg.inv(forward_linear).T
+    mask = _transformed_pilot_mask(
+        (height, width),
+        template.frequency_pairs / sample_scale,
+        frequency_linear,
+        radius=_PILOT_FREQUENCY_RADIUS / sample_scale,
+    )
+    predicted_energy = float(np.sum(np.abs(predicted_fft[mask]) ** 2))
+    signal_energy = float(np.sum(np.abs(signal_fft[mask]) ** 2))
+    if predicted_energy <= 0.0 or signal_energy <= 0.0:
+        return None
+    cross_spectrum = np.zeros((height, width), dtype=np.complex128)
+    cross_spectrum[mask] = signal_fft[mask] * np.conj(predicted_fft[mask])
+    correlation = np.fft.ifft2(cross_spectrum).real
+    peak_y, peak_x = np.unravel_index(int(np.argmax(correlation)), correlation.shape)
+    peak_value = float(correlation[peak_y, peak_x])
+    denominator = math.sqrt(predicted_energy * signal_energy)
+    score = peak_value * height * width / denominator
+    if not math.isfinite(score):
+        return None
+
+    sampled_translation_x = _signed_cyclic_coordinate(
+        peak_x + _cyclic_quadratic_offset(correlation[peak_y], peak_x), width
+    )
+    sampled_translation_y = _signed_cyclic_coordinate(
+        peak_y + _cyclic_quadratic_offset(correlation[:, peak_x], peak_y), height
+    )
+    translation_x = sampled_translation_x / sample_scale
+    translation_y = sampled_translation_y / sample_scale
+    forward = np.array(
+        [
+            [forward_linear[0, 0], forward_linear[0, 1], translation_x],
+            [forward_linear[1, 0], forward_linear[1, 1], translation_y],
+            [0.0, 0.0, 1.0],
+        ],
+        dtype=np.float64,
+    )
+    try:
+        homography = np.linalg.inv(forward)
+    except np.linalg.LinAlgError:
+        return None
+    return GeometryHypothesisV2(
+        np.ascontiguousarray(homography, dtype=np.float64),
+        float(np.clip(score, -1.0, 1.0)),
+        "pilot",
+    )
+
+
+def _bounded_geometry_views(
+    luminance: NDArray[np.generic], spatial: NDArray[np.float64]
+) -> tuple[NDArray[np.float64], NDArray[np.float64], float]:
+    """Resize attacked and canonical inputs by one factor to preserve geometry."""
+
+    signal_height, signal_width = luminance.shape
+    template_height, template_width = spatial.shape
+    long_edge = max(
+        signal_height, signal_width, template_height, template_width
+    )
+    sample_scale = min(1.0, _FFT_LONG_EDGE_MAX / long_edge)
+    if sample_scale == 1.0:
+        return (
+            np.ascontiguousarray(luminance, dtype=np.float64),
+            np.ascontiguousarray(spatial, dtype=np.float64),
+            sample_scale,
+        )
+    signal_size = (
+        max(1, int(round(signal_width * sample_scale))),
+        max(1, int(round(signal_height * sample_scale))),
+    )
+    template_size = (
+        max(1, int(round(template_width * sample_scale))),
+        max(1, int(round(template_height * sample_scale))),
+    )
+    signal_view = cv2.resize(
+        luminance, signal_size, interpolation=cv2.INTER_AREA
+    )
+    template_view = cv2.resize(
+        spatial, template_size, interpolation=cv2.INTER_AREA
+    )
+    return (
+        np.ascontiguousarray(signal_view, dtype=np.float64),
+        np.ascontiguousarray(template_view, dtype=np.float64),
+        sample_scale,
+    )
+
+
+def _transformed_pilot_mask(
+    shape: tuple[int, int],
+    frequencies: NDArray[np.float64],
+    frequency_linear: NDArray[np.float64],
+    *,
+    radius: float,
+) -> NDArray[np.bool_]:
+    height, width = shape
+    frequency_y = np.fft.fftfreq(height)[:, None]
+    frequency_x = np.fft.fftfreq(width)[None, :]
+    mask = np.zeros((height, width), dtype=np.bool_)
+    for frequency in frequencies:
+        transformed = frequency_linear @ frequency
+        for sign in (-1.0, 1.0):
+            mask |= (
+                (frequency_x - sign * transformed[0]) ** 2
+                + (frequency_y - sign * transformed[1]) ** 2
+                <= radius**2
+            )
+    return mask
+
+
+def _cyclic_quadratic_offset(values: NDArray[np.float64], index: int) -> float:
+    samples = np.asarray(
+        (
+            values[(index - 1) % len(values)],
+            values[index],
+            values[(index + 1) % len(values)],
+        ),
+        dtype=np.float64,
+    )
+    divisor = float(samples[0] - 2.0 * samples[1] + samples[2])
+    if not math.isfinite(divisor) or abs(divisor) <= 1e-12:
+        return 0.0
+    return float(np.clip(0.5 * (samples[0] - samples[2]) / divisor, -1.0, 1.0))
+
+
+def _signed_cyclic_coordinate(value: float, period: int) -> float:
+    return value - period if value > period / 2.0 else value
+
+
+def _similarity_linear(scale: float, degrees: float) -> NDArray[np.float64]:
+    radians = math.radians(degrees)
+    cosine = math.cos(radians)
+    sine = math.sin(radians)
+    return scale * np.asarray(((cosine, sine), (-sine, cosine)), dtype=np.float64)
+
+
+def _wrap_degrees(value: float) -> float:
+    return (value + 180.0) % 360.0 - 180.0
+
+
+def _orb_hypothesis_v2(
+    page_bgr: NDArray[np.uint8], template: SyncTemplate
+) -> GeometryHypothesisV2 | None:
+    keypoints, descriptors = _detect(_to_gray(page_bgr))
+    if descriptors is None or len(keypoints) < 4:
+        return None
+    matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
+    pairs = matcher.knnMatch(descriptors, template.descriptors, k=2)
+    matches = [
+        first
+        for pair in pairs
+        if len(pair) == 2
+        for first, second in [pair]
+        if first.distance < 0.75 * second.distance
+    ]
+    if len(matches) < 8:
+        return None
+    source = np.asarray(
+        [keypoints[match.queryIdx].pt for match in matches], dtype=np.float64
+    ).reshape(-1, 1, 2)
+    target = np.asarray(
+        [template.keypoints[match.trainIdx] for match in matches], dtype=np.float64
+    ).reshape(-1, 1, 2)
+    cv2.setRNGSeed(0)
+    matrix, inlier_mask = cv2.findHomography(
+        source,
+        target,
+        method=cv2.RANSAC,
+        ransacReprojThreshold=3.0,
+        maxIters=2000,
+        confidence=0.995,
+    )
+    if matrix is None or inlier_mask is None:
+        return None
+    if not _orb_geometry_is_acceptable_v2(
+        matrix,
+        source,
+        target,
+        inlier_mask,
+        page_bgr.shape[:2],
+        template.page_shape,
+    ):
+        return None
+    if not _geometry_is_acceptable_v2(
+        matrix, page_bgr.shape[:2], template.page_shape
+    ):
+        return None
+    normalized = np.asarray(matrix, dtype=np.float64)
+    divisor = float(normalized[2, 2])
+    if not math.isfinite(divisor) or abs(divisor) <= 1e-12:
+        return None
+    return GeometryHypothesisV2(
+        np.ascontiguousarray(normalized / divisor, dtype=np.float64), 0.0, "orb"
+    )
+
+
+def _orb_geometry_is_acceptable_v2(
+    homography: object,
+    source: NDArray[np.float64],
+    target: NDArray[np.float64],
+    inlier_mask: object,
+    source_shape: tuple[int, int],
+    target_shape: tuple[int, int],
+) -> bool:
+    return _geometry_is_acceptable(
+        homography,
+        source,
+        target,
+        inlier_mask,
+        source_shape,
+        target_shape,
+    )
+
+
+def _geometry_is_acceptable_v2(
+    homography: object,
+    source_shape: tuple[int, int],
+    target_shape: tuple[int, int],
+) -> bool:
+    """Reject unsafe V2 geometry before allocating a canonical page raster."""
+
+    matrix = np.asarray(homography)
+    if matrix.shape != (3, 3) or not np.all(np.isfinite(matrix)):
+        return False
+    divisor = float(matrix[2, 2])
+    if not math.isfinite(divisor) or abs(divisor) <= 1e-12:
+        return False
+    matrix = matrix.astype(np.float64) / divisor
+    source_height, source_width = source_shape
+    target_height, target_width = target_shape
+    source_scale = np.diag(
+        (max(1.0, source_width - 1.0), max(1.0, source_height - 1.0), 1.0)
+    )
+    target_scale = np.diag(
+        (
+            1.0 / max(1.0, target_width - 1.0),
+            1.0 / max(1.0, target_height - 1.0),
+            1.0,
+        )
+    )
+    condition = float(np.linalg.cond(target_scale @ matrix @ source_scale))
+    if not math.isfinite(condition) or condition > _MAX_HOMOGRAPHY_CONDITION:
+        return False
+    try:
+        forward = np.linalg.inv(matrix)
+    except np.linalg.LinAlgError:
+        return False
+    if not np.all(np.isfinite(forward)) or abs(float(forward[2, 2])) <= 1e-12:
+        return False
+    forward /= float(forward[2, 2])
+    determinant = float(np.linalg.det(matrix))
+    if not math.isfinite(determinant) or determinant <= 0.0:
+        return False
+
+    target_grid = np.asarray(
+        [
+            [[x, y]]
+            for y in (0.0, (target_height - 1.0) / 2.0, target_height - 1.0)
+            for x in (0.0, (target_width - 1.0) / 2.0, target_width - 1.0)
+        ],
+        dtype=np.float64,
+    )
+    try:
+        projected_grid = cv2.perspectiveTransform(target_grid, forward).reshape(-1, 2)
+    except cv2.error:
+        return False
+    if not np.all(np.isfinite(projected_grid)):
+        return False
+    similarity, reprojection_rmse = _fit_similarity_v2(
+        target_grid.reshape(-1, 2), projected_grid
+    )
+    if (
+        similarity is None
+        or reprojection_rmse > _MAX_SIMILARITY_REPROJECTION_RMSE_PX
+    ):
+        return False
+    linear = similarity[:2, :2]
+    scale = math.sqrt(float(np.linalg.det(linear)))
+    rotation = _wrap_degrees(
+        math.degrees(math.atan2(linear[0, 1], linear[0, 0]))
+    )
+    if not _SCALE_MIN <= scale <= _SCALE_MAX:
+        return False
+    if not _ROTATION_MIN_DEGREES <= rotation <= _ROTATION_MAX_DEGREES:
+        return False
+
+    translation_x = float(similarity[0, 2])
+    translation_y = float(similarity[1, 2])
+    if abs(translation_x) > _TRANSLATION_FRACTION_MAX * target_width:
+        return False
+    if abs(translation_y) > _TRANSLATION_FRACTION_MAX * target_height:
+        return False
+
+    source_corners = np.asarray(
+        [
+            [[0.0, 0.0]],
+            [[source_width - 1.0, 0.0]],
+            [[source_width - 1.0, source_height - 1.0]],
+            [[0.0, source_height - 1.0]],
+        ],
+        dtype=np.float64,
+    )
+    try:
+        target_corners = cv2.perspectiveTransform(source_corners, matrix).reshape(-1, 2)
+    except cv2.error:
+        return False
+    if not np.all(np.isfinite(target_corners)):
+        return False
+    return _v2_corners_are_plausible(target_corners, target_shape)
+
+
+def _fit_similarity_v2(
+    source: NDArray[np.float64], target: NDArray[np.float64]
+) -> tuple[NDArray[np.float64] | None, float]:
+    rows = np.zeros((2 * len(source), 4), dtype=np.float64)
+    values = np.zeros(2 * len(source), dtype=np.float64)
+    rows[0::2, 0] = source[:, 0]
+    rows[0::2, 1] = source[:, 1]
+    rows[0::2, 2] = 1.0
+    rows[1::2, 0] = source[:, 1]
+    rows[1::2, 1] = -source[:, 0]
+    rows[1::2, 3] = 1.0
+    values[0::2] = target[:, 0]
+    values[1::2] = target[:, 1]
+    try:
+        parameters, _, rank, _ = np.linalg.lstsq(rows, values, rcond=None)
+    except np.linalg.LinAlgError:
+        return None, math.inf
+    if rank != 4 or not np.all(np.isfinite(parameters)):
+        return None, math.inf
+    scale_cosine, scale_sine, translation_x, translation_y = parameters
+    matrix = np.asarray(
+        (
+            (scale_cosine, scale_sine, translation_x),
+            (-scale_sine, scale_cosine, translation_y),
+            (0.0, 0.0, 1.0),
+        ),
+        dtype=np.float64,
+    )
+    predicted = source @ matrix[:2, :2].T + matrix[:2, 2]
+    rmse = float(np.sqrt(np.mean(np.sum((predicted - target) ** 2, axis=1))))
+    if not math.isfinite(rmse):
+        return None, math.inf
+    return matrix, rmse
+
+
+def _v2_corners_are_plausible(
+    corners: NDArray[np.float64], target_shape: tuple[int, int]
+) -> bool:
+    target_height, target_width = target_shape
+    x = corners[:, 0]
+    y = corners[:, 1]
+    signed_area = 0.5 * float(np.sum(x * np.roll(y, -1) - y * np.roll(x, -1)))
+    target_area = max(1.0, float((target_width - 1) * (target_height - 1)))
+    area_ratio = signed_area / target_area
+    if not 0.0 < area_ratio <= _MAX_CORNER_AREA_RATIO:
+        return False
+    margin_x = _CORNER_MARGIN_FRACTION * target_width
+    margin_y = _CORNER_MARGIN_FRACTION * target_height
+    if (
+        np.any(x < -margin_x)
+        or np.any(x > target_width - 1 + margin_x)
+        or np.any(y < -margin_y)
+        or np.any(y > target_height - 1 + margin_y)
+    ):
+        return False
+
+    target_polygon = np.asarray(
+        (
+            (0.0, 0.0),
+            (target_width - 1.0, 0.0),
+            (target_width - 1.0, target_height - 1.0),
+            (0.0, target_height - 1.0),
+        ),
+        dtype=np.float32,
+    )
+    try:
+        intersection_area, _ = cv2.intersectConvexConvex(
+            corners.astype(np.float32), target_polygon
+        )
+    except cv2.error:
+        return False
+    source_footprint_area = signed_area
+    source_coverage = float(intersection_area) / max(1.0, source_footprint_area)
+    target_coverage = float(intersection_area) / target_area
+    return (
+        source_coverage >= _MIN_CORNER_COVERAGE
+        and target_coverage >= _MIN_CORNER_COVERAGE
+    )
 
 
 class _HmacByteStream:
