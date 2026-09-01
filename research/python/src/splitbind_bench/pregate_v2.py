@@ -9,8 +9,16 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Literal, Mapping, Sequence
 
-from splitbind_attack.attacks import AttackCase
-from splitbind_attack.ground_truth import NormalizedRect
+import numpy as np
+
+from splitbind_attack.attacks import AttackCase, AttackedArtifact, apply_attack
+from splitbind_attack.ground_truth import (
+    NormalizedRect,
+    Transform,
+    compose_transforms,
+    merge_regions,
+    transform_regions,
+)
 from splitbind_ref.contracts import fingerprint_candidates_v2, fingerprint_candidates_v2_bytes
 from splitbind_ref.fingerprint_v2_profile import candidate_identifier_v2, load_v2_profiles
 
@@ -22,6 +30,8 @@ from .runner import (
     _canonical_json,
     _case_context,
     _case_seed,
+    _fit_canvas,
+    _iter_sources,
     _outcome,
     _plan_digest,
     _remaining_embedded_tiles_v2,
@@ -98,6 +108,7 @@ _ROW_LIMITATIONS_PREFIX = (
     "peak RSS is the process-lifetime OS high-water mark observed after attack and decode",
     "temporary disk peak is 0 because A4 attacks and decode run in memory; output/checkpoint storage is excluded",
 )
+_FLOAT_SERIALIZATION_ABS_TOLERANCE = 1e-12
 
 
 @dataclass(frozen=True, slots=True)
@@ -564,6 +575,8 @@ def _validate_rows(
     observed: set[tuple[str, int, str, str]] = set()
     observed_row_ids: set[str] = set()
     canvas_width, canvas_height = _benchmark_dimensions(plan.candidates)
+    artifacts: dict[str, AttackedArtifact] = {}
+    canvas_transforms: dict[tuple[str, int], Transform] = {}
     for ordinal, row in enumerate(rows):
         if not isinstance(row, Mapping):
             raise ValueError(f"pre-gate row {ordinal} must be an object")
@@ -649,6 +662,8 @@ def _validate_rows(
             raise ValueError("non-decoded V2 status exposes an issuance identity")
         if status == "decoded":
             _validate_canonical_uuid(decoded, "decoded_id")
+        _validate_v2_evidence_values(row, candidate, status)
+        artifact_absent = _validate_limitations(row, reason)
         outcome = _required_string(row, "outcome")
         expected_outcome = _outcome(
             expected_id,
@@ -665,6 +680,16 @@ def _validate_rows(
             attack,
             expected_id,
             (canvas_height, canvas_width),
+        )
+        _validate_reconstructed_attack_evidence(
+            row,
+            source,
+            page_index,
+            attack,
+            (canvas_height, canvas_width),
+            artifact_absent,
+            artifacts,
+            canvas_transforms,
         )
     if require_complete and observed != expected_set:
         raise ValueError("pre-gate results contain missing scheduled rows")
@@ -723,7 +748,6 @@ def _validate_measurement_fields(row: Mapping[str, object], source_kind: str) ->
     _required_integer(row, "case_seed")
     _required_number_in_range(row, "confidence", minimum=0.0, maximum=1.0)
     _optional_number_in_range(row, "bit_error_rate", minimum=0.0, maximum=1.0)
-    _required_integer(row, "valid_vote_count")
     _validate_psnr(row.get("psnr_db"))
     _required_number_in_range(row, "ssim", minimum=-1.0, maximum=1.0)
     if _required_number(row, "quality_data_range") != 255.0:
@@ -769,15 +793,184 @@ def _validate_measurement_fields(row: Mapping[str, object], source_kind: str) ->
         "fewer_than_two_complete_embedded_tiles_remain",
     }:
         raise ValueError("pre-gate eligibility reason is invalid")
-    _optional_number_in_range(row, "removed_area_fraction", minimum=0.0, maximum=1.0)
+    _required_integer(row, "valid_vote_count")
+
+
+def _validate_v2_evidence_values(
+    row: Mapping[str, object], candidate: Candidate, status: str
+) -> None:
+    votes = _required_integer(row, "valid_vote_count")
+    repetitions = int(candidate.values["payload_repetitions"])
+    if votes > repetitions:
+        raise ValueError("valid_vote_count exceeds the candidate repetition bound")
+    bit_error_rate = row.get("bit_error_rate")
+    if status == "decoded":
+        if votes < 2:
+            raise ValueError("decoded V2 evidence requires valid_vote_count at least 2")
+        if bit_error_rate is None:
+            raise ValueError("decoded V2 evidence requires bit_error_rate")
+        return
+    if status == "partial_payload_evidence":
+        if votes < 1:
+            raise ValueError("partial V2 evidence requires valid_vote_count at least 1")
+        if bit_error_rate is None:
+            raise ValueError("partial V2 evidence requires bit_error_rate")
+        return
+    if votes != 0 or bit_error_rate is not None:
+        raise ValueError("non-payload V2 evidence must not carry payload votes or BER")
+
+
+def _validate_limitations(row: Mapping[str, object], reason: str) -> bool | None:
     limitations = row.get("limitations")
-    if (
-        not isinstance(limitations, list)
-        or len(limitations) < len(_ROW_LIMITATIONS_PREFIX)
-        or tuple(limitations[: len(_ROW_LIMITATIONS_PREFIX)]) != _ROW_LIMITATIONS_PREFIX
-        or any(not isinstance(value, str) or not value for value in limitations)
+    if not isinstance(limitations, list) or any(
+        not isinstance(value, str) for value in limitations
     ):
         raise ValueError("pre-gate row limitations are invalid")
+    if reason != "execution_error":
+        if tuple(limitations) != _ROW_LIMITATIONS_PREFIX:
+            raise ValueError("non-error pre-gate row limitations are invalid")
+        return False
+    if (
+        len(limitations) != len(_ROW_LIMITATIONS_PREFIX) + 1
+        or tuple(limitations[: len(_ROW_LIMITATIONS_PREFIX)]) != _ROW_LIMITATIONS_PREFIX
+        or not _is_execution_diagnostic(limitations[-1])
+    ):
+        raise ValueError("execution-error pre-gate row limitations are invalid")
+    if limitations[-1].startswith("embedding "):
+        return True
+    # The persisted row has no stage field.  A generic execution diagnostic can
+    # originate before attack construction or during decode, so either exact
+    # provenance state is valid; both are reconstructed below.
+    return None
+
+
+def _is_execution_diagnostic(value: str) -> bool:
+    diagnostic = value.removeprefix("embedding ")
+    exception_name, separator, _ = diagnostic.partition(": ")
+    return bool(separator) and exception_name.isidentifier()
+
+
+def _validate_reconstructed_attack_evidence(
+    row: Mapping[str, object],
+    source,
+    page_index: int,
+    attack: AttackCase,
+    page_shape: tuple[int, int],
+    artifact_absent: bool | None,
+    artifacts: dict[str, AttackedArtifact],
+    canvas_transforms: dict[tuple[str, int], Transform],
+) -> None:
+    transform = _source_to_canvas_transform(
+        source, page_index, page_shape, canvas_transforms
+    )
+    artifact_states = (artifact_absent,) if artifact_absent is not None else (False, True)
+    first_error: ValueError | None = None
+    for absent in artifact_states:
+        try:
+            _validate_attack_evidence_for_state(
+                row,
+                source.ground_truth,
+                transform,
+                None if absent else _canonical_attack_artifact(attack, page_shape, artifacts),
+            )
+            return
+        except ValueError as error:
+            first_error = first_error or error
+    if first_error is not None:
+        raise first_error
+    raise ValueError("pre-gate attack provenance state is invalid")
+
+
+def _validate_attack_evidence_for_state(
+    row: Mapping[str, object],
+    source_ground_truth: Sequence[NormalizedRect],
+    source_to_canvas: Transform,
+    artifact: AttackedArtifact | None,
+) -> None:
+    transform = source_to_canvas
+    if artifact is not None:
+        transform = compose_transforms(artifact.source_to_output, transform)
+    ground_truth = transform_regions(source_ground_truth, transform)
+    if artifact is not None:
+        ground_truth = merge_regions(ground_truth, artifact.ground_truth)
+    expected_ground_truth = tuple(rectangle.as_dict() for rectangle in ground_truth)
+    _validate_reconstructed_ground_truth(row.get("tamper_ground_truth"), expected_ground_truth)
+    expected_removed = None if artifact is None else artifact.removed_area_fraction
+    _validate_reconstructed_removed_fraction(row.get("removed_area_fraction"), expected_removed)
+
+
+def _canonical_attack_artifact(
+    attack: AttackCase,
+    page_shape: tuple[int, int],
+    artifacts: dict[str, AttackedArtifact],
+) -> AttackedArtifact:
+    cached = artifacts.get(attack.case_id)
+    if cached is not None:
+        return cached
+    height, width = page_shape
+    artifact = apply_attack(
+        np.zeros((height, width, 3), dtype=np.uint8), attack, np.random.default_rng(0)
+    )
+    artifacts[attack.case_id] = artifact
+    return artifact
+
+
+def _source_to_canvas_transform(
+    source,
+    page_index: int,
+    page_shape: tuple[int, int],
+    canvas_transforms: dict[tuple[str, int], Transform],
+) -> Transform:
+    if not source.ground_truth:
+        return (1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
+    key = (source.fixture_id, page_index)
+    cached = canvas_transforms.get(key)
+    if cached is not None:
+        return cached
+    height, width = page_shape
+    for page in _iter_sources((source,)):
+        if page.page_index == page_index:
+            transform = _fit_canvas(page.image, width, height).source_to_canvas
+            canvas_transforms[key] = transform
+            return transform
+    raise ValueError("pre-gate source page is unavailable for ground-truth reconstruction")
+
+
+def _validate_reconstructed_ground_truth(
+    value: object, expected: Sequence[Mapping[str, float]]
+) -> None:
+    if not isinstance(value, list) or len(value) != len(expected):
+        raise ValueError("tamper_ground_truth disagrees with source and attack provenance")
+    fields = ("x", "y", "width", "height")
+    for observed, reference in zip(value, expected):
+        if not isinstance(observed, Mapping) or set(observed) != set(fields):
+            raise ValueError("tamper_ground_truth disagrees with source and attack provenance")
+        if any(
+            not _serialized_float_matches(observed[field], reference[field])
+            for field in fields
+        ):
+            raise ValueError("tamper_ground_truth disagrees with source and attack provenance")
+
+
+def _validate_reconstructed_removed_fraction(value: object, expected: float | None) -> None:
+    if expected is None:
+        if value is not None:
+            raise ValueError("removed_area_fraction disagrees with attack provenance")
+        return
+    if not _serialized_float_matches(value, expected):
+        raise ValueError("removed_area_fraction disagrees with attack provenance")
+
+
+def _serialized_float_matches(value: object, expected: float) -> bool:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    observed = float(value)
+    return math.isfinite(observed) and math.isclose(
+        observed,
+        expected,
+        rel_tol=0.0,
+        abs_tol=_FLOAT_SERIALIZATION_ABS_TOLERANCE,
+    )
 
 
 def _required_string_exact(

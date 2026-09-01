@@ -1,6 +1,7 @@
 import hashlib
 import json
 import sqlite3
+from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -277,7 +278,7 @@ def _minimal_valid_row(plan, *, attack_id="identity"):
         "eligible": True,
         "remaining_embedded_tiles": None,
         "eligibility_reason": "eligible",
-        "removed_area_fraction": None,
+        "removed_area_fraction": 0.0,
         "limitations": [
             "A5 integrity localization is not implemented; tamper ground truth is recorded but localization IoU is not evaluated",
             "peak RSS is the process-lifetime OS high-water mark observed after attack and decode",
@@ -351,6 +352,175 @@ def test_row_validation_reconstructs_seed_source_and_outcome(field, value):
         )
 
 
+@pytest.mark.parametrize("valid_vote_count", [0, 1])
+def test_decoded_positive_row_requires_two_independent_votes(valid_vote_count):
+    plan = build_v2_pregate_plan(CORPUS, PROFILES, MATRIX, seed=20260827)
+    row = _minimal_valid_row(plan)
+    row.update(
+        {
+            "algorithm_status": "decoded",
+            "reason": "decoded",
+            "decoded_id": row["expected_id"],
+            "outcome": "true_attribution",
+            "valid_vote_count": valid_vote_count,
+            "bit_error_rate": 0.0,
+        }
+    )
+
+    with pytest.raises(ValueError, match="valid_vote_count"):
+        _validate_rows([row], plan, require_complete=False)
+
+
+def test_valid_vote_count_cannot_exceed_the_candidate_repetition_bound():
+    plan = build_v2_pregate_plan(CORPUS, PROFILES, MATRIX, seed=20260827)
+    row = _minimal_valid_row(plan)
+    row.update(
+        {
+            "algorithm_status": "partial_payload_evidence",
+            "reason": "partial",
+            "outcome": "partial",
+            "valid_vote_count": int(plan.candidates[0].values["payload_repetitions"]) + 1,
+            "bit_error_rate": 0.0,
+        }
+    )
+
+    with pytest.raises(ValueError, match="valid_vote_count"):
+        _validate_rows([row], plan, require_complete=False)
+
+
+@pytest.mark.parametrize(
+    ("algorithm_status", "reason", "valid_vote_count", "bit_error_rate"),
+    [
+        ("partial_payload_evidence", "partial", 0, 0.0),
+        ("payload_not_detected", "not_detected", 1, None),
+        ("decoded", "decoded", 2, None),
+    ],
+)
+def test_v2_evidence_status_requires_the_producer_vote_and_ber_shape(
+    algorithm_status, reason, valid_vote_count, bit_error_rate
+):
+    plan = build_v2_pregate_plan(CORPUS, PROFILES, MATRIX, seed=20260827)
+    row = _minimal_valid_row(plan)
+    row.update(
+        {
+            "algorithm_status": algorithm_status,
+            "reason": reason,
+            "valid_vote_count": valid_vote_count,
+            "bit_error_rate": bit_error_rate,
+        }
+    )
+    if algorithm_status == "decoded":
+        row.update(
+            {
+                "decoded_id": row["expected_id"],
+                "outcome": "true_attribution",
+            }
+        )
+    elif algorithm_status == "partial_payload_evidence":
+        row["outcome"] = "partial"
+
+    with pytest.raises(ValueError):
+        _validate_rows([row], plan, require_complete=False)
+
+
+def test_non_decoded_v2_evidence_cannot_expose_an_issuance_id():
+    plan = build_v2_pregate_plan(CORPUS, PROFILES, MATRIX, seed=20260827)
+    row = _minimal_valid_row(plan)
+    row.update(
+        {
+            "algorithm_status": "partial_payload_evidence",
+            "reason": "partial",
+            "decoded_id": row["expected_id"],
+            "outcome": "true_attribution",
+            "valid_vote_count": 1,
+            "bit_error_rate": 0.0,
+        }
+    )
+
+    with pytest.raises(ValueError, match="non-decoded"):
+        _validate_rows([row], plan, require_complete=False)
+
+
+def _retained_pregate_row(fixture_id, attack_id):
+    results = ROOT / "reports" / "fingerprint-pregate-v2" / "results.jsonl"
+    for line in results.read_text(encoding="utf-8").splitlines():
+        row = json.loads(line)
+        if row["fixture_id"] == fixture_id and row["attack_id"] == attack_id:
+            return row
+    raise AssertionError(f"retained row not found: {fixture_id}/{attack_id}")
+
+
+def test_row_validation_reconstructs_tamper_ground_truth_from_provenance():
+    plan = build_v2_pregate_plan(CORPUS, PROFILES, MATRIX, seed=20260827)
+    row = _retained_pregate_row("tamper-ground-truth", "crop-f0p25")
+    tampered = deepcopy(row)
+    tampered["tamper_ground_truth"][0]["x"] += 0.01
+
+    with pytest.raises(ValueError, match="tamper_ground_truth"):
+        _validate_rows([tampered], plan, require_complete=False)
+
+
+def test_row_validation_reconstructs_removed_crop_fraction_from_provenance():
+    plan = build_v2_pregate_plan(CORPUS, PROFILES, MATRIX, seed=20260827)
+    row = _retained_pregate_row("tamper-ground-truth", "crop-f0p25")
+    tampered = deepcopy(row)
+    tampered["removed_area_fraction"] -= 0.01
+
+    with pytest.raises(ValueError, match="removed_area_fraction"):
+        _validate_rows([tampered], plan, require_complete=False)
+
+
+@pytest.mark.parametrize("execution_error", [False, True])
+def test_row_validation_rejects_arbitrary_trailing_limitations(execution_error):
+    plan = build_v2_pregate_plan(CORPUS, PROFILES, MATRIX, seed=20260827)
+    row = _minimal_valid_row(plan)
+    if execution_error:
+        row.update(
+            {
+                "reason": "execution_error",
+                "algorithm_status": "execution_error",
+                "outcome": "execution_error",
+                "removed_area_fraction": None,
+            }
+        )
+    row["limitations"].append("arbitrary trailing limitation")
+
+    with pytest.raises(ValueError, match="limitations"):
+        _validate_rows([row], plan, require_complete=False)
+
+
+def test_execution_error_allows_one_structured_producer_diagnostic():
+    plan = build_v2_pregate_plan(CORPUS, PROFILES, MATRIX, seed=20260827)
+    row = _minimal_valid_row(plan)
+    row.update(
+        {
+            "reason": "execution_error",
+            "algorithm_status": "execution_error",
+            "outcome": "execution_error",
+            "removed_area_fraction": None,
+        }
+    )
+    row["limitations"].append("embedding RuntimeError: synthetic diagnostic")
+
+    _validate_rows([row], plan, require_complete=False)
+
+
+def test_execution_error_allows_exact_no_artifact_evidence_after_attack_failure():
+    plan = build_v2_pregate_plan(CORPUS, PROFILES, MATRIX, seed=20260827)
+    row = _minimal_valid_row(plan)
+    row.update(
+        {
+            "reason": "execution_error",
+            "algorithm_status": "execution_error",
+            "outcome": "execution_error",
+            "removed_area_fraction": None,
+        }
+    )
+    row["limitations"].append("RuntimeError: synthetic attack diagnostic")
+
+    _validate_rows([row], plan, require_complete=False)
+
+
 def test_eligible_crop_execution_error_cannot_be_removed_from_the_denominator():
     plan = build_v2_pregate_plan(CORPUS, PROFILES, MATRIX, seed=20260827)
     row = {
@@ -361,6 +531,13 @@ def test_eligible_crop_execution_error_cannot_be_removed_from_the_denominator():
         "eligible": True,
         "remaining_embedded_tiles": None,
         "eligibility_reason": "eligible",
+        "removed_area_fraction": None,
+        "limitations": [
+            "A5 integrity localization is not implemented; tamper ground truth is recorded but localization IoU is not evaluated",
+            "peak RSS is the process-lifetime OS high-water mark observed after attack and decode",
+            "temporary disk peak is 0 because A4 attacks and decode run in memory; output/checkpoint storage is excluded",
+            "embedding RuntimeError: synthetic diagnostic",
+        ],
     }
 
     with pytest.raises(ValueError, match="crop eligibility"):
