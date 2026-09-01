@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 import pytest
 
+from splitbind_bench import runner
 from splitbind_bench.runner import (
     NONDETERMINISTIC_ROW_FIELDS,
     build_execution_plan,
@@ -141,6 +142,20 @@ def test_v2_full_plan_uses_explicit_version_dispatch_without_changing_v1_populat
     assert plan.candidate_count == 16
     assert plan.attack_count == 31
     assert plan.planned_rows == 22 * 16 * 31
+
+
+def test_v2_public_matrix_rejects_an_unselected_full_grid_before_output(tmp_path, monkeypatch):
+    output = tmp_path / "unselected-v2"
+
+    def unexpected_execution(*args, **kwargs):
+        raise AssertionError("V2 image work must not start without a selection")
+
+    monkeypatch.setattr(runner, "_run_execution_plan", unexpected_execution)
+
+    with pytest.raises(ValueError, match="qualified candidate selection"):
+        run_matrix(CORPUS, PROFILES_V2, MATRIX, 20260827, output)
+
+    assert not output.exists()
 
 
 def test_smoke_plan_uses_feature_rich_positive_and_negative_control():
@@ -462,6 +477,38 @@ def test_cli_plan_only_exposes_the_complete_full_matrix_without_claiming_results
         "seed": 20260827,
         "smoke": False,
     }
+
+
+def test_v2_cli_plan_only_marks_the_unselected_grid_non_executable(tmp_path):
+    output = tmp_path / "unselected-v2-output"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--profiles",
+            str(PROFILES_V2),
+            "--corpus",
+            str(CORPUS),
+            "--matrix",
+            str(MATRIX),
+            "--seed",
+            "20260827",
+            "--output",
+            str(output),
+            "--plan-only",
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    plan = json.loads(completed.stdout)
+    assert plan["candidate_selection_sha256"] is None
+    assert plan["execution_blocked_reason"] == "qualified_candidate_selection_required"
+    assert plan["executable"] is False
+    assert not output.exists()
 
 
 def test_cli_executes_a_bounded_matrix_and_reports_artifact_paths(

@@ -252,6 +252,10 @@ def run_matrix(
         smoke=smoke,
         candidate_selection=candidate_selection,
     )
+    if plan.algorithm_version == 2 and plan.candidate_selection_sha256 is None:
+        raise ValueError(
+            "fingerprint V2 execution requires a nonempty qualified candidate selection"
+        )
     return _run_execution_plan(
         plan,
         output_dir,

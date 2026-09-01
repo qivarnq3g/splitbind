@@ -19,7 +19,14 @@ from splitbind_bench.pregate_v2 import (
     _validate_rows,
 )
 from splitbind_bench import runner
-from splitbind_bench.runner import _case_context, _initialize_checkpoint, _row_identifier, _run_identity
+from splitbind_bench import pregate_v2
+from splitbind_bench.runner import (
+    _case_context,
+    _case_seed,
+    _initialize_checkpoint,
+    _row_identifier,
+    _run_identity,
+)
 from splitbind_ref.fingerprint_v2 import DecodeV2Decision
 from splitbind_ref.contracts import fingerprint_candidates_v2
 from splitbind_ref.fingerprint_v2_profile import candidate_identifier_v2, load_v2_profiles
@@ -32,8 +39,7 @@ CORPUS = ROOT / "fixtures" / "corpus" / "corpus-manifest.v1.json"
 MATRIX = ROOT / "contracts" / "algorithm" / "attack-matrix.v1.json"
 
 
-def _score(**overrides) -> PreGateCandidateScoreV2:
-    profile = load_v2_profiles()[0]
+def _score_for(profile, **overrides) -> PreGateCandidateScoreV2:
     values = {
         "profile_id": hashlib.sha256(candidate_identifier_v2(profile)).hexdigest(),
         "candidate_id": candidate_identifier_v2(profile).hex(),
@@ -57,6 +63,20 @@ def _score(**overrides) -> PreGateCandidateScoreV2:
     }
     values.update(overrides)
     return PreGateCandidateScoreV2(**values)
+
+
+def _score(**overrides) -> PreGateCandidateScoreV2:
+    return _score_for(load_v2_profiles()[0], **overrides)
+
+
+def _canonical_scores(
+    *, first_only: bool = False, **overrides
+) -> tuple[PreGateCandidateScoreV2, ...]:
+    profiles = load_v2_profiles()
+    return tuple(
+        _score_for(profile, **(overrides if not first_only or index == 0 else {}))
+        for index, profile in enumerate(profiles)
+    )
 
 
 def _summary(*scores: PreGateCandidateScoreV2, **overrides) -> PreGateSummaryV2:
@@ -117,8 +137,8 @@ def test_identity_attack_is_a_true_contiguous_copy_without_fabricated_geometry()
 @pytest.mark.parametrize(
     "summary",
     [
-        _summary(_score(), execution_errors=1, status="complete_with_errors"),
-        _summary(_score(), completed_rows=1407, status="incomplete"),
+        _summary(*_canonical_scores(), execution_errors=1, status="complete_with_errors"),
+        _summary(*_canonical_scores(), completed_rows=1407, status="incomplete"),
     ],
 )
 def test_any_execution_error_or_incomplete_evidence_empties_the_whole_selection(summary):
@@ -138,28 +158,23 @@ def test_any_execution_error_or_incomplete_evidence_empties_the_whole_selection(
     ],
 )
 def test_candidate_selection_keeps_the_unchanged_thresholds(field, value, failed_gate):
-    failed = _score(**{field: value}, failed_gates=(failed_gate,))
+    scores = _canonical_scores(**{field: value}, failed_gates=(failed_gate,))
 
-    assert select_qualified_candidates(_summary(failed), fingerprint_candidates_v2()) == ()
+    assert select_qualified_candidates(_summary(*scores), fingerprint_candidates_v2()) == ()
 
 
 def test_selection_is_sorted_by_binary_candidate_identifier():
-    profiles = load_v2_profiles()
-    second = _score(
-        profile_id=hashlib.sha256(candidate_identifier_v2(profiles[1])).hexdigest(),
-        candidate_id=candidate_identifier_v2(profiles[1]).hex(),
-    )
-    first = _score()
-    summary = _summary(second, first)
+    scores = tuple(reversed(_canonical_scores()))
+    summary = _summary(*scores)
 
     selected = select_qualified_candidates(summary, fingerprint_candidates_v2())
 
-    assert selected == tuple(sorted((bytes.fromhex(first.candidate_id), bytes.fromhex(second.candidate_id))))
+    assert selected == tuple(sorted(bytes.fromhex(score.candidate_id) for score in scores))
 
 
 def test_selection_rejects_a_source_contract_hash_mismatch():
     summary = _summary(
-        _score(),
+        *_canonical_scores(),
         contract_hashes={
             "profiles_sha256": "0" * 64,
             "corpus_sha256": hashlib.sha256(CORPUS.read_bytes()).hexdigest(),
@@ -193,17 +208,21 @@ def test_selection_loader_rejects_tampering_and_duplicate_json_keys(tmp_path):
 
 
 def test_summary_qualified_ids_cannot_disagree_with_candidate_gates():
-    failed = replace(_score(), mean_ssim=0.94, failed_gates=("mean_ssim_at_least_0.95",))
-    tampered = _summary(failed, qualified_candidate_ids=(failed.candidate_id,))
+    scores = _canonical_scores(
+        first_only=True,
+        mean_ssim=0.94,
+        failed_gates=("mean_ssim_at_least_0.95",),
+    )
+    tampered = _summary(*scores, qualified_candidate_ids=(scores[0].candidate_id,))
 
     with pytest.raises(ValueError, match="qualified"):
         select_qualified_candidates(tampered, fingerprint_candidates_v2())
 
 
-def _minimal_valid_row(plan):
+def _minimal_valid_row(plan, *, attack_id="identity"):
     source = plan.sources[0]
     candidate = plan.candidates[0]
-    attack = plan.attacks[0]
+    attack = next(attack for attack in plan.attacks if attack.case_id == attack_id)
     expected = str(
         _case_context(plan.seed, source.fixture_id, 0, candidate.profile_sha256)[0]
     )
@@ -213,7 +232,10 @@ def _minimal_valid_row(plan):
         "row_id": _row_identifier(
             source.fixture_id, 0, candidate.profile_sha256, attack.case_id
         ),
+        "evidence_scope": "research_measurement_only",
+        "profile_promoted": False,
         "corpus_contract_sha256": plan.corpus_contract_sha256,
+        "corpus_sha256": source.sha256,
         "profile_contract_sha256": plan.profile_contract_sha256,
         "attack_matrix_sha256": plan.attack_matrix_sha256,
         "benchmark_plan_sha256": plan.plan_sha256,
@@ -225,15 +247,42 @@ def _minimal_valid_row(plan):
         "attack_id": attack.case_id,
         "attack_kind": attack.kind,
         "attack_parameters": dict(attack.parameters),
+        "ordered_operations": [attack.kind],
         "seed": plan.seed,
+        "case_seed": _case_seed(
+            plan.seed, source.fixture_id, 0, candidate.profile_sha256, attack.case_id
+        ),
         "canonical_shape": [1536, 3072],
         "expected_id": expected,
         "decoded_id": None,
+        "confidence": 0.0,
+        "bit_error_rate": None,
         "reason": "not_detected",
         "algorithm_status": "insufficient_sync_evidence",
+        "outcome": "not_detected",
+        "valid_vote_count": 0,
+        "psnr_db": 40.0,
+        "ssim": 1.0,
+        "quality_data_range": 255.0,
+        "quality_scope": "original_vs_watermarked_before_attack",
+        "localization_iou": None,
+        "tamper_ground_truth": [],
+        "ground_truth_coordinate_system": "normalized_attack_output_axis_aligned_envelope",
+        "elapsed_ms": 1.0,
+        "timing_scope": "attack_and_decode",
+        "peak_rss_bytes": 1,
+        "peak_rss_scope": "process_lifetime_high_water_observed_after_attack_and_decode",
+        "temp_peak_bytes": 0,
+        "temp_peak_scope": "attack_and_decode_in_memory_temporary_files_only",
         "eligible": True,
         "remaining_embedded_tiles": None,
         "eligibility_reason": "eligible",
+        "removed_area_fraction": None,
+        "limitations": [
+            "A5 integrity localization is not implemented; tamper ground truth is recorded but localization IoU is not evaluated",
+            "peak RSS is the process-lifetime OS high-water mark observed after attack and decode",
+            "temporary disk peak is 0 because A4 attacks and decode run in memory; output/checkpoint storage is excluded",
+        ],
     }
 
 
@@ -251,6 +300,123 @@ def test_row_validation_rejects_duplicate_missing_and_canonical_shape_tampering(
             plan,
             require_complete=False,
         )
+
+
+def test_row_validation_rejects_unexpected_private_field():
+    plan = build_v2_pregate_plan(CORPUS, PROFILES, MATRIX, seed=20260827)
+
+    with pytest.raises(ValueError, match="unexpected"):
+        _validate_rows(
+            [{**_minimal_valid_row(plan), "private_debug_trace": "do-not-export"}],
+            plan,
+            require_complete=False,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("schema_version", True),
+        ("algorithm_version", 2.0),
+        ("attack_parameters", {"quality": 70.0}),
+    ],
+)
+def test_row_validation_rejects_provenance_type_confusion(field, value):
+    plan = build_v2_pregate_plan(CORPUS, PROFILES, MATRIX, seed=20260827)
+
+    with pytest.raises(ValueError, match="provenance mismatch"):
+        _validate_rows(
+            [{**_minimal_valid_row(plan, attack_id="jpeg-q70"), field: value}],
+            plan,
+            require_complete=False,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("case_seed", 0),
+        ("corpus_sha256", "0" * 64),
+        ("outcome", "true_attribution"),
+    ],
+)
+def test_row_validation_reconstructs_seed_source_and_outcome(field, value):
+    plan = build_v2_pregate_plan(CORPUS, PROFILES, MATRIX, seed=20260827)
+
+    with pytest.raises(ValueError):
+        _validate_rows(
+            [{**_minimal_valid_row(plan), field: value}],
+            plan,
+            require_complete=False,
+        )
+
+
+def test_eligible_crop_execution_error_cannot_be_removed_from_the_denominator():
+    plan = build_v2_pregate_plan(CORPUS, PROFILES, MATRIX, seed=20260827)
+    row = {
+        **_minimal_valid_row(plan, attack_id="crop-f0p25"),
+        "reason": "execution_error",
+        "algorithm_status": "execution_error",
+        "outcome": "execution_error",
+        "eligible": True,
+        "remaining_embedded_tiles": None,
+        "eligibility_reason": "eligible",
+    }
+
+    with pytest.raises(ValueError, match="crop eligibility"):
+        _validate_rows([row], plan, require_complete=False)
+
+
+def test_any_candidate_execution_error_empties_selection_despite_forged_global_zero():
+    scores = list(_canonical_scores())
+    scores[1] = replace(
+        scores[1], execution_errors=1, failed_gates=("execution_errors_zero",)
+    )
+    forged = _summary(*scores, execution_errors=0, status="complete")
+
+    assert select_qualified_candidates(forged, fingerprint_candidates_v2()) == ()
+
+
+def test_loader_reconstructs_forged_global_zero_from_validated_rows(tmp_path, monkeypatch):
+    plan = build_v2_pregate_plan(CORPUS, PROFILES, MATRIX, seed=20260827)
+    results = b'{"reason":"execution_error"}\n'
+    scores = list(_canonical_scores())
+    scores[1] = replace(
+        scores[1], execution_errors=1, failed_gates=("execution_errors_zero",)
+    )
+    preliminary = PreGateSummaryV2(
+        status="complete",
+        planned_rows=1408,
+        completed_rows=1408,
+        execution_errors=0,
+        contract_hashes={
+            "profiles_sha256": hashlib.sha256(PROFILES.read_bytes()).hexdigest(),
+            "corpus_sha256": hashlib.sha256(CORPUS.read_bytes()).hexdigest(),
+            "attack_matrix_sha256": hashlib.sha256(MATRIX.read_bytes()).hexdigest(),
+        },
+        plan_sha256=plan.plan_sha256,
+        results_sha256=hashlib.sha256(results).hexdigest(),
+        qualified_candidate_ids=(),
+        candidates=tuple(scores),
+        limitations=(),
+    )
+    forged = replace(
+        preliminary,
+        qualified_candidate_ids=pregate_v2._qualified_ids(preliminary),
+    )
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text(
+        json.dumps(pregate_v2._summary_document(forged), sort_keys=True),
+        encoding="utf-8",
+    )
+    (tmp_path / "results.jsonl").write_bytes(results)
+    monkeypatch.setattr(pregate_v2, "_validate_rows", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        pregate_v2, "_aggregate_scores", lambda *args, **kwargs: tuple(scores)
+    )
+
+    with pytest.raises(ValueError, match="tampered"):
+        pregate_v2.load_v2_pregate_summary(summary_path, PROFILES)
 
 
 def test_pregate_checkpoint_resume_identity_is_exact_and_bounded():
@@ -332,12 +498,15 @@ def test_v2_runner_uses_only_the_pre_attack_canvas_and_classifies_runtime_failur
 
     monkeypatch.setattr(runner, "decode_fingerprint_v2", decode)
     output = tmp_path / ("runtime" if runtime_failure else "missing-evidence")
-    summary = runner.run_matrix(
+    plan = runner.build_execution_plan(
         corpus,
         PROFILES,
         matrix,
         seed=20260827,
-        output_dir=output,
+    )
+    summary = runner._run_execution_plan(
+        plan,
+        output,
         max_rows=1,
     )
     row = json.loads((output / "results.jsonl").read_text(encoding="utf-8"))

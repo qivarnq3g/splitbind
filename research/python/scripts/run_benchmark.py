@@ -47,19 +47,28 @@ def main(argv: list[str] | None = None) -> int:
             smoke=arguments.smoke,
             candidate_selection=arguments.candidate_selection,
         )
-        print(
-            json.dumps(
+        document = {
+            "attack_count": plan.attack_count,
+            "candidate_count": plan.candidate_count,
+            "corpus_pages": plan.corpus_pages,
+            "planned_rows": plan.planned_rows,
+            "seed": plan.seed,
+            "smoke": plan.smoke,
+        }
+        if plan.algorithm_version == 2:
+            executable = plan.candidate_selection_sha256 is not None
+            document.update(
                 {
-                    "attack_count": plan.attack_count,
-                    "candidate_count": plan.candidate_count,
-                    "corpus_pages": plan.corpus_pages,
-                    "planned_rows": plan.planned_rows,
-                    "seed": plan.seed,
-                    "smoke": plan.smoke,
-                },
-                sort_keys=True,
+                    "candidate_selection_sha256": plan.candidate_selection_sha256,
+                    "executable": executable,
+                    "execution_blocked_reason": (
+                        None
+                        if executable
+                        else "qualified_candidate_selection_required"
+                    ),
+                }
             )
-        )
+        print(json.dumps(document, sort_keys=True))
         return 0
     if arguments.output is None:
         parser.error("--output is required unless --plan-only is used")

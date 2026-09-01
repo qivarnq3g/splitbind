@@ -21,6 +21,8 @@ from .runner import (
     _benchmark_dimensions,
     _canonical_json,
     _case_context,
+    _case_seed,
+    _outcome,
     _plan_digest,
     _remaining_embedded_tiles_v2,
     _row_identifier,
@@ -39,6 +41,63 @@ REQUIRED_CANDIDATES = 16
 REQUIRED_ATTACKS = 4
 REQUIRED_ROWS = 1408
 _REQUIRED_ATTACK_IDS = ("identity", "jpeg-q70", "resize-s0p75", "crop-f0p25")
+_V2_ROW_FIELDS = frozenset(
+    {
+        "schema_version",
+        "row_id",
+        "evidence_scope",
+        "profile_promoted",
+        "corpus_contract_sha256",
+        "corpus_sha256",
+        "profile_contract_sha256",
+        "attack_matrix_sha256",
+        "benchmark_plan_sha256",
+        "algorithm_profile_sha256",
+        "candidate_id",
+        "fixture_id",
+        "fixture_kind",
+        "page_index",
+        "attack_id",
+        "attack_kind",
+        "attack_parameters",
+        "ordered_operations",
+        "seed",
+        "case_seed",
+        "expected_id",
+        "decoded_id",
+        "confidence",
+        "bit_error_rate",
+        "reason",
+        "outcome",
+        "valid_vote_count",
+        "psnr_db",
+        "ssim",
+        "quality_data_range",
+        "quality_scope",
+        "localization_iou",
+        "tamper_ground_truth",
+        "ground_truth_coordinate_system",
+        "elapsed_ms",
+        "timing_scope",
+        "peak_rss_bytes",
+        "peak_rss_scope",
+        "temp_peak_bytes",
+        "temp_peak_scope",
+        "eligible",
+        "eligibility_reason",
+        "remaining_embedded_tiles",
+        "removed_area_fraction",
+        "limitations",
+        "algorithm_version",
+        "algorithm_status",
+        "canonical_shape",
+    }
+)
+_ROW_LIMITATIONS_PREFIX = (
+    "A5 integrity localization is not implemented; tamper ground truth is recorded but localization IoU is not evaluated",
+    "peak RSS is the process-lifetime OS high-water mark observed after attack and decode",
+    "temporary disk peak is 0 because A4 attacks and decode run in memory; output/checkpoint storage is excluded",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,19 +225,11 @@ def run_v2_pregate(
     rows = _decode_json_lines(results_bytes)
     _validate_rows(rows, plan, require_complete=False)
     scores = _aggregate_scores(rows, plan)
-    execution_errors = sum(row.get("reason") == "execution_error" for row in rows)
-    complete = len(rows) == REQUIRED_ROWS
-    status: Literal["complete", "complete_with_errors", "incomplete"] = (
-        "complete_with_errors"
-        if complete and execution_errors
-        else "complete"
-        if complete
-        else "incomplete"
-    )
+    status, completed_rows, execution_errors = _evidence_state(rows)
     preliminary = PreGateSummaryV2(
         status=status,
         planned_rows=REQUIRED_ROWS,
-        completed_rows=len(rows),
+        completed_rows=completed_rows,
         execution_errors=execution_errors,
         contract_hashes=_contract_hashes(plan),
         plan_sha256=plan.plan_sha256,
@@ -226,10 +277,12 @@ def select_qualified_candidates(
         raise ValueError("pre-gate source contract hash mismatch")
     if summary.planned_rows != REQUIRED_ROWS:
         raise ValueError("pre-gate summary planned row count mismatch")
+    _validate_candidate_score_population(summary.candidates)
     if (
         summary.status != "complete"
         or summary.completed_rows != REQUIRED_ROWS
         or summary.execution_errors != 0
+        or any(score.execution_errors != 0 for score in summary.candidates)
     ):
         return ()
     expected = _qualified_ids(summary)
@@ -259,11 +312,12 @@ def load_v2_pregate_summary(
     plan = build_v2_pregate_plan(corpus, profiles, matrix, REQUIRED_SEED)
     _validate_rows(rows, plan, require_complete=True)
     scores = _aggregate_scores(rows, plan)
+    status, completed_rows, execution_errors = _evidence_state(rows)
     evidence = PreGateSummaryV2(
-        status=_required_status(summary_document),
-        planned_rows=_required_integer(summary_document, "planned_rows"),
-        completed_rows=_required_integer(summary_document, "completed_rows"),
-        execution_errors=_required_integer(summary_document, "execution_errors"),
+        status=status,
+        planned_rows=REQUIRED_ROWS,
+        completed_rows=completed_rows,
+        execution_errors=execution_errors,
         contract_hashes=_required_contract_hashes(summary_document),
         plan_sha256=_required_sha256(summary_document, "plan_sha256"),
         results_sha256=_required_sha256(summary_document, "results_sha256"),
@@ -348,6 +402,50 @@ def _aggregate_scores(
         _aggregate_one(candidates[profile_id], grouped[profile_id])
         for profile_id in sorted(grouped)
     )
+
+
+def _evidence_state(
+    rows: Sequence[Mapping[str, object]],
+) -> tuple[Literal["complete", "complete_with_errors", "incomplete"], int, int]:
+    """Derive completion and error state only from already validated rows."""
+
+    completed_rows = len(rows)
+    execution_errors = sum(row["reason"] == "execution_error" for row in rows)
+    status: Literal["complete", "complete_with_errors", "incomplete"] = (
+        "complete_with_errors"
+        if completed_rows == REQUIRED_ROWS and execution_errors
+        else "complete"
+        if completed_rows == REQUIRED_ROWS
+        else "incomplete"
+    )
+    return status, completed_rows, execution_errors
+
+
+def _validate_candidate_score_population(
+    scores: Sequence[PreGateCandidateScoreV2],
+) -> None:
+    """Require one complete, canonical score for every frozen V2 candidate."""
+
+    profiles = load_v2_profiles()
+    expected = {
+        hashlib.sha256(candidate_identifier_v2(profile)).hexdigest(): candidate_identifier_v2(
+            profile
+        ).hex()
+        for profile in profiles
+    }
+    if len(scores) != REQUIRED_CANDIDATES:
+        raise ValueError("pre-gate summary must contain exactly 16 candidate scores")
+    observed: dict[str, str] = {}
+    for score in scores:
+        if not isinstance(score, PreGateCandidateScoreV2):
+            raise ValueError("pre-gate candidate score has an invalid type")
+        if score.profile_id in observed:
+            raise ValueError("pre-gate summary contains a duplicate candidate score")
+        observed[score.profile_id] = score.candidate_id
+        if score.scheduled_rows != REQUIRED_ROWS // REQUIRED_CANDIDATES:
+            raise ValueError("pre-gate candidate score must cover exactly 88 rows")
+    if observed != expected:
+        raise ValueError("pre-gate summary candidate scores are not the canonical V2 population")
 
 
 def _aggregate_one(
@@ -469,6 +567,7 @@ def _validate_rows(
     for ordinal, row in enumerate(rows):
         if not isinstance(row, Mapping):
             raise ValueError(f"pre-gate row {ordinal} must be an object")
+        _validate_exact_row_fields(row, ordinal)
         fixture_id = _required_string(row, "fixture_id")
         page_index = _required_integer(row, "page_index")
         profile_id = _required_string(row, "algorithm_profile_sha256")
@@ -489,20 +588,42 @@ def _validate_rows(
         expected_provenance = {
             "schema_version": 1,
             "algorithm_version": 2,
+            "evidence_scope": "research_measurement_only",
+            "profile_promoted": False,
             "corpus_contract_sha256": plan.corpus_contract_sha256,
+            "corpus_sha256": source.sha256,
             "profile_contract_sha256": plan.profile_contract_sha256,
             "attack_matrix_sha256": plan.attack_matrix_sha256,
             "benchmark_plan_sha256": plan.plan_sha256,
+            "algorithm_profile_sha256": candidate.profile_sha256,
             "candidate_id": candidate.candidate_id,
             "fixture_kind": source.kind,
             "attack_kind": attack.kind,
             "attack_parameters": dict(attack.parameters),
+            "ordered_operations": [
+                operation.kind for operation in attack.operations
+            ]
+            if attack.operations
+            else [attack.kind],
             "seed": plan.seed,
+            "case_seed": _case_seed(
+                plan.seed, fixture_id, page_index, profile_id, attack_id
+            ),
             "canonical_shape": [canvas_height, canvas_width],
         }
         for field, expected in expected_provenance.items():
-            if row.get(field) != expected:
+            if not _same_json_value(row.get(field), expected):
                 raise ValueError(f"pre-gate row provenance mismatch for {field}")
+        for field in (
+            "corpus_contract_sha256",
+            "corpus_sha256",
+            "profile_contract_sha256",
+            "attack_matrix_sha256",
+            "benchmark_plan_sha256",
+            "algorithm_profile_sha256",
+        ):
+            _required_sha256(row, field)
+        _validate_measurement_fields(row, source.kind)
         expected_id = None
         if source.kind != "negative_external":
             expected_id = str(_case_context(plan.seed, fixture_id, page_index, profile_id)[0])
@@ -526,17 +647,201 @@ def _validate_rows(
         decoded = row.get("decoded_id")
         if status != "decoded" and decoded is not None:
             raise ValueError("non-decoded V2 status exposes an issuance identity")
-        if reason != "execution_error":
-            _validate_crop_eligibility(
-                row,
-                plan,
-                candidate,
-                attack,
-                expected_id,
-                (canvas_height, canvas_width),
-            )
+        if status == "decoded":
+            _validate_canonical_uuid(decoded, "decoded_id")
+        outcome = _required_string(row, "outcome")
+        expected_outcome = _outcome(
+            expected_id,
+            decoded if isinstance(decoded, str) else None,
+            reason,
+            "execution_error" if reason == "execution_error" else None,
+        )
+        if outcome != expected_outcome:
+            raise ValueError("pre-gate row outcome disagrees with the evidence state")
+        _validate_crop_eligibility(
+            row,
+            plan,
+            candidate,
+            attack,
+            expected_id,
+            (canvas_height, canvas_width),
+        )
     if require_complete and observed != expected_set:
         raise ValueError("pre-gate results contain missing scheduled rows")
+
+
+def _validate_exact_row_fields(row: Mapping[str, object], ordinal: int) -> None:
+    actual = set(row)
+    if actual == _V2_ROW_FIELDS:
+        return
+    unexpected = sorted(actual - _V2_ROW_FIELDS)
+    missing = sorted(_V2_ROW_FIELDS - actual)
+    details: list[str] = []
+    if unexpected:
+        details.append(f"unexpected fields {unexpected}")
+    if missing:
+        details.append(f"missing fields {missing}")
+    raise ValueError(f"pre-gate row {ordinal} has " + "; ".join(details))
+
+
+def _same_json_value(actual: object, expected: object) -> bool:
+    """Compare a reconstructed JSON value without Python's type coercion."""
+
+    if type(actual) is not type(expected):
+        return False
+    if isinstance(expected, Mapping):
+        if not isinstance(actual, Mapping) or set(actual) != set(expected):
+            return False
+        return all(
+            _same_json_value(actual[key], expected[key]) for key in expected
+        )
+    if isinstance(expected, list):
+        return isinstance(actual, list) and len(actual) == len(expected) and all(
+            _same_json_value(item, reference)
+            for item, reference in zip(actual, expected)
+        )
+    return actual == expected
+
+
+def _validate_measurement_fields(row: Mapping[str, object], source_kind: str) -> None:
+    if not isinstance(row.get("profile_promoted"), bool):
+        raise ValueError("profile_promoted must be boolean")
+    if not isinstance(row.get("attack_parameters"), Mapping):
+        raise ValueError("attack_parameters must be an object")
+    operations = row.get("ordered_operations")
+    if not isinstance(operations, list) or any(
+        not isinstance(operation, str) or not operation for operation in operations
+    ):
+        raise ValueError("ordered_operations must be a non-empty string array")
+    shape = row.get("canonical_shape")
+    if (
+        not isinstance(shape, list)
+        or len(shape) != 2
+        or any(isinstance(value, bool) or not isinstance(value, int) or value < 1 for value in shape)
+    ):
+        raise ValueError("canonical_shape must be a positive integer [height, width]")
+    _required_integer(row, "case_seed")
+    _required_number_in_range(row, "confidence", minimum=0.0, maximum=1.0)
+    _optional_number_in_range(row, "bit_error_rate", minimum=0.0, maximum=1.0)
+    _required_integer(row, "valid_vote_count")
+    _validate_psnr(row.get("psnr_db"))
+    _required_number_in_range(row, "ssim", minimum=-1.0, maximum=1.0)
+    if _required_number(row, "quality_data_range") != 255.0:
+        raise ValueError("quality_data_range must be exactly 255")
+    expected_quality_scope = (
+        "negative_control_original_vs_unmodified"
+        if source_kind == "negative_external"
+        else "original_vs_watermarked_before_attack"
+    )
+    if row.get("quality_scope") != expected_quality_scope:
+        raise ValueError("pre-gate row quality scope is invalid")
+    if row.get("localization_iou") is not None:
+        raise ValueError("pre-gate localization_iou must remain null")
+    _validate_normalized_rectangles(row.get("tamper_ground_truth"))
+    if (
+        row.get("ground_truth_coordinate_system")
+        != "normalized_attack_output_axis_aligned_envelope"
+    ):
+        raise ValueError("pre-gate ground-truth coordinate system is invalid")
+    _required_number_in_range(row, "elapsed_ms", minimum=0.0)
+    _required_string_exact(row, "timing_scope", "attack_and_decode")
+    _required_integer(row, "peak_rss_bytes")
+    _required_string_exact(
+        row,
+        "peak_rss_scope",
+        "process_lifetime_high_water_observed_after_attack_and_decode",
+    )
+    if _required_integer(row, "temp_peak_bytes") != 0:
+        raise ValueError("temp_peak_bytes must be zero for in-memory pre-gate work")
+    _required_string_exact(
+        row,
+        "temp_peak_scope",
+        "attack_and_decode_in_memory_temporary_files_only",
+    )
+    if not isinstance(row.get("eligible"), bool):
+        raise ValueError("eligible must be boolean")
+    remaining = row.get("remaining_embedded_tiles")
+    if remaining is not None:
+        _required_integer(row, "remaining_embedded_tiles")
+    if row.get("eligibility_reason") not in {
+        "eligible",
+        "at_least_two_complete_embedded_tiles_remain",
+        "fewer_than_two_complete_embedded_tiles_remain",
+    }:
+        raise ValueError("pre-gate eligibility reason is invalid")
+    _optional_number_in_range(row, "removed_area_fraction", minimum=0.0, maximum=1.0)
+    limitations = row.get("limitations")
+    if (
+        not isinstance(limitations, list)
+        or len(limitations) < len(_ROW_LIMITATIONS_PREFIX)
+        or tuple(limitations[: len(_ROW_LIMITATIONS_PREFIX)]) != _ROW_LIMITATIONS_PREFIX
+        or any(not isinstance(value, str) or not value for value in limitations)
+    ):
+        raise ValueError("pre-gate row limitations are invalid")
+
+
+def _required_string_exact(
+    row: Mapping[str, object], field: str, expected: str
+) -> None:
+    if _required_string(row, field) != expected:
+        raise ValueError(f"pre-gate {field} is invalid")
+
+
+def _required_number_in_range(
+    row: Mapping[str, object], field: str, *, minimum: float, maximum: float | None = None
+) -> float:
+    value = _required_number(row, field)
+    if value < minimum or (maximum is not None and value > maximum):
+        raise ValueError(f"{field} is outside its permitted range")
+    return value
+
+
+def _optional_number_in_range(
+    row: Mapping[str, object], field: str, *, minimum: float, maximum: float | None = None
+) -> float | None:
+    if row.get(field) is None:
+        return None
+    return _required_number_in_range(row, field, minimum=minimum, maximum=maximum)
+
+
+def _validate_psnr(value: object) -> None:
+    if value == "Infinity":
+        return
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("psnr_db must be a non-negative finite number or Infinity")
+    if not math.isfinite(float(value)) or float(value) < 0.0:
+        raise ValueError("psnr_db must be a non-negative finite number or Infinity")
+
+
+def _validate_normalized_rectangles(value: object) -> None:
+    if not isinstance(value, list):
+        raise ValueError("tamper_ground_truth must be an array")
+    for rectangle in value:
+        if not isinstance(rectangle, Mapping) or set(rectangle) != {
+            "x",
+            "y",
+            "width",
+            "height",
+        }:
+            raise ValueError("tamper ground-truth rectangle schema is invalid")
+        x = _required_number_in_range(rectangle, "x", minimum=0.0, maximum=1.0)
+        y = _required_number_in_range(rectangle, "y", minimum=0.0, maximum=1.0)
+        width = _required_number_in_range(rectangle, "width", minimum=0.0, maximum=1.0)
+        height = _required_number_in_range(rectangle, "height", minimum=0.0, maximum=1.0)
+        if width == 0.0 or height == 0.0 or x + width > 1.0 or y + height > 1.0:
+            raise ValueError("tamper ground-truth rectangle is outside normalized bounds")
+
+
+def _validate_canonical_uuid(value: object, field: str) -> None:
+    if not isinstance(value, str):
+        raise ValueError(f"{field} must be a canonical UUID string")
+    try:
+        from uuid import UUID
+
+        if str(UUID(value)) != value:
+            raise ValueError
+    except ValueError as error:
+        raise ValueError(f"{field} must be a canonical UUID string") from error
 
 
 def _validate_crop_eligibility(
