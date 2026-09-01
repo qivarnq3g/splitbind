@@ -19,6 +19,7 @@ from splitbind_bench.runner import (
 
 ROOT = Path(__file__).resolve().parents[4]
 PROFILES = ROOT / "contracts" / "algorithm" / "fingerprint-candidates.v1.json"
+PROFILES_V2 = ROOT / "contracts" / "algorithm" / "fingerprint-candidates.v2.json"
 CORPUS = ROOT / "fixtures" / "corpus" / "corpus-manifest.v1.json"
 MATRIX = ROOT / "contracts" / "algorithm" / "attack-matrix.v1.json"
 SCRIPT = ROOT / "research" / "python" / "scripts" / "run_benchmark.py"
@@ -122,6 +123,24 @@ def test_full_plan_is_the_complete_corpus_candidate_attack_cross_product():
         "screenshot",
         "perspective",
     ]
+
+
+def test_v1_plan_hash_and_dispatch_are_unchanged_after_v2_support():
+    plan = build_execution_plan(CORPUS, PROFILES, MATRIX, seed=20260827)
+
+    assert plan.plan_sha256 == "9118eb9424e32400548d7feae4cb5d9c9c827359d9d8b74a6d9e3a9f0d7f71f3"
+    assert plan.profile_contract_sha256 == "d3a8c2ec271c76a2ed424dd52fc5f2760ddd3ef2773663168bbad68e54865e9f"
+    assert plan.algorithm_version == 1
+
+
+def test_v2_full_plan_uses_explicit_version_dispatch_without_changing_v1_population():
+    plan = build_execution_plan(CORPUS, PROFILES_V2, MATRIX, seed=20260827)
+
+    assert plan.algorithm_version == 2
+    assert plan.corpus_pages == 22
+    assert plan.candidate_count == 16
+    assert plan.attack_count == 31
+    assert plan.planned_rows == 22 * 16 * 31
 
 
 def test_smoke_plan_uses_feature_rich_positive_and_negative_control():

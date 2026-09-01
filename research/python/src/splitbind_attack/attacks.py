@@ -51,6 +51,14 @@ def apply_attack(
         raise TypeError("case must be an AttackCase")
     if not isinstance(rng, np.random.Generator):
         raise TypeError("rng must be a numpy Generator")
+    if case.kind == "identity":
+        if case.parameters or case.operations:
+            raise ValueError("identity attack must not contain parameters or operations")
+        return AttackedArtifact(
+            image=np.ascontiguousarray(source).copy(),
+            operations=("identity",),
+            source_to_output=IDENTITY_TRANSFORM,
+        )
     if case.kind == "combined":
         if not case.operations:
             raise ValueError("combined attack must contain ordered operations")

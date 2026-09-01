@@ -33,7 +33,11 @@ from splitbind_attack.ground_truth import (
     transform_regions,
 )
 from splitbind_bench.metrics import Result, compute_detection_metrics, compute_quality_metrics
-from splitbind_ref.contracts import fingerprint_candidates
+from splitbind_ref.contracts import (
+    fingerprint_candidates,
+    fingerprint_candidates_v2,
+    fingerprint_candidates_v2_bytes,
+)
 from splitbind_ref.fingerprint import (
     DecodeDecision,
     FingerprintContext,
@@ -42,6 +46,18 @@ from splitbind_ref.fingerprint import (
     embed_fingerprint,
 )
 from splitbind_ref.tile_layout import derive_tiles
+from splitbind_ref.fingerprint_v2 import (
+    DecodeV2Decision,
+    FingerprintV2Context,
+    decode_fingerprint_v2,
+    embed_fingerprint_v2,
+)
+from splitbind_ref.fingerprint_v2_profile import (
+    FingerprintV2Profile,
+    candidate_identifier_v2,
+    load_v2_profiles,
+)
+from splitbind_ref.tile_layout_v2 import derive_tiles_v2
 
 
 NONDETERMINISTIC_ROW_FIELDS = frozenset({"elapsed_ms", "peak_rss_bytes"})
@@ -78,6 +94,8 @@ class FittedCanvas:
 class Candidate:
     values: Mapping[str, int | float]
     profile_sha256: str
+    algorithm_version: int = 1
+    candidate_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,6 +113,21 @@ class ExecutionPlan:
     plan_sha256: str
     seed: int
     smoke: bool
+    algorithm_version: int = 1
+    candidate_selection_sha256: str | None = None
+    run_kind: str = "full"
+
+    @property
+    def positive_pages(self) -> int:
+        return sum(
+            source.pages for source in self.sources if source.kind != "negative_external"
+        )
+
+    @property
+    def negative_pages(self) -> int:
+        return sum(
+            source.pages for source in self.sources if source.kind == "negative_external"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,6 +150,7 @@ def build_execution_plan(
     seed: int,
     *,
     smoke: bool = False,
+    candidate_selection: str | Path | None = None,
 ) -> ExecutionPlan:
     """Expand the exact manifest/grid/matrix cross product without executing it."""
 
@@ -128,14 +162,36 @@ def build_execution_plan(
     profile_document = _load_json(profile_path)
     matrix_document = _load_json(matrix_path)
     sources = _corpus_sources(corpus_path, corpus_document)
-    candidates = _candidate_grid(profile_document)
+    algorithm_version, candidates = _candidate_grid(profile_document, profile_path)
     attacks = _attack_cases(matrix_document)
+    selection_sha256: str | None = None
+    if candidate_selection is not None:
+        if algorithm_version != 2:
+            raise ValueError("candidate selection is supported only for fingerprint V2")
+        selection_path = Path(candidate_selection).resolve()
+        from splitbind_bench.pregate_v2 import load_qualified_candidate_selection
+
+        selected_ids = load_qualified_candidate_selection(selection_path, profile_path)
+        if not selected_ids:
+            raise ValueError("candidate selection is empty; the full V2 matrix must be skipped")
+        selected_hex = {value.hex() for value in selected_ids}
+        candidates = tuple(
+            candidate for candidate in candidates if candidate.candidate_id in selected_hex
+        )
+        if len(candidates) != len(selected_ids):
+            raise ValueError("candidate selection contains an unknown V2 candidate")
+        selection_sha256 = _sha256_file(selection_path)
     if smoke:
         sources = _smoke_sources(sources)
         candidates = candidates[:1]
         attacks = _smoke_attacks(attacks)
     page_count = sum(source.pages for source in sources)
-    plan_sha256 = _plan_digest(sources, candidates, attacks)
+    plan_sha256 = _plan_digest(
+        sources,
+        candidates,
+        attacks,
+        candidate_selection_sha256=selection_sha256,
+    )
     return ExecutionPlan(
         sources=sources,
         candidates=candidates,
@@ -150,6 +206,8 @@ def build_execution_plan(
         plan_sha256=plan_sha256,
         seed=seed,
         smoke=smoke,
+        algorithm_version=algorithm_version,
+        candidate_selection_sha256=selection_sha256,
     )
 
 
@@ -177,6 +235,7 @@ def run_matrix(
     max_rows: int | None = None,
     shard_index: int = 0,
     shard_count: int = 1,
+    candidate_selection: str | Path | None = None,
 ) -> BenchmarkSummary:
     """Run or resume a matrix shard and atomically export truthful evidence.
 
@@ -185,7 +244,33 @@ def run_matrix(
     shard identity match exactly.
     """
 
-    plan = build_execution_plan(corpus, profiles, matrix, seed, smoke=smoke)
+    plan = build_execution_plan(
+        corpus,
+        profiles,
+        matrix,
+        seed,
+        smoke=smoke,
+        candidate_selection=candidate_selection,
+    )
+    return _run_execution_plan(
+        plan,
+        output_dir,
+        max_rows=max_rows,
+        shard_index=shard_index,
+        shard_count=shard_count,
+    )
+
+
+def _run_execution_plan(
+    plan: ExecutionPlan,
+    output_dir: str | Path,
+    *,
+    max_rows: int | None = None,
+    shard_index: int = 0,
+    shard_count: int = 1,
+) -> BenchmarkSummary:
+    """Execute an already validated plan; used by full runs and the V2 pre-gate."""
+
     _validate_shard(shard_index, shard_count)
     if max_rows is not None and (isinstance(max_rows, bool) or max_rows < 1):
         raise ValueError("max_rows must be a positive integer")
@@ -228,33 +313,59 @@ def run_matrix(
                     raw_page.page_index,
                     candidate.profile_sha256,
                 )
-                runtime_profile = {
-                    "schema_version": 1,
-                    **candidate.values,
-                    "document_nonce": context_values[2],
-                    "page_index": raw_page.page_index,
-                }
                 expected_id: UUID | None = None
                 embedding_error: Exception | None = None
                 watermarked = page
-                decode_profile = runtime_profile
-                if raw_page.source.kind != "negative_external":
-                    expected_id = context_values[0]
-                    try:
-                        embedded = embed_fingerprint(
-                            page,
-                            FingerprintContext(
-                                issuance_id=expected_id,
-                                fingerprint_key=context_values[1],
-                                document_nonce=context_values[2],
-                                page_index=raw_page.page_index,
-                            ),
-                            runtime_profile,
-                        )
-                        watermarked = embedded.image
-                        decode_profile = {**runtime_profile, "sync_template": embedded.sync_template}
-                    except Exception as error:  # Every planned case remains represented.
-                        embedding_error = error
+                runtime_profile: Mapping[str, object] | FingerprintV2Profile
+                decode_profile: Mapping[str, object] | FingerprintV2Profile
+                if plan.algorithm_version == 1:
+                    runtime_profile = {
+                        "schema_version": 1,
+                        **candidate.values,
+                        "document_nonce": context_values[2],
+                        "page_index": raw_page.page_index,
+                    }
+                    decode_profile = runtime_profile
+                    if raw_page.source.kind != "negative_external":
+                        expected_id = context_values[0]
+                        try:
+                            embedded = embed_fingerprint(
+                                page,
+                                FingerprintContext(
+                                    issuance_id=expected_id,
+                                    fingerprint_key=context_values[1],
+                                    document_nonce=context_values[2],
+                                    page_index=raw_page.page_index,
+                                ),
+                                runtime_profile,
+                            )
+                            watermarked = embedded.image
+                            decode_profile = {
+                                **runtime_profile,
+                                "sync_template": embedded.sync_template,
+                            }
+                        except Exception as error:  # Every planned case remains represented.
+                            embedding_error = error
+                elif plan.algorithm_version == 2:
+                    runtime_profile = _runtime_v2_profile(candidate)
+                    decode_profile = runtime_profile
+                    if raw_page.source.kind != "negative_external":
+                        expected_id = context_values[0]
+                        try:
+                            embedded_v2 = embed_fingerprint_v2(
+                                page,
+                                FingerprintV2Context(
+                                    issuance_id=expected_id,
+                                    fingerprint_key=context_values[1],
+                                    page_index=raw_page.page_index,
+                                ),
+                                runtime_profile,
+                            )
+                            watermarked = embedded_v2.image
+                        except Exception as error:  # Every planned case remains represented.
+                            embedding_error = error
+                else:  # Defensive: plan construction admits only explicit versions.
+                    raise ValueError("unsupported fingerprint algorithm version")
                 quality = compute_quality_metrics(page, watermarked)
                 for _, attack, row_id in scheduled:
                     if max_rows is not None and new_rows >= max_rows:
@@ -276,6 +387,7 @@ def run_matrix(
                         key=context_values[1],
                         quality=quality,
                         embedding_error=embedding_error,
+                        canonical_shape=page.shape[:2],
                     )
                     connection.execute(
                         "INSERT INTO result_rows(row_id, payload) VALUES (?, ?)",
@@ -312,12 +424,13 @@ def _execute_row(
     original: NDArray[np.uint8],
     watermarked: NDArray[np.uint8],
     source_to_canvas: Transform,
-    runtime_profile: Mapping[str, object],
-    decode_profile: Mapping[str, object],
+    runtime_profile: Mapping[str, object] | FingerprintV2Profile,
+    decode_profile: Mapping[str, object] | FingerprintV2Profile,
     expected_id: UUID | None,
     key: bytes,
     quality,
     embedding_error: Exception | None,
+    canonical_shape: tuple[int, int],
 ) -> dict[str, object]:
     case_seed = _case_seed(
         plan.seed, source.fixture_id, page_index, candidate.profile_sha256, attack.case_id
@@ -327,7 +440,13 @@ def _execute_row(
         "peak RSS is the process-lifetime OS high-water mark observed after attack and decode",
         "temporary disk peak is 0 because A4 attacks and decode run in memory; output/checkpoint storage is excluded",
     ]
-    decision = DecodeDecision(None, 0.0, 0, None, "not_detected")
+    decision: DecodeDecision | DecodeV2Decision
+    if plan.algorithm_version == 1:
+        decision = DecodeDecision(None, 0.0, 0, None, "not_detected")
+    else:
+        decision = DecodeV2Decision(
+            None, 0.0, 0, None, "insufficient_sync_evidence"
+        )
     artifact: AttackedArtifact | None = None
     elapsed_ms = 0.0
     error_text: str | None = None
@@ -338,7 +457,18 @@ def _execute_row(
             artifact = apply_attack(
                 watermarked, attack, np.random.default_rng(case_seed)
             )
-            decision = decode_fingerprint(artifact.image, key, (decode_profile,))
+            if plan.algorithm_version == 1:
+                decision = decode_fingerprint(artifact.image, key, (decode_profile,))
+            else:
+                if not isinstance(decode_profile, FingerprintV2Profile):
+                    raise TypeError("V2 runner requires a FingerprintV2Profile")
+                decision = decode_fingerprint_v2(
+                    artifact.image,
+                    key,
+                    page_index,
+                    canonical_shape,
+                    (decode_profile,),
+                )
         except Exception as error:  # Preserve failures as data instead of omission.
             error_text = f"{type(error).__name__}: {error}"
         elapsed_ms = (time.perf_counter_ns() - start) / 1_000_000.0
@@ -350,9 +480,22 @@ def _execute_row(
     eligible = True
     eligibility_reason = "eligible"
     if artifact is not None and artifact.retained_region is not None and expected_id is not None:
-        remaining_tiles = _remaining_embedded_tiles(
-            original.shape[:2], key, runtime_profile, artifact.retained_region
-        )
+        if plan.algorithm_version == 1:
+            if not isinstance(runtime_profile, Mapping):
+                raise TypeError("V1 runner requires a mapping profile")
+            remaining_tiles = _remaining_embedded_tiles(
+                original.shape[:2], key, runtime_profile, artifact.retained_region
+            )
+        else:
+            if not isinstance(runtime_profile, FingerprintV2Profile):
+                raise TypeError("V2 runner requires a FingerprintV2Profile")
+            remaining_tiles = _remaining_embedded_tiles_v2(
+                canonical_shape,
+                key,
+                page_index,
+                runtime_profile,
+                artifact.retained_region,
+            )
         eligible = remaining_tiles >= 2
         eligibility_reason = (
             "at_least_two_complete_embedded_tiles_remain"
@@ -376,8 +519,21 @@ def _execute_row(
 
     decoded_id = str(decision.issuance_id) if decision.issuance_id is not None else None
     expected_text = str(expected_id) if expected_id is not None else None
-    outcome = _outcome(expected_text, decoded_id, decision.reason, error_text)
-    profile_for_identifier = dict(runtime_profile)
+    decision_status = decision.reason if isinstance(decision, DecodeDecision) else decision.status
+    row_reason = (
+        decision.reason
+        if isinstance(decision, DecodeDecision)
+        else _v2_metric_reason(decision.status)
+    )
+    outcome = _outcome(expected_text, decoded_id, row_reason, error_text)
+    if plan.algorithm_version == 1:
+        if not isinstance(runtime_profile, Mapping):
+            raise TypeError("V1 runner requires a mapping profile")
+        candidate_id = candidate_identifier(dict(runtime_profile)).hex()
+    else:
+        candidate_id = candidate.candidate_id
+        if candidate_id is None:
+            raise ValueError("V2 candidate identity is missing")
     row = {
         "schema_version": 1,
         "row_id": row_id,
@@ -389,7 +545,7 @@ def _execute_row(
         "attack_matrix_sha256": plan.attack_matrix_sha256,
         "benchmark_plan_sha256": plan.plan_sha256,
         "algorithm_profile_sha256": candidate.profile_sha256,
-        "candidate_id": candidate_identifier(profile_for_identifier).hex(),
+        "candidate_id": candidate_id,
         "fixture_id": source.fixture_id,
         "fixture_kind": source.kind,
         "page_index": page_index,
@@ -405,7 +561,7 @@ def _execute_row(
         "decoded_id": decoded_id,
         "confidence": float(decision.confidence),
         "bit_error_rate": decision.bit_error_rate,
-        "reason": decision.reason if error_text is None else "execution_error",
+        "reason": row_reason if error_text is None else "execution_error",
         "outcome": outcome,
         "valid_vote_count": decision.valid_votes,
         "psnr_db": _finite_json_number(quality.psnr_db),
@@ -429,6 +585,12 @@ def _execute_row(
         "removed_area_fraction": artifact.removed_area_fraction if artifact is not None else None,
         "limitations": limitations,
     }
+    if plan.algorithm_version == 2:
+        row["algorithm_version"] = 2
+        row["algorithm_status"] = (
+            decision_status if error_text is None else "execution_error"
+        )
+        row["canonical_shape"] = [canonical_shape[0], canonical_shape[1]]
     return row
 
 
@@ -479,9 +641,14 @@ def _attack_cases(document: Mapping[str, object]) -> tuple[AttackCase, ...]:
     return tuple(cases)
 
 
-def _candidate_grid(document: Mapping[str, object]) -> tuple[Candidate, ...]:
-    if document.get("schema_version") != 1:
-        raise ValueError("candidate schema_version must be 1")
+def _candidate_grid(
+    document: Mapping[str, object], profile_path: Path
+) -> tuple[int, tuple[Candidate, ...]]:
+    schema_version = document.get("schema_version")
+    if type(schema_version) is not int or schema_version not in {1, 2}:
+        raise ValueError("candidate schema_version must be explicit integer 1 or 2")
+    if schema_version == 2:
+        return 2, _candidate_grid_v2(document, profile_path)
     fixed = document.get("fixed")
     canonical_fixed = fingerprint_candidates().get("fixed")
     if not isinstance(fixed, Mapping) or fixed != canonical_fixed:
@@ -502,6 +669,37 @@ def _candidate_grid(document: Mapping[str, object]) -> tuple[Candidate, ...]:
             ).encode()
         ).hexdigest()
         candidates.append(Candidate(profile, digest))
+    return 1, tuple(candidates)
+
+
+def _candidate_grid_v2(
+    document: Mapping[str, object], profile_path: Path
+) -> tuple[Candidate, ...]:
+    canonical = fingerprint_candidates_v2()
+    canonical_sha256 = hashlib.sha256(fingerprint_candidates_v2_bytes()).hexdigest()
+    if document != canonical or _sha256_file(profile_path) != canonical_sha256:
+        raise ValueError("selected V2 candidate contract must match the frozen contract bytes")
+    candidates: list[Candidate] = []
+    for profile in load_v2_profiles():
+        identifier = candidate_identifier_v2(profile)
+        values: dict[str, int | float] = {
+            "qim_delta": profile.qim_delta,
+            "pilot_strength_rms": profile.pilot_strength_rms,
+            "tile_size_px": profile.tile_size_px,
+            "tiles_per_page": profile.tiles_per_page,
+            "payload_repetitions": profile.payload_repetitions,
+            "bit_replication": profile.bit_replication,
+            "bit_confidence_min": profile.bit_confidence_min,
+            "pilot_score_min": profile.pilot_score_min,
+        }
+        candidates.append(
+            Candidate(
+                values=values,
+                profile_sha256=hashlib.sha256(identifier).hexdigest(),
+                algorithm_version=2,
+                candidate_id=identifier.hex(),
+            )
+        )
     return tuple(candidates)
 
 
@@ -628,6 +826,46 @@ def _remaining_embedded_tiles(
     )
 
 
+def _remaining_embedded_tiles_v2(
+    page_shape: tuple[int, int],
+    key: bytes,
+    page_index: int,
+    profile: FingerprintV2Profile,
+    retained: NormalizedRect,
+) -> int:
+    tiles = derive_tiles_v2(page_shape, key, page_index, profile)[
+        : profile.payload_repetitions
+    ]
+    height, width = page_shape
+    left = retained.x * width
+    top = retained.y * height
+    right = retained.right * width
+    bottom = retained.bottom * height
+    return sum(
+        tile.x >= left
+        and tile.y >= top
+        and tile.x + tile.width <= right
+        and tile.y + tile.height <= bottom
+        for tile in tiles
+    )
+
+
+def _runtime_v2_profile(candidate: Candidate) -> FingerprintV2Profile:
+    if candidate.algorithm_version != 2 or candidate.candidate_id is None:
+        raise ValueError("candidate is not a V2 candidate")
+    matches = tuple(
+        profile
+        for profile in load_v2_profiles()
+        if candidate_identifier_v2(profile).hex() == candidate.candidate_id
+    )
+    if len(matches) != 1:
+        raise ValueError("V2 candidate does not resolve to exactly one frozen profile")
+    profile = matches[0]
+    if hashlib.sha256(candidate_identifier_v2(profile)).hexdigest() != candidate.profile_sha256:
+        raise ValueError("V2 candidate profile hash mismatch")
+    return profile
+
+
 def _fit_canvas(image: NDArray[np.uint8], width: int, height: int) -> FittedCanvas:
     source_height, source_width = image.shape[:2]
     scale = min(width / source_width, height / source_height)
@@ -688,6 +926,8 @@ def _plan_digest(
     sources: Sequence[CorpusSource],
     candidates: Sequence[Candidate],
     attacks: Sequence[AttackCase],
+    *,
+    candidate_selection_sha256: str | None = None,
 ) -> str:
     def attack_document(case: AttackCase) -> dict[str, object]:
         return {
@@ -710,6 +950,8 @@ def _plan_digest(
         "candidates": [candidate.profile_sha256 for candidate in candidates],
         "attacks": [attack_document(attack) for attack in attacks],
     }
+    if candidate_selection_sha256 is not None:
+        document["candidate_selection_sha256"] = candidate_selection_sha256
     return hashlib.sha256(_canonical_json(document).encode("utf-8")).hexdigest()
 
 
@@ -729,20 +971,27 @@ def _case_seed(
 
 
 def _run_identity(plan: ExecutionPlan, shard_index: int, shard_count: int) -> str:
-    return _canonical_json(
-        {
-            "schema_version": 1,
-            "seed": plan.seed,
-            "smoke": plan.smoke,
-            "corpus_contract_sha256": plan.corpus_contract_sha256,
-            "profile_contract_sha256": plan.profile_contract_sha256,
-            "attack_matrix_sha256": plan.attack_matrix_sha256,
-            "plan_sha256": plan.plan_sha256,
-            "planned_rows": plan.planned_rows,
-            "shard_index": shard_index,
-            "shard_count": shard_count,
-        }
-    )
+    identity: dict[str, object] = {
+        "schema_version": 1,
+        "seed": plan.seed,
+        "smoke": plan.smoke,
+        "corpus_contract_sha256": plan.corpus_contract_sha256,
+        "profile_contract_sha256": plan.profile_contract_sha256,
+        "attack_matrix_sha256": plan.attack_matrix_sha256,
+        "plan_sha256": plan.plan_sha256,
+        "planned_rows": plan.planned_rows,
+        "shard_index": shard_index,
+        "shard_count": shard_count,
+    }
+    if plan.algorithm_version == 2:
+        identity.update(
+            {
+                "algorithm_version": 2,
+                "run_kind": plan.run_kind,
+                "candidate_selection_sha256": plan.candidate_selection_sha256,
+            }
+        )
+    return _canonical_json(identity)
 
 
 def _initialize_checkpoint(connection: sqlite3.Connection, identity: str) -> None:
@@ -829,6 +1078,12 @@ def _export_artifacts(
             "temporary disk excludes checkpoint and report outputs because attack/decode uses no temporary files",
         ],
     }
+    if plan.algorithm_version == 2:
+        summary_document["algorithm_version"] = 2
+        summary_document["run_kind"] = plan.run_kind
+        summary_document["contracts"][
+            "candidate_selection_sha256"
+        ] = plan.candidate_selection_sha256
     jsonl = "".join(_canonical_json(row) + "\n" for row in payloads)
     _atomic_write_text(destination / "results.jsonl", jsonl)
     _atomic_write_csv(destination / "results.csv", payloads)
@@ -1005,6 +1260,20 @@ def _outcome(expected: str | None, decoded: str | None, reason: str, error: str 
     return reason
 
 
+def _v2_metric_reason(status: str) -> str:
+    if status == "decoded":
+        return "decoded"
+    if status == "partial_payload_evidence":
+        return "partial"
+    if status in {
+        "payload_not_detected",
+        "insufficient_sync_evidence",
+        "geometry_rejected",
+    }:
+        return "not_detected"
+    raise ValueError(f"unsupported V2 decode status: {status}")
+
+
 def _row_identifier(fixture_id: str, page_index: int, profile_hash: str, attack_id: str) -> str:
     material = f"{fixture_id}\x00{page_index}\x00{profile_hash}\x00{attack_id}".encode()
     return hashlib.sha256(material).hexdigest()
@@ -1028,9 +1297,18 @@ def _canonical_json(value: object) -> str:
 
 def _load_json(path: Path) -> dict[str, object]:
     with path.open(encoding="utf-8") as stream:
-        document = json.load(stream)
+        document = json.load(stream, object_pairs_hook=_reject_duplicate_keys)
     if not isinstance(document, dict):
         raise ValueError(f"JSON document must be an object: {path}")
+    return document
+
+
+def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    document: dict[str, object] = {}
+    for key, value in pairs:
+        if key in document:
+            raise ValueError(f"JSON object contains duplicate key: {key}")
+        document[key] = value
     return document
 
 

@@ -22,6 +22,7 @@ def _parser() -> argparse.ArgumentParser:
         description="Run the versioned SplitBind attack matrix without promoting a candidate."
     )
     parser.add_argument("--profiles", required=True, type=Path)
+    parser.add_argument("--candidate-selection", type=Path)
     parser.add_argument("--corpus", required=True, type=Path)
     parser.add_argument("--matrix", required=True, type=Path)
     parser.add_argument("--seed", required=True, type=int)
@@ -44,6 +45,7 @@ def main(argv: list[str] | None = None) -> int:
             arguments.matrix,
             arguments.seed,
             smoke=arguments.smoke,
+            candidate_selection=arguments.candidate_selection,
         )
         print(
             json.dumps(
@@ -71,6 +73,7 @@ def main(argv: list[str] | None = None) -> int:
         max_rows=arguments.max_rows,
         shard_index=arguments.shard_index,
         shard_count=arguments.shard_count,
+        candidate_selection=arguments.candidate_selection,
     )
     document = asdict(summary)
     document["output_dir"] = str(summary.output_dir)
