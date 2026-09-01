@@ -544,6 +544,113 @@ def test_eligible_crop_execution_error_cannot_be_removed_from_the_denominator():
         _validate_rows([row], plan, require_complete=False)
 
 
+def _assert_preartifact_crop_failure_is_complete_evidence(summary, output, plan, errors):
+    rows = [
+        json.loads(line)
+        for line in (output / "results.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    crop = next(row for row in rows if row["attack_id"] == "crop-f0p25")
+    height, width = crop["canonical_shape"]
+    retained_width = max(1, round(width * 0.75**0.5))
+    retained_height = max(1, round(height * 0.75**0.5))
+    expected_removed = 1.0 - (retained_width * retained_height) / (width * height)
+    source_page = next(
+        page
+        for page in runner._iter_sources((plan.sources[0],))
+        if page.page_index == crop["page_index"]
+    )
+    source_only_ground_truth = runner.transform_regions(
+        plan.sources[0].ground_truth,
+        runner._fit_canvas(source_page.image, width, height).source_to_canvas,
+    )
+
+    assert crop["reason"] == "execution_error"
+    assert crop["algorithm_status"] == "execution_error"
+    assert crop["tamper_ground_truth"] == [
+        rectangle.as_dict() for rectangle in source_only_ground_truth
+    ]
+    assert crop["removed_area_fraction"] == expected_removed
+    assert crop["eligible"] is True
+    assert crop["remaining_embedded_tiles"] >= 2
+    assert crop["eligibility_reason"] == "at_least_two_complete_embedded_tiles_remain"
+    assert summary.status == "incomplete"
+    assert summary.completed_rows == 4
+    assert summary.execution_errors == errors
+    assert summary.qualified_candidate_ids == ()
+    score = next(score for score in summary.candidates if score.scheduled_rows)
+    assert (score.crop025_true_attribution, score.crop025_denominator) == (0, 1)
+    assert score.execution_errors == errors
+
+
+def _pregate_plan_with_an_eligible_first_crop():
+    plan = build_v2_pregate_plan(CORPUS, PROFILES, MATRIX, seed=20260827)
+    source = next(source for source in plan.sources if source.fixture_id == "tamper-ground-truth")
+    return replace(
+        plan,
+        sources=(source, *(item for item in plan.sources if item != source)),
+        candidates=(plan.candidates[1], plan.candidates[0], *plan.candidates[2:]),
+    )
+
+
+def test_forced_embedding_failure_keeps_eligible_crop_error_as_pregate_evidence(
+    tmp_path, monkeypatch
+):
+    plan = _pregate_plan_with_an_eligible_first_crop()
+
+    def fail_embedding(*args, **kwargs):
+        raise RuntimeError("synthetic embedding failure")
+
+    monkeypatch.setattr(runner, "embed_fingerprint_v2", fail_embedding)
+    monkeypatch.setattr(pregate_v2, "build_v2_pregate_plan", lambda *args: plan)
+    output = tmp_path / "embedding-failure"
+
+    summary = pregate_v2.run_v2_pregate(
+        CORPUS, PROFILES, MATRIX, 20260827, output, max_rows=4
+    )
+
+    _assert_preartifact_crop_failure_is_complete_evidence(summary, output, plan, 4)
+
+
+def test_forced_attack_failure_keeps_eligible_crop_error_as_pregate_evidence(
+    tmp_path, monkeypatch
+):
+    plan = _pregate_plan_with_an_eligible_first_crop()
+    apply = runner.apply_attack
+
+    def embed(page, context, profile):
+        watermarked = page.copy()
+        watermarked[0, 0, 0] ^= 1
+        return SimpleNamespace(image=watermarked)
+
+    monkeypatch.setattr(
+        runner,
+        "embed_fingerprint_v2",
+        embed,
+    )
+    monkeypatch.setattr(
+        runner,
+        "decode_fingerprint_v2",
+        lambda image, key, page_index, canonical_shape, profiles: DecodeV2Decision(
+            None, 0.0, 0, None, "insufficient_sync_evidence"
+        ),
+    )
+
+    def fail_crop(image, attack, rng):
+        if attack.case_id == "crop-f0p25":
+            raise RuntimeError("synthetic attack failure")
+        return apply(image, attack, rng)
+
+    monkeypatch.setattr(runner, "apply_attack", fail_crop)
+    monkeypatch.setattr(pregate_v2, "build_v2_pregate_plan", lambda *args: plan)
+    output = tmp_path / "attack-failure"
+
+    summary = pregate_v2.run_v2_pregate(
+        CORPUS, PROFILES, MATRIX, 20260827, output, max_rows=4
+    )
+
+    _assert_preartifact_crop_failure_is_complete_evidence(summary, output, plan, 1)
+
+
 def test_any_candidate_execution_error_empties_selection_despite_forged_global_zero():
     scores = list(_canonical_scores())
     scores[1] = replace(

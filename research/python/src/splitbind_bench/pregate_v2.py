@@ -11,7 +11,12 @@ from typing import Literal, Mapping, Sequence
 
 import numpy as np
 
-from splitbind_attack.attacks import AttackCase, AttackedArtifact, apply_attack
+from splitbind_attack.attacks import (
+    AttackCase,
+    AttackedArtifact,
+    apply_attack,
+    planned_crop_geometry,
+)
 from splitbind_attack.ground_truth import (
     NormalizedRect,
     Transform,
@@ -863,6 +868,11 @@ def _validate_reconstructed_attack_evidence(
     transform = _source_to_canvas_transform(
         source, page_index, page_shape, canvas_transforms
     )
+    planned_crop = (
+        planned_crop_geometry(attack, page_shape)
+        if source.kind != "negative_external"
+        else None
+    )
     artifact_states = (artifact_absent,) if artifact_absent is not None else (False, True)
     first_error: ValueError | None = None
     for absent in artifact_states:
@@ -872,6 +882,7 @@ def _validate_reconstructed_attack_evidence(
                 source.ground_truth,
                 transform,
                 None if absent else _canonical_attack_artifact(attack, page_shape, artifacts),
+                planned_crop[1] if absent and planned_crop is not None else None,
             )
             return
         except ValueError as error:
@@ -886,6 +897,7 @@ def _validate_attack_evidence_for_state(
     source_ground_truth: Sequence[NormalizedRect],
     source_to_canvas: Transform,
     artifact: AttackedArtifact | None,
+    preartifact_removed_fraction: float | None,
 ) -> None:
     transform = source_to_canvas
     if artifact is not None:
@@ -895,7 +907,11 @@ def _validate_attack_evidence_for_state(
         ground_truth = merge_regions(ground_truth, artifact.ground_truth)
     expected_ground_truth = tuple(rectangle.as_dict() for rectangle in ground_truth)
     _validate_reconstructed_ground_truth(row.get("tamper_ground_truth"), expected_ground_truth)
-    expected_removed = None if artifact is None else artifact.removed_area_fraction
+    expected_removed = (
+        artifact.removed_area_fraction
+        if artifact is not None
+        else preartifact_removed_fraction
+    )
     _validate_reconstructed_removed_fraction(row.get("removed_area_fraction"), expected_removed)
 
 
@@ -1047,18 +1063,10 @@ def _validate_crop_eligibility(
 ) -> None:
     expected: tuple[bool, int | None, str] = (True, None, "eligible")
     if expected_id is not None and attack.case_id == "crop-f0p25":
-        height, width = page_shape
-        side_scale = math.sqrt(0.75)
-        retained_width = max(1, round(width * side_scale))
-        retained_height = max(1, round(height * side_scale))
-        x0 = (width - retained_width) // 2
-        y0 = (height - retained_height) // 2
-        retained = NormalizedRect(
-            x=x0 / width,
-            y=y0 / height,
-            width=retained_width / width,
-            height=retained_height / height,
-        )
+        planned_crop = planned_crop_geometry(attack, page_shape)
+        if planned_crop is None:
+            raise ValueError("pre-gate crop attack geometry is unavailable")
+        retained, _ = planned_crop
         page_index = _required_integer(row, "page_index")
         _, key, _ = _case_context(
             plan.seed,

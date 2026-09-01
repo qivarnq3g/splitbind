@@ -24,7 +24,12 @@ import numpy as np
 import pypdfium2 as pdfium
 from numpy.typing import NDArray
 
-from splitbind_attack.attacks import AttackCase, AttackedArtifact, apply_attack
+from splitbind_attack.attacks import (
+    AttackCase,
+    AttackedArtifact,
+    apply_attack,
+    planned_crop_geometry,
+)
 from splitbind_attack.ground_truth import (
     NormalizedRect,
     Transform,
@@ -451,6 +456,15 @@ def _execute_row(
         decision = DecodeV2Decision(
             None, 0.0, 0, None, "insufficient_sync_evidence"
         )
+    planned_crop = (
+        planned_crop_geometry(attack, canonical_shape)
+        if (
+            plan.algorithm_version == 2
+            and plan.run_kind == "v2_pregate"
+            and expected_id is not None
+        )
+        else None
+    )
     artifact: AttackedArtifact | None = None
     elapsed_ms = 0.0
     error_text: str | None = None
@@ -483,7 +497,14 @@ def _execute_row(
     remaining_tiles: int | None = None
     eligible = True
     eligibility_reason = "eligible"
-    if artifact is not None and artifact.retained_region is not None and expected_id is not None:
+    retained_region = (
+        artifact.retained_region
+        if artifact is not None
+        else planned_crop[0]
+        if planned_crop is not None
+        else None
+    )
+    if retained_region is not None and expected_id is not None:
         if plan.algorithm_version == 1:
             if not isinstance(runtime_profile, Mapping):
                 raise TypeError("V1 runner requires a mapping profile")
@@ -498,7 +519,7 @@ def _execute_row(
                 key,
                 page_index,
                 runtime_profile,
-                artifact.retained_region,
+                retained_region,
             )
         eligible = remaining_tiles >= 2
         eligibility_reason = (
@@ -586,7 +607,13 @@ def _execute_row(
         "eligible": eligible,
         "eligibility_reason": eligibility_reason,
         "remaining_embedded_tiles": remaining_tiles,
-        "removed_area_fraction": artifact.removed_area_fraction if artifact is not None else None,
+        "removed_area_fraction": (
+            artifact.removed_area_fraction
+            if artifact is not None
+            else planned_crop[1]
+            if planned_crop is not None
+            else None
+        ),
         "limitations": limitations,
     }
     if plan.algorithm_version == 2:

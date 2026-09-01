@@ -118,6 +118,19 @@ def apply_attack(
     )
 
 
+def planned_crop_geometry(
+    case: AttackCase, page_shape: tuple[int, int]
+) -> tuple[NormalizedRect, float] | None:
+    """Return exact direct-crop geometry without constructing an image artifact."""
+
+    if not isinstance(case, AttackCase):
+        raise TypeError("case must be an AttackCase")
+    if case.kind != "crop":
+        return None
+    _, _, _, _, retained, removed_fraction = _crop_geometry(case.parameters, page_shape)
+    return retained, removed_fraction
+
+
 def _jpeg_roundtrip(
     image: Image, parameters: Mapping[str, object], _: np.random.Generator
 ) -> AttackedArtifact:
@@ -134,19 +147,8 @@ def _jpeg_roundtrip(
 def _crop_fraction(
     image: Image, parameters: Mapping[str, object], _: np.random.Generator
 ) -> AttackedArtifact:
-    fraction = _bounded_float(parameters, "fraction", 0.0, 1.0, upper_inclusive=False)
-    height, width = image.shape[:2]
-    side_scale = math.sqrt(1.0 - fraction)
-    retained_width = max(1, round(width * side_scale))
-    retained_height = max(1, round(height * side_scale))
-    x0 = (width - retained_width) // 2
-    y0 = (height - retained_height) // 2
-    actual_fraction = 1.0 - (retained_width * retained_height) / (width * height)
-    retained = NormalizedRect(
-        x=x0 / width,
-        y=y0 / height,
-        width=retained_width / width,
-        height=retained_height / height,
+    x0, y0, retained_width, retained_height, retained, actual_fraction = _crop_geometry(
+        parameters, image.shape[:2]
     )
     return AttackedArtifact(
         image=image[y0 : y0 + retained_height, x0 : x0 + retained_width].copy(),
@@ -164,6 +166,37 @@ def _crop_fraction(
             1.0,
         ),
     )
+
+
+def _crop_geometry(
+    parameters: Mapping[str, object], page_shape: tuple[int, int]
+) -> tuple[int, int, int, int, NormalizedRect, float]:
+    if not isinstance(parameters, Mapping):
+        raise TypeError("crop parameters must be a mapping")
+    if (
+        not isinstance(page_shape, tuple)
+        or len(page_shape) != 2
+        or any(
+            isinstance(value, bool) or not isinstance(value, int) or value < 1
+            for value in page_shape
+        )
+    ):
+        raise ValueError("crop page shape must be positive integer (height, width)")
+    fraction = _bounded_float(parameters, "fraction", 0.0, 1.0, upper_inclusive=False)
+    height, width = page_shape
+    side_scale = math.sqrt(1.0 - fraction)
+    retained_width = max(1, round(width * side_scale))
+    retained_height = max(1, round(height * side_scale))
+    x0 = (width - retained_width) // 2
+    y0 = (height - retained_height) // 2
+    actual_fraction = 1.0 - (retained_width * retained_height) / (width * height)
+    retained = NormalizedRect(
+        x=x0 / width,
+        y=y0 / height,
+        width=retained_width / width,
+        height=retained_height / height,
+    )
+    return x0, y0, retained_width, retained_height, retained, actual_fraction
 
 
 def _resize_scale(
