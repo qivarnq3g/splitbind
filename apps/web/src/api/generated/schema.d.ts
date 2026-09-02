@@ -837,6 +837,15 @@ export interface operations {
                     "application/json": components["schemas"]["CodeError"];
                 };
             };
+            /** @description Request throttled. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DetailError"];
+                };
+            };
             /** @description Object storage is unavailable. */
             503: {
                 headers: {

@@ -2,6 +2,7 @@ import uuid
 from datetime import timedelta
 
 import pytest
+from django.core.cache import cache
 from django.test import Client, override_settings
 from django.utils import timezone
 
@@ -313,3 +314,35 @@ def test_issuance_result_download_hides_storage_failure(issuance_context):
     assert event.target_id == str(issuance.id)
     assert event.outcome == AuditOutcome.FAILED
     assert event.metadata == {"safe_error_code": "STORAGE_UNAVAILABLE"}
+
+
+@pytest.mark.django_db
+@override_settings(
+    REST_FRAMEWORK={
+        "NUM_PROXIES": 1,
+        "DEFAULT_THROTTLE_RATES": {
+            "account": "1/min",
+            "source_ip": "10/min",
+            "issuance_job": "10/min",
+            "verification_job": "10/min",
+        },
+    }
+)
+def test_result_download_throttle_rejects_excess_without_more_audit_rows(issuance_context):
+    _organization, issuer, issuance, job, storage = issuance_context
+    commit_result(issuance, job)
+    client = Client()
+    login(client, issuer)
+    cache.clear()
+    try:
+        with override_settings(SPLITBIND_OBJECT_STORAGE=storage):
+            first = client.get(f"/api/v1/issuances/{issuance.id}/result")
+            audit_count = AuditEvent.objects.count()
+            second = client.get(f"/api/v1/issuances/{issuance.id}/result")
+
+        assert first.status_code == 200
+        assert second.status_code == 429
+        assert_private_no_store(second)
+        assert AuditEvent.objects.count() == audit_count == 1
+    finally:
+        cache.clear()

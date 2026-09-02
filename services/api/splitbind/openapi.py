@@ -244,6 +244,7 @@ issuance_result_schema = extend_schema(
         403: DETAIL_403,
         404: DETAIL_404,
         409: CODE_409,
+        429: DETAIL_429,
         503: CODE_503,
     },
 )

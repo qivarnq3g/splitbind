@@ -41,7 +41,7 @@ def test_schema_publishes_every_current_browser_facing_route(schema):
         ("/api/v1/uploads/{id}/complete", "post", {"200", "400", "403", "404", "429", "503"}),
         ("/api/v1/issuances", "post", {"201", "400", "403", "404", "409", "429"}),
         ("/api/v1/issuances/{id}", "get", {"200", "403", "404"}),
-        ("/api/v1/issuances/{id}/result", "get", {"200", "403", "404", "409", "503"}),
+        ("/api/v1/issuances/{id}/result", "get", {"200", "403", "404", "409", "429", "503"}),
         ("/api/v1/verifications", "post", {"201", "400", "403", "404", "409", "429"}),
         ("/api/v1/verifications/{id}", "get", {"200", "403", "404"}),
         ("/api/v1/jobs/{id}", "get", {"200", "403", "404"}),

@@ -457,6 +457,16 @@
                         },
                         "description": "Workflow state or idempotency conflict."
                     },
+                    "429": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Request throttled."
+                    },
                     "503": {
                         "content": {
                             "application/json": {

@@ -108,6 +108,7 @@ class IssuanceDetailView(APIView):
 @method_decorator(never_cache, name="dispatch")
 class IssuanceResultView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_classes = [AccountRateThrottle, SourceIPRateThrottle]
 
     @issuance_result_schema
     def get(self, request, id):
