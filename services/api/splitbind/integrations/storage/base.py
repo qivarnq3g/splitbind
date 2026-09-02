@@ -1,7 +1,9 @@
+import hashlib
+import hmac
 import re
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Mapping, Protocol
+from typing import Iterable, Mapping, Protocol
 
 from django.conf import settings
 
@@ -54,6 +56,14 @@ class ObjectMetadata:
     client_sha256_metadata: str | None
 
 
+@dataclass(frozen=True)
+class ObjectBytes:
+    key: str
+    data: bytes
+    content_type: str | None
+    actual_sha256: str
+
+
 class ObjectStorage(Protocol):
     def presign_put(
         self, *, key: str, content_type: str, size_bytes: int, sha256: str, expires: timedelta
@@ -62,6 +72,14 @@ class ObjectStorage(Protocol):
     def head(self, *, key: str) -> ObjectMetadata | None: ...
 
     def presign_get(self, *, key: str, expires: timedelta) -> str: ...
+
+    def download_bytes(
+        self, *, key: str, max_bytes: int, expected_sha256: str
+    ) -> ObjectBytes: ...
+
+    def upload_bytes(
+        self, *, key: str, content_type: str, chunks: Iterable[bytes], max_bytes: int
+    ) -> ObjectBytes: ...
 
     def copy_verified(self, *, source: str, destination: str, sha256: str) -> ObjectMetadata:
         """Copy and observe metadata; on mismatch, retain the destination for owned cleanup."""
@@ -114,6 +132,40 @@ def validate_copy_boundary(source: str, destination: str) -> None:
 def validate_checksum(sha256: str) -> None:
     if not isinstance(sha256, str) or not re.fullmatch(SHA256_PATTERN, sha256):
         raise ValueError("storage checksum must be a canonical SHA-256")
+
+
+def collect_bounded_bytes(chunks: Iterable[bytes], max_bytes: int) -> bytes:
+    runtime_max = getattr(settings, "MAX_PDF_BYTES", MAX_UPLOAD_BYTES)
+    if (
+        not isinstance(max_bytes, int)
+        or isinstance(max_bytes, bool)
+        or not 1 <= max_bytes <= runtime_max
+    ):
+        raise ValueError("storage byte limit must be between one byte and ten MiB")
+    collected = bytearray()
+    for chunk in chunks:
+        if not isinstance(chunk, bytes):
+            raise TypeError("storage byte stream must yield bytes")
+        collected.extend(chunk)
+        if len(collected) > max_bytes:
+            raise UploadRejected("STORAGE_BYTE_LIMIT")
+    return bytes(collected)
+
+
+def verified_object_bytes(
+    *, key: str, data: bytes, content_type: str | None, expected_sha256: str | None = None
+) -> ObjectBytes:
+    actual_sha256 = hashlib.sha256(data).hexdigest()
+    if expected_sha256 is not None:
+        validate_checksum(expected_sha256)
+        if not hmac.compare_digest(actual_sha256, expected_sha256):
+            raise UploadRejected("STORAGE_CHECKSUM_MISMATCH")
+    return ObjectBytes(
+        key=key,
+        data=data,
+        content_type=content_type,
+        actual_sha256=actual_sha256,
+    )
 
 
 def validate_expiry(expires: timedelta) -> None:

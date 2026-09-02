@@ -1,3 +1,9 @@
-from .base import ObjectMetadata, ObjectStorage, PresignedPut, StorageUnavailable
+from .base import ObjectBytes, ObjectMetadata, ObjectStorage, PresignedPut, StorageUnavailable
 
-__all__ = ["ObjectMetadata", "ObjectStorage", "PresignedPut", "StorageUnavailable"]
+__all__ = [
+    "ObjectBytes",
+    "ObjectMetadata",
+    "ObjectStorage",
+    "PresignedPut",
+    "StorageUnavailable",
+]

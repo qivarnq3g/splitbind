@@ -3,15 +3,18 @@ from datetime import timedelta
 from urllib.parse import quote
 
 from .base import (
+    ObjectBytes,
     ObjectMetadata,
     PresignedPut,
     StorageUnavailable,
     UploadRejected,
+    collect_bounded_bytes,
     validate_copy_boundary,
     validate_checksum,
     validate_controlled_key,
     validate_expiry,
     validate_put_constraints,
+    verified_object_bytes,
 )
 
 
@@ -28,6 +31,7 @@ class FakeObjectStorage:
 
     def __init__(self):
         self.objects: dict[str, ObjectMetadata] = {}
+        self.object_bytes: dict[str, bytes] = {}
         self.expected_puts: dict[str, _ExpectedPut] = {}
         self._failures: dict[str, str] = {}
 
@@ -70,6 +74,25 @@ class FakeObjectStorage:
         validate_checksum(sha256)
         self._store_object(key=key, content_type=content_type, size_bytes=size_bytes, sha256=sha256)
 
+    def inject_object_bytes(
+        self,
+        *,
+        key: str,
+        content_type: str,
+        data: bytes,
+        client_sha256_metadata: str,
+    ) -> None:
+        """Test-only hook for attaching real bytes without trusting their metadata digest."""
+        validate_controlled_key(key)
+        validate_checksum(client_sha256_metadata)
+        self._store_object(
+            key=key,
+            content_type=content_type,
+            size_bytes=len(data),
+            sha256=client_sha256_metadata,
+        )
+        self.object_bytes[key] = bytes(data)
+
     def _store_object(self, *, key: str, content_type: str, size_bytes: int, sha256: str) -> None:
         candidate = ObjectMetadata(key, size_bytes, content_type, sha256)
         current = self.objects.get(key)
@@ -88,6 +111,38 @@ class FakeObjectStorage:
         self._maybe_fail("presign_get")
         return f"https://fake-storage.invalid/{quote(key)}?signed=opaque"
 
+    def download_bytes(self, *, key: str, max_bytes: int, expected_sha256: str) -> ObjectBytes:
+        validate_controlled_key(key)
+        self._maybe_fail("download_bytes")
+        if key not in self.object_bytes:
+            raise StorageUnavailable("storage object bytes unavailable")
+        data = collect_bounded_bytes((self.object_bytes[key],), max_bytes)
+        metadata = self.objects[key]
+        return verified_object_bytes(
+            key=key,
+            data=data,
+            content_type=metadata.content_type,
+            expected_sha256=expected_sha256,
+        )
+
+    def upload_bytes(self, *, key, content_type, chunks, max_bytes) -> ObjectBytes:
+        validate_controlled_key(key)
+        self._maybe_fail("upload_bytes")
+        data = collect_bounded_bytes(chunks, max_bytes)
+        uploaded = verified_object_bytes(
+            key=key,
+            data=data,
+            content_type=content_type,
+        )
+        self._store_object(
+            key=key,
+            content_type=content_type,
+            size_bytes=len(data),
+            sha256=uploaded.actual_sha256,
+        )
+        self.object_bytes[key] = data
+        return uploaded
+
     def copy_verified(self, *, source, destination, sha256):
         validate_copy_boundary(source, destination)
         validate_checksum(sha256)
@@ -102,6 +157,8 @@ class FakeObjectStorage:
             original.client_sha256_metadata,
         )
         self.objects[destination] = copied
+        if source in self.object_bytes:
+            self.object_bytes[destination] = self.object_bytes[source]
         if copied.client_sha256_metadata != sha256:
             raise UploadRejected("STORAGE_COPY_MISMATCH")
         return copied
@@ -110,3 +167,4 @@ class FakeObjectStorage:
         validate_controlled_key(key)
         self._maybe_fail("delete")
         self.objects.pop(key, None)
+        self.object_bytes.pop(key, None)

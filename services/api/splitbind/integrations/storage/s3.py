@@ -5,15 +5,18 @@ from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 
 from .base import (
+    ObjectBytes,
     ObjectMetadata,
     PresignedPut,
     StorageUnavailable,
     UploadRejected,
+    collect_bounded_bytes,
     validate_copy_boundary,
     validate_checksum,
     validate_controlled_key,
     validate_expiry,
     validate_put_constraints,
+    verified_object_bytes,
 )
 
 
@@ -141,6 +144,62 @@ class S3ObjectStorage:
         validate_controlled_key(key)
         validate_expiry(expires)
         return self._call("generate_presigned_url", "get_object", Params={"Bucket": self.bucket, "Key": key}, ExpiresIn=int(expires.total_seconds()), HttpMethod="GET")
+
+    def download_bytes(self, *, key: str, max_bytes: int, expected_sha256: str) -> ObjectBytes:
+        validate_controlled_key(key)
+        validate_checksum(expected_sha256)
+        response = self._call("get_object", Bucket=self.bucket, Key=key)
+        body = response.get("Body")
+        if body is None or not callable(getattr(body, "read", None)):
+            raise StorageUnavailable("storage provider request failed")
+
+        def chunks():
+            streamed = 0
+            while True:
+                chunk = body.read(min(64 * 1024, max_bytes - streamed + 1))
+                if not chunk:
+                    return
+                streamed += len(chunk)
+                yield chunk
+
+        try:
+            data = collect_bounded_bytes(chunks(), max_bytes)
+        except (UploadRejected, TypeError, ValueError):
+            raise
+        except Exception as error:
+            raise StorageUnavailable("storage provider request failed") from error
+        finally:
+            close = getattr(body, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:
+                    pass
+        return verified_object_bytes(
+            key=key,
+            data=data,
+            content_type=response.get("ContentType"),
+            expected_sha256=expected_sha256,
+        )
+
+    def upload_bytes(self, *, key, content_type, chunks, max_bytes) -> ObjectBytes:
+        validate_controlled_key(key)
+        data = collect_bounded_bytes(chunks, max_bytes)
+        uploaded = verified_object_bytes(
+            key=key,
+            data=data,
+            content_type=content_type,
+        )
+        self._call(
+            "put_object",
+            Bucket=self.bucket,
+            Key=key,
+            Body=data,
+            ContentLength=len(data),
+            ContentType=content_type,
+            Metadata={"sha256": uploaded.actual_sha256},
+        )
+        return uploaded
 
     def copy_verified(self, *, source, destination, sha256):
         validate_copy_boundary(source, destination)
