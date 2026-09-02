@@ -142,6 +142,18 @@ class ReadinessSerializer(serializers.Serializer):
     components = serializers.DictField(child=serializers.ChoiceField(choices=["up", "down"]))
 
 
+class DemoProcessingLimitsSerializer(serializers.Serializer):
+    max_pdf_pages = serializers.IntegerField(min_value=1)
+    max_pdf_bytes = serializers.IntegerField(min_value=1)
+    max_image_pixels = serializers.IntegerField(min_value=1)
+
+
+class DemoCapabilitySerializer(serializers.Serializer):
+    enabled = serializers.BooleanField()
+    processing_limits = DemoProcessingLimitsSerializer()
+    algorithm_label = serializers.ChoiceField(choices=["experimental_unreleased_fingerprint_v2"])
+
+
 CSRF_HEADER = OpenApiParameter(
     name="X-CSRFToken",
     type=str,
@@ -240,4 +252,8 @@ job_cancel_schema = extend_schema(
 live_schema = extend_schema(operation_id="health_live", auth=[], responses={200: LiveSerializer})
 ready_schema = extend_schema(
     operation_id="health_ready", auth=[], responses={200: ReadinessSerializer, 503: ReadinessSerializer}
+)
+demo_capability_schema = extend_schema(
+    operation_id="demo_capabilities_retrieve",
+    responses={200: DemoCapabilitySerializer, 403: DETAIL_403},
 )

@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 from .limits import load_runtime_limits
 
 
@@ -29,6 +31,7 @@ INSTALLED_APPS = [
     "splitbind.outbox.apps.OutboxConfig",
     "splitbind.audit.apps.AuditConfig",
     "splitbind.health.apps.HealthConfig",
+    "splitbind.demo.apps.DemoConfig",
 ]
 
 MIDDLEWARE = [
@@ -81,6 +84,23 @@ CSRF_COOKIE_SECURE = True
 CSRF_FAILURE_VIEW = "splitbind.access.csrf.csrf_failure"
 
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "production")
+
+
+def load_demo_mode(environment: str, value: object) -> bool:
+    if value is None:
+        return False
+    if value == "true":
+        enabled = True
+    elif value == "false":
+        enabled = False
+    else:
+        raise ImproperlyConfigured("SPLITBIND_DEMO_MODE must be exactly true or false")
+    if environment == "production" and enabled:
+        raise ImproperlyConfigured("SPLITBIND_DEMO_MODE cannot be enabled in production")
+    return enabled
+
+
+SPLITBIND_DEMO_MODE = load_demo_mode(ENVIRONMENT, os.environ.get("SPLITBIND_DEMO_MODE"))
 globals().update(load_runtime_limits(ENVIRONMENT, os.environ))
 SPLITBIND_BROKER_READINESS = None
 BROKER_READINESS_TIMEOUT_SECONDS = 1.0
