@@ -1,5 +1,7 @@
 # SplitBind
 
+> Fingerprint research status: V1 remains unreleased after execution errors. The V2 pre-gate completed, but its hash-bound selection contains 0/16 candidates; Task 7 therefore did not run the V2 full matrix, `fingerprint-profile.v2.json` is absent, and Rust A7 remains blocked. See the [factual V2 no-release report](docs/evaluation/fingerprint-profile-v2.md).
+
 SplitBind là hệ thống truy vết toàn vẹn văn bản dành cho bài tập lớn môn An toàn thông tin của Nhóm 9. Hệ thống cấp một dấu vân tay riêng cho từng bản PDF gửi tới người nhận, sau đó hỗ trợ xác minh nguồn phát hành và dấu hiệu chỉnh sửa trên tài liệu nghi vấn.
 
 > Trạng thái: MVP đang được triển khai. Repository đã có reference implementation, Django control plane, OpenAPI/typed TypeScript client và giao diện React cho đăng nhập, cấp phát, kiểm chứng, theo dõi job và đọc bằng chứng kỹ thuật; worker Rust, kết quả xử lý thực tế, tải tệp kết quả và deployment vẫn chưa hoàn thành.
