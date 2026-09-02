@@ -6,6 +6,7 @@ from django.test import Client, override_settings
 from django.utils import timezone
 
 from splitbind.access.models import Organization, Recipient, Role, User
+from splitbind.audit.models import AuditEvent, AuditOutcome
 from splitbind.demo.capabilities import DEMO_ALGORITHM_LABEL
 from splitbind.demo.models import (
     DEMO_CANONICAL_CANVAS,
@@ -128,6 +129,11 @@ def login(client, user):
     assert client.login(username=user.username, password=PASSWORD)
 
 
+def assert_private_no_store(response):
+    directives = {item.strip() for item in response.headers["Cache-Control"].split(",")}
+    assert {"private", "no-store"} <= directives
+
+
 @pytest.mark.django_db
 def test_issuance_payload_reports_only_consistent_committed_result(issuance_context):
     _organization, issuer, issuance, job, _storage = issuance_context
@@ -151,6 +157,28 @@ def test_issuance_result_download_requires_authentication(issuance_context):
     _organization, _issuer, issuance, _job, _storage = issuance_context
     response = Client().get(f"/api/v1/issuances/{issuance.id}/result")
     assert response.status_code == 403
+    assert_private_no_store(response)
+
+
+@pytest.mark.django_db
+def test_issuer_owner_may_download_committed_result_and_grant_is_audited(issuance_context):
+    _organization, issuer, issuance, job, storage = issuance_context
+    commit_result(issuance, job)
+    client = Client()
+    login(client, issuer)
+
+    with override_settings(SPLITBIND_OBJECT_STORAGE=storage):
+        response = client.get(f"/api/v1/issuances/{issuance.id}/result")
+
+    assert response.status_code == 200
+    assert_private_no_store(response)
+    event = AuditEvent.objects.get(action="issuance.result_download_granted")
+    assert event.actor_id == issuer.id
+    assert event.target_id == str(issuance.id)
+    assert event.outcome == AuditOutcome.SUCCEEDED
+    assert event.metadata == {"attempt": "0"}
+    serialized = str(event.metadata).lower()
+    assert "http" not in serialized and "output" not in serialized and "signed" not in serialized
 
 
 @pytest.mark.django_db
@@ -174,6 +202,7 @@ def test_same_organization_read_roles_may_download_committed_result(issuance_con
     expires_at = timezone.datetime.fromisoformat(payload["expires_at"])
     assert before + timedelta(minutes=5) <= expires_at <= after + timedelta(minutes=5)
     assert "output_object_key" not in payload
+    assert_private_no_store(response)
 
 
 @pytest.mark.django_db
@@ -190,6 +219,15 @@ def test_issuance_result_download_is_requester_and_organization_scoped(issuance_
         with override_settings(SPLITBIND_OBJECT_STORAGE=storage):
             response = client.get(f"/api/v1/issuances/{issuance.id}/result")
         assert response.status_code == 404
+        assert_private_no_store(response)
+        event = AuditEvent.objects.get(
+            organization_id=actor.organization_id,
+            actor_id=actor.id,
+            action="issuance.result_download_denied",
+        )
+        assert event.target_id == str(actor.id)
+        assert event.outcome == AuditOutcome.DENIED
+        assert event.metadata == {"safe_error_code": "WORKFLOW_NOT_FOUND"}
 
 
 @pytest.mark.django_db
@@ -201,6 +239,11 @@ def test_issuance_result_download_returns_stable_conflict_when_unavailable(issua
         response = client.get(f"/api/v1/issuances/{issuance.id}/result")
     assert response.status_code == 409
     assert response.json() == {"code": "ISSUANCE_RESULT_UNAVAILABLE"}
+    assert_private_no_store(response)
+    event = AuditEvent.objects.get(action="issuance.result_download_denied")
+    assert event.target_id == str(issuance.id)
+    assert event.outcome == AuditOutcome.DENIED
+    assert event.metadata == {"safe_error_code": "ISSUANCE_RESULT_UNAVAILABLE"}
 
 
 @pytest.mark.django_db
@@ -216,6 +259,7 @@ def test_issuance_result_download_rejects_deleted_output(issuance_context):
         response = client.get(f"/api/v1/issuances/{issuance.id}/result")
     assert response.status_code == 409
     assert response.json() == {"code": "ISSUANCE_RESULT_UNAVAILABLE"}
+    assert_private_no_store(response)
 
 
 @pytest.mark.django_db
@@ -229,6 +273,27 @@ def test_issuance_result_download_rejects_inconsistent_output_metadata(issuance_
         response = client.get(f"/api/v1/issuances/{issuance.id}/result")
     assert response.status_code == 409
     assert response.json() == {"code": "ISSUANCE_RESULT_UNAVAILABLE"}
+    assert_private_no_store(response)
+
+
+@pytest.mark.django_db
+def test_issuance_result_download_rejects_committed_evidence_from_a_stale_attempt(issuance_context):
+    _organization, issuer, issuance, job, storage = issuance_context
+    commit_result(issuance, job)
+    Job.objects.filter(pk=job.pk).update(attempt=1)
+    client = Client()
+    login(client, issuer)
+
+    detail = client.get(f"/api/v1/issuances/{issuance.id}")
+    with override_settings(SPLITBIND_OBJECT_STORAGE=storage):
+        response = client.get(f"/api/v1/issuances/{issuance.id}/result")
+
+    assert detail.json()["result_available"] is False
+    assert detail.json()["algorithm_label"] is None
+    assert response.status_code == 409
+    assert response.json() == {"code": "ISSUANCE_RESULT_UNAVAILABLE"}
+    assert storage.presign_get_expiry is None
+    assert_private_no_store(response)
 
 
 @pytest.mark.django_db
@@ -243,3 +308,8 @@ def test_issuance_result_download_hides_storage_failure(issuance_context):
     assert response.status_code == 503
     assert response.json() == {"code": "STORAGE_UNAVAILABLE"}
     assert "private" not in response.content.decode().lower()
+    assert_private_no_store(response)
+    event = AuditEvent.objects.get(action="issuance.result_download_failed")
+    assert event.target_id == str(issuance.id)
+    assert event.outcome == AuditOutcome.FAILED
+    assert event.metadata == {"safe_error_code": "STORAGE_UNAVAILABLE"}

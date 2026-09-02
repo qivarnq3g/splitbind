@@ -76,19 +76,24 @@ def _contract_metrics(value):
     }
 
 
-def issuance_result_evidence(record):
+def issuance_result_evidence(record, job=None):
     from splitbind.demo.capabilities import DEMO_ALGORITHM_LABEL
     from splitbind.demo.models import DemoOutputState
 
+    job = job or record.jobs.order_by("created_at").first()
     evidence = getattr(record, "demo_result", None)
     if (
-        evidence is None
+        job is None
+        or evidence is None
         or evidence.output_state != DemoOutputState.COMMITTED
         or evidence.algorithm_label != DEMO_ALGORITHM_LABEL
         or evidence.issuance_id != record.id
         or evidence.organization_id != record.organization_id
+        or evidence.job_id != job.id
+        or evidence.job.organization_id != record.organization_id
         or evidence.job.status != JobStatus.SUCCEEDED
         or evidence.job.issuance_id != record.id
+        or evidence.attempt != evidence.job.attempt
         or not record.output_object_key
         or not record.output_sha256
         or record.output_deleted_at is not None
@@ -101,7 +106,7 @@ def issuance_result_evidence(record):
 
 def serialize_issuance(record, job=None):
     job = job or record.jobs.order_by("created_at").first()
-    evidence = issuance_result_evidence(record)
+    evidence = issuance_result_evidence(record, job)
     return {
         "id": str(record.id),
         "job_id": str(job.id) if job else None,

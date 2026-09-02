@@ -24,6 +24,7 @@ type ObservedRequest = {
   credentials: RequestCredentials;
   headers: Headers;
   body: unknown;
+  cache?: RequestCache;
 };
 
 function json(data: unknown, status = 200): Response {
@@ -106,6 +107,7 @@ describe("issuance browser workflow", () => {
         credentials: request.credentials,
         headers: new Headers(request.headers),
         body,
+        cache: request.cache,
       });
 
       if (url.pathname === "/api/v1/auth/session") return json(session("issuer"));
@@ -352,6 +354,7 @@ describe("issuance browser workflow", () => {
 
   it("labels and downloads an available experimental result using a fresh URL", async () => {
     const observed: string[] = [];
+    const resultRequestCaches: RequestCache[] = [];
     const fetchMock = vi.fn<typeof globalThis.fetch>(async (input) => {
       const request = input instanceof Request ? input : new Request(input);
       const path = new URL(request.url).pathname;
@@ -360,6 +363,7 @@ describe("issuance browser workflow", () => {
       if (path === "/api/v1/demo/capabilities") return json(demoCapabilities(true));
       if (path === `/api/v1/issuances/${ISSUANCE_ID}`) return json(issuance(true));
       if (path === `/api/v1/issuances/${ISSUANCE_ID}/result`) {
+        resultRequestCaches.push(request.cache);
         return json({
           download_url: "https://storage.example.test/signed-result.pdf",
           expires_at: "2026-08-30T12:06:00Z",
@@ -381,6 +385,9 @@ describe("issuance browser workflow", () => {
     await waitFor(() => expect(downloadedHref).toBe("https://storage.example.test/signed-result.pdf"));
     expect(observed.filter((path) => path === `/api/v1/issuances/${ISSUANCE_ID}/result`)).toHaveLength(1);
     expect(screen.getByRole("button", { name: "Đã mở bản tải" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Đã mở bản tải" }));
+    await waitFor(() => expect(observed.filter((path) => path === `/api/v1/issuances/${ISSUANCE_ID}/result`)).toHaveLength(2));
+    expect(resultRequestCaches).toEqual(["no-store", "no-store"]);
   });
 
   it("explains an unavailable finished output without inventing a URL", async () => {
@@ -413,6 +420,33 @@ describe("issuance browser workflow", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Tải PDF kết quả" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Không thể tạo liên kết tải lúc này. Hãy thử lại.");
     expect(screen.getByRole("button", { name: "Thử tải lại" })).toBeVisible();
+  });
+
+  it("removes a stale download action when the server reports permanent unavailability", async () => {
+    let detailReads = 0;
+    const fetchMock = vi.fn<typeof globalThis.fetch>(async (input) => {
+      const request = input instanceof Request ? input : new Request(input);
+      const path = new URL(request.url).pathname;
+      if (path === "/api/v1/auth/session") return json(session("issuer"));
+      if (path === "/api/v1/demo/capabilities") return json(demoCapabilities(true));
+      if (path === `/api/v1/issuances/${ISSUANCE_ID}`) {
+        detailReads += 1;
+        return json(issuance(detailReads === 1));
+      }
+      if (path === `/api/v1/issuances/${ISSUANCE_ID}/result`) {
+        return json({ code: "ISSUANCE_RESULT_UNAVAILABLE" }, 409);
+      }
+      return json({ detail: "Not found." }, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderApp(`/issuances/${ISSUANCE_ID}`);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Tải PDF kết quả" }));
+
+    expect(await screen.findByText("Kết quả PDF hiện không có sẵn. Hãy kiểm tra trạng thái công việc hoặc chạy lại quy trình demo.")).toBeVisible();
+    await waitFor(() => expect(detailReads).toBe(2));
+    expect(screen.queryByRole("button", { name: /tải/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("Hãy thử lại.")).not.toBeInTheDocument();
   });
 });
 

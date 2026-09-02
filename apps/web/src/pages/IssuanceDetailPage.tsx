@@ -1,11 +1,17 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 
-import { getIssuance, getIssuanceResult, openIssuanceResult } from "../features/issuances/issuances";
+import {
+  getIssuance,
+  getIssuanceResult,
+  IssuanceResultUnavailableError,
+  openIssuanceResult,
+} from "../features/issuances/issuances";
 import { JOB_LABELS } from "../features/jobs/useJob";
 
 export function IssuanceDetailPage() {
   const { id } = useParams();
+  const queryClient = useQueryClient();
   const issuance = useQuery({
     queryKey: ["issuance", id],
     queryFn: ({ signal }) => getIssuance(id!, signal),
@@ -15,6 +21,11 @@ export function IssuanceDetailPage() {
     mutationFn: async () => {
       const result = await getIssuanceResult(id!);
       openIssuanceResult(result.download_url);
+    },
+    onError: async (error) => {
+      if (error instanceof IssuanceResultUnavailableError) {
+        await queryClient.invalidateQueries({ queryKey: ["issuance", id] });
+      }
     },
   });
 

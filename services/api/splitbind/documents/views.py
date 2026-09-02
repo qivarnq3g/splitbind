@@ -4,6 +4,7 @@ from datetime import timedelta
 from django.http import Http404
 from django.utils import timezone
 from django.utils.decorators import method_decorator
+from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_protect
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -43,6 +44,20 @@ from splitbind.uploads.services import get_storage
 
 
 ISSUANCE_RESULT_TTL = timedelta(minutes=5)
+
+
+def _result_download_audit(actor, target, outcome, *, safe_error_code=None, attempt=None):
+    metadata = {}
+    if safe_error_code is not None:
+        metadata["safe_error_code"] = safe_error_code
+    if attempt is not None:
+        metadata["attempt"] = attempt
+    action = {
+        AuditOutcome.SUCCEEDED: "issuance.result_download_granted",
+        AuditOutcome.DENIED: "issuance.result_download_denied",
+        AuditOutcome.FAILED: "issuance.result_download_failed",
+    }[outcome]
+    record_event(actor, action, target, outcome, uuid.uuid4(), metadata)
 
 
 def _serializer_denial(actor, action):
@@ -90,6 +105,7 @@ class IssuanceDetailView(APIView):
         return Response(serialize_issuance(record))
 
 
+@method_decorator(never_cache, name="dispatch")
 class IssuanceResultView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -98,9 +114,21 @@ class IssuanceResultView(APIView):
         try:
             record = get_issuance(request.user, id)
         except WorkflowNotFound:
+            _result_download_audit(
+                request.user,
+                request.user,
+                AuditOutcome.DENIED,
+                safe_error_code="WORKFLOW_NOT_FOUND",
+            )
             raise Http404
         evidence = issuance_result_evidence(record)
         if evidence is None:
+            _result_download_audit(
+                request.user,
+                record,
+                AuditOutcome.DENIED,
+                safe_error_code="ISSUANCE_RESULT_UNAVAILABLE",
+            )
             return Response({"code": "ISSUANCE_RESULT_UNAVAILABLE"}, status=409)
         expires_at = timezone.now() + ISSUANCE_RESULT_TTL
         try:
@@ -109,9 +137,27 @@ class IssuanceResultView(APIView):
                 expires=ISSUANCE_RESULT_TTL,
             )
         except StorageUnavailable:
+            _result_download_audit(
+                request.user,
+                record,
+                AuditOutcome.FAILED,
+                safe_error_code="STORAGE_UNAVAILABLE",
+            )
             return Response({"code": "STORAGE_UNAVAILABLE"}, status=503)
         except ValueError:
+            _result_download_audit(
+                request.user,
+                record,
+                AuditOutcome.DENIED,
+                safe_error_code="ISSUANCE_RESULT_UNAVAILABLE",
+            )
             return Response({"code": "ISSUANCE_RESULT_UNAVAILABLE"}, status=409)
+        _result_download_audit(
+            request.user,
+            record,
+            AuditOutcome.SUCCEEDED,
+            attempt=evidence.attempt,
+        )
         return Response(
             {
                 "download_url": download_url,
