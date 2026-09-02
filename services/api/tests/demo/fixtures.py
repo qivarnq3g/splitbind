@@ -3,6 +3,7 @@ import hashlib
 import io
 import struct
 
+import cv2
 import numpy as np
 import pypdfium2 as pdfium
 
@@ -119,3 +120,19 @@ def encrypted_pdf_bytes() -> bytes:
         ).encode("ascii")
     )
     return bytes(output)
+
+
+def synthetic_image_bytes(
+    *, extension: str = ".png", width: int = 640, height: int = 480
+) -> bytes:
+    """Encode a deterministic synthetic raster through the real OpenCV codec."""
+
+    y, x = np.indices((height, width), dtype=np.uint16)
+    image = np.empty((height, width, 3), dtype=np.uint8)
+    image[:, :, 0] = ((x * 3 + y) % 256).astype(np.uint8)
+    image[:, :, 1] = ((x + y * 2) % 256).astype(np.uint8)
+    image[:, :, 2] = (((x // 16 + y // 16) % 2) * 192 + 32).astype(np.uint8)
+    encoded_ok, encoded = cv2.imencode(extension, image)
+    if not encoded_ok:
+        raise RuntimeError("synthetic image encoding failed")
+    return encoded.tobytes()
