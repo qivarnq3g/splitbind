@@ -104,6 +104,8 @@ def process_verification_job(*, job_id, storage) -> VerificationProcessingResult
             candidate, _candidate_identifier = _select_frozen_candidate()
         except DemoIssuanceProcessingError as error:
             raise DemoVerificationError(error.code) from error
+        if _cancel_before_work(acquired):
+            raise DemoVerificationError("DEMO_JOB_CANCELLED")
         try:
             downloaded = storage.download_bytes(
                 key=acquired.input_object_key,
@@ -408,17 +410,17 @@ def _aggregate_decisions(decisions: list[DecodeV2Decision]) -> _DecodeSummary:
     decoded = {decision.issuance_id for decision in decisions if decision.status == "decoded"}
     confidence = max((decision.confidence for decision in decisions), default=0.0)
     valid_votes = sum(decision.valid_votes for decision in decisions)
-    if len(decoded) == 1:
-        return _DecodeSummary(decoded.pop(), confidence, valid_votes, "decoded")
-    if decoded or any(
+    if any(
         decision.status == "partial_payload_evidence" for decision in decisions
-    ):
+    ) or len(decoded) > 1:
         return _DecodeSummary(
             None,
             confidence,
             valid_votes,
             "partial_payload_evidence",
         )
+    if len(decoded) == 1:
+        return _DecodeSummary(decoded.pop(), confidence, valid_votes, "decoded")
     statuses = {decision.status for decision in decisions}
     for status in (
         "geometry_rejected",

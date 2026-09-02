@@ -440,6 +440,65 @@ def test_modified_issued_pdf_requires_real_decode_and_keeps_hash_fact_separate(
 
 @pytest.mark.django_db
 @override_settings(SPLITBIND_DEMO_MODE=True)
+def test_partial_payload_on_any_page_prevents_decoded_source_attribution(
+    issued_pdf_bytes,
+    monkeypatch,
+):
+    from splitbind.demo import verification as verification_module
+    from splitbind.demo.verification import process_verification_job
+    from splitbind_ref.fingerprint_v2 import DecodeV2Decision
+
+    monkeypatch.setenv("SPLITBIND_DEMO_FINGERPRINT_KEY_HEX", FINGERPRINT_KEY.hex())
+    organization = Organization.objects.create(
+        name="Conflicting multi-page verification",
+        slug=f"conflicting-{uuid.uuid4().hex[:8]}",
+    )
+    actor = User.objects.create_user(
+        username=f"conflicting-{uuid.uuid4().hex[:8]}",
+        password="correct horse battery staple",
+        organization=organization,
+        role=Role.VERIFIER,
+    )
+    issuance = _record_committed_issuance(
+        organization=organization,
+        actor=actor,
+        output=issued_pdf_bytes,
+    )
+    suspect = blank_pdf_bytes(page_sizes=((288, 384), (288, 384)))
+    storage = FakeObjectStorage()
+    job, verification = _processing_verification(
+        organization=organization,
+        actor=actor,
+        data=suspect,
+        storage=storage,
+    )
+    decisions = iter(
+        (
+            DecodeV2Decision(issuance.id, 0.9, 3, 0.0, "decoded"),
+            DecodeV2Decision(None, 0.7, 2, None, "partial_payload_evidence"),
+        )
+    )
+    monkeypatch.setattr(
+        verification_module,
+        "decode_fingerprint_v2",
+        lambda *args, **kwargs: next(decisions),
+    )
+
+    result = process_verification_job(job_id=job.id, storage=storage)
+
+    verification.refresh_from_db()
+    assert result.status == VerificationStatus.PARTIAL_EVIDENCE
+    assert result.decode_status == "partial_payload_evidence"
+    assert result.recovered_issuance_id is None
+    assert result.exact_file_hash_match is False
+    assert result.pages_analyzed == 2
+    assert result.valid_vote_count == 5
+    assert verification.status == VerificationStatus.PARTIAL_EVIDENCE
+    assert verification.recovered_issuance_id is None
+
+
+@pytest.mark.django_db
+@override_settings(SPLITBIND_DEMO_MODE=True)
 def test_unrelated_valid_jpeg_is_decoded_with_opencv(monkeypatch):
     from splitbind.demo.verification import process_verification_job
 
@@ -607,6 +666,43 @@ def test_cancellation_before_work_reserves_owner_but_never_reads_storage(monkeyp
     assert result_record.result_state == "cancelled"
     assert result_record.safe_error_code == "DEMO_JOB_CANCELLED"
     assert result_record.metrics == {"cleanup_failures": 0}
+    assert not JobResultReceipt.objects.filter(job=context[0]).exists()
+
+
+@pytest.mark.django_db
+@override_settings(SPLITBIND_DEMO_MODE=True)
+def test_cancellation_after_claim_and_before_provider_read_skips_download(monkeypatch):
+    from splitbind.demo import verification as verification_module
+    from splitbind.demo.verification import DemoVerificationError, process_verification_job
+
+    monkeypatch.setenv("SPLITBIND_DEMO_FINGERPRINT_KEY_HEX", FINGERPRINT_KEY.hex())
+    context = _new_verification_context(synthetic_pdf_bytes())
+    real_load_key = verification_module._load_fingerprint_key
+    real_download = context[2].download_bytes
+    download_calls = 0
+
+    def load_key_then_cancel():
+        fingerprint_key = real_load_key()
+        Job.objects.filter(pk=context[0].id).update(cancel_requested_at=timezone.now())
+        return fingerprint_key
+
+    def tracked_download(**kwargs):
+        nonlocal download_calls
+        download_calls += 1
+        return real_download(**kwargs)
+
+    monkeypatch.setattr(verification_module, "_load_fingerprint_key", load_key_then_cancel)
+    monkeypatch.setattr(context[2], "download_bytes", tracked_download)
+
+    with pytest.raises(DemoVerificationError, match="^DEMO_JOB_CANCELLED$"):
+        process_verification_job(job_id=context[0].id, storage=context[2])
+
+    context[0].refresh_from_db()
+    context[1].refresh_from_db()
+    assert download_calls == 0
+    assert context[0].status == JobStatus.CANCELLED
+    assert context[1].status is None
+    assert context[0].demo_verification_result.result_state == "cancelled"
     assert not JobResultReceipt.objects.filter(job=context[0]).exists()
 
 
