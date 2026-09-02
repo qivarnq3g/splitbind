@@ -1,10 +1,12 @@
 import uuid
+from contextlib import contextmanager
 from datetime import timedelta
 
 import pytest
 from django.test import override_settings
 from django.utils import timezone
 
+import splitbind.demo.worker as demo_worker
 from splitbind.access.models import Organization, Role, User
 from splitbind.demo.worker import claim_next_job
 from splitbind.documents.models import Verification
@@ -129,3 +131,61 @@ def test_claim_fails_closed_without_mutation_when_demo_mode_is_disabled(claim_co
 
     job.refresh_from_db()
     assert job.status == JobStatus.QUEUED
+
+
+@pytest.mark.django_db
+@override_settings(SPLITBIND_DEMO_MODE=True)
+def test_claim_selects_and_evaluates_candidate_inside_atomic_block(monkeypatch):
+    observed = []
+    atomic_depth = 0
+
+    @contextmanager
+    def observe_atomic():
+        nonlocal atomic_depth
+        atomic_depth += 1
+        try:
+            yield
+        finally:
+            atomic_depth -= 1
+
+    class EmptyLockedQuery:
+        def first(self):
+            observed.append(("first", atomic_depth))
+            return None
+
+    def observe_lock(queryset):
+        observed.append(("lock", atomic_depth))
+        return EmptyLockedQuery()
+
+    monkeypatch.setattr(demo_worker.transaction, "atomic", observe_atomic)
+    monkeypatch.setattr(demo_worker, "_lock_jobs", observe_lock)
+
+    assert claim_next_job() is None
+    assert observed == [("lock", 1), ("first", 1)]
+
+
+@pytest.mark.parametrize(
+    ("supports_skip_locked", "expected_kwargs"),
+    [(True, {"skip_locked": True}), (False, {})],
+)
+def test_lock_jobs_uses_skip_locked_only_when_database_advertises_support(
+    monkeypatch,
+    supports_skip_locked,
+    expected_kwargs,
+):
+    calls = []
+
+    class Query:
+        def select_for_update(self, **kwargs):
+            calls.append(kwargs)
+            return self
+
+    query = Query()
+    monkeypatch.setattr(
+        demo_worker.connection.features,
+        "has_select_for_update_skip_locked",
+        supports_skip_locked,
+    )
+
+    assert demo_worker._lock_jobs(query) is query
+    assert calls == [expected_kwargs]

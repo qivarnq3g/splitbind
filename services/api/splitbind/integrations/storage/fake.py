@@ -85,13 +85,14 @@ class FakeObjectStorage:
         """Test-only hook for attaching real bytes without trusting their metadata digest."""
         validate_controlled_key(key)
         validate_checksum(client_sha256_metadata)
+        converted = bytes(data)
         self._store_object(
             key=key,
             content_type=content_type,
-            size_bytes=len(data),
+            size_bytes=len(converted),
             sha256=client_sha256_metadata,
         )
-        self.object_bytes[key] = bytes(data)
+        self.object_bytes[key] = converted
 
     def _store_object(self, *, key: str, content_type: str, size_bytes: int, sha256: str) -> None:
         candidate = ObjectMetadata(key, size_bytes, content_type, sha256)
@@ -99,6 +100,7 @@ class FakeObjectStorage:
         if current is not None and current != candidate:
             raise UploadRejected("STORAGE_METADATA_IMMUTABLE")
         self.objects[key] = candidate
+        self.object_bytes.pop(key, None)
 
     def head(self, *, key):
         validate_controlled_key(key)
@@ -159,6 +161,8 @@ class FakeObjectStorage:
         self.objects[destination] = copied
         if source in self.object_bytes:
             self.object_bytes[destination] = self.object_bytes[source]
+        else:
+            self.object_bytes.pop(destination, None)
         if copied.client_sha256_metadata != sha256:
             raise UploadRejected("STORAGE_COPY_MISMATCH")
         return copied

@@ -146,9 +146,9 @@ def collect_bounded_bytes(chunks: Iterable[bytes], max_bytes: int) -> bytes:
     for chunk in chunks:
         if not isinstance(chunk, bytes):
             raise TypeError("storage byte stream must yield bytes")
-        collected.extend(chunk)
-        if len(collected) > max_bytes:
+        if len(chunk) > max_bytes - len(collected):
             raise UploadRejected("STORAGE_BYTE_LIMIT")
+        collected.extend(chunk)
     return bytes(collected)
 
 
