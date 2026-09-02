@@ -1,6 +1,8 @@
+import { useQuery } from "@tanstack/react-query";
 import { Navigate, NavLink, Outlet, RouteObject, createBrowserRouter, useLocation } from "react-router-dom";
 
 import { canCreateIssuance, canCreateVerification, useLogout, useSession } from "../features/auth/session";
+import { getDemoCapabilities } from "../features/demo/capabilities";
 import { IssueDocumentPage } from "../pages/IssueDocumentPage";
 import { IssuanceDetailPage } from "../pages/IssuanceDetailPage";
 import { JobDetailPage } from "../pages/JobDetailPage";
@@ -27,6 +29,13 @@ function AppShell() {
   const session = useSession();
   const logout = useLogout();
   const user = session.data?.user;
+  const demoCapabilities = useQuery({
+    queryKey: ["demo-capabilities"],
+    queryFn: ({ signal }) => getDemoCapabilities(signal),
+    enabled: Boolean(user),
+    staleTime: 30_000,
+    retry: false,
+  });
 
   return (
     <div className="app-shell">
@@ -44,6 +53,12 @@ function AppShell() {
         ) : <NavLink className="rail-account" to="/login">Đăng nhập</NavLink>}
       </nav>
       <div className="app-content">
+        {demoCapabilities.data?.enabled ? (
+          <aside className="demo-banner" aria-label="Giới hạn chế độ demo">
+            <strong>Chế độ demo cục bộ — vân tay thử nghiệm, chưa phát hành.</strong>
+            <p>Kết quả kỹ thuật không chứng minh ai đã làm rò rỉ, chỉnh sửa hoặc phân phối tài liệu.</p>
+          </aside>
+        ) : null}
         <Outlet />
         <footer className="foot-line">
           <p>SplitBind · Nhóm 9 · Bài tập lớn An toàn thông tin</p>

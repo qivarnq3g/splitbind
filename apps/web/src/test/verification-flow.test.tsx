@@ -86,7 +86,10 @@ describe("verification browser workflow", () => {
     fireEvent.submit(screen.getByRole("button", { name: "Bắt đầu xác minh" }).closest("form")!);
     expect(await screen.findByText("Đang xử lý")).toBeVisible();
 
-    const workflow = observed.filter((request) => request.path !== "/api/v1/auth/session");
+    const workflow = observed.filter((request) => ![
+      "/api/v1/auth/session",
+      "/api/v1/demo/capabilities",
+    ].includes(request.path));
     expect(workflow.map((request) => request.path)).toEqual([
       "/api/v1/uploads", "/direct-upload", `/api/v1/uploads/${UPLOAD_ID}/complete`,
       "/api/v1/verifications", `/api/v1/jobs/${JOB_ID}`,
@@ -104,7 +107,7 @@ describe("verification browser workflow", () => {
     renderApp();
     expect(await screen.findByRole("heading", { name: "Không có quyền tạo kiểm chứng" })).toBeVisible();
     expect(screen.queryByLabelText("Tệp cần kiểm chứng")).not.toBeInTheDocument();
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
   });
 
   it("lets an administrator create a verification, matching the backend policy", async () => {

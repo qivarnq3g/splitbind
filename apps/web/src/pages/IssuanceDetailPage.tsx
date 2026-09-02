@@ -1,7 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 
-import { getIssuance } from "../features/issuances/issuances";
+import { getIssuance, getIssuanceResult, openIssuanceResult } from "../features/issuances/issuances";
 import { JOB_LABELS } from "../features/jobs/useJob";
 
 export function IssuanceDetailPage() {
@@ -11,6 +11,26 @@ export function IssuanceDetailPage() {
     queryFn: ({ signal }) => getIssuance(id!, signal),
     enabled: Boolean(id),
   });
+  const download = useMutation({
+    mutationFn: async () => {
+      const result = await getIssuanceResult(id!);
+      openIssuanceResult(result.download_url);
+    },
+  });
+
+  const processing = issuance.data?.status && ![
+    "succeeded",
+    "failed",
+    "dead_lettered",
+    "cancelled",
+  ].includes(issuance.data.status);
+  const downloadLabel = download.isPending
+    ? "Đang tạo liên kết"
+    : download.isError
+      ? "Thử tải lại"
+      : download.isSuccess
+        ? "Đã mở bản tải"
+        : "Tải PDF kết quả";
 
   return (
     <main className="workspace-page">
@@ -26,9 +46,27 @@ export function IssuanceDetailPage() {
             <div><dt>Mã hồ sơ</dt><dd>{issuance.data.id}</dd></div>
             <div><dt>Trạng thái</dt><dd>{issuance.data.status ? JOB_LABELS[issuance.data.status] ?? issuance.data.status : "Chưa có"}</dd></div>
             <div><dt>Thời điểm tạo</dt><dd>{new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(issuance.data.issued_at))}</dd></div>
+            {issuance.data.algorithm_label ? <div><dt>Mức độ thuật toán</dt><dd>Thử nghiệm — chưa phát hành</dd></div> : null}
           </dl>
           {issuance.data.job_id ? <Link className="button button-secondary" to={`/jobs/${issuance.data.job_id}`}>Xem tiến độ xử lý</Link> : null}
-          <p className="result-note">API hiện tại chưa cung cấp URL tải kết quả. Giao diện không tạo hoặc suy đoán liên kết tải xuống.</p>
+          {issuance.data.result_available ? (
+            <div className="result-actions" aria-live="polite">
+              <button
+                className="button button-primary result-download"
+                type="button"
+                data-state={download.isPending ? "loading" : download.isError ? "error" : download.isSuccess ? "success" : "default"}
+                disabled={download.isPending}
+                onClick={() => download.mutate()}
+              >
+                {downloadLabel}
+              </button>
+              {download.isError ? <p className="form-error" role="alert">{download.error.message}</p> : null}
+            </div>
+          ) : processing ? (
+            <p className="result-note">Kết quả PDF đang được xử lý.</p>
+          ) : (
+            <p className="result-note">Kết quả PDF hiện không có sẵn. Hãy kiểm tra trạng thái công việc hoặc chạy lại quy trình demo.</p>
+          )}
         </section>
       ) : null}
     </main>

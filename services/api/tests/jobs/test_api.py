@@ -60,7 +60,11 @@ def test_session_csrf_issuance_detail_job_and_cancel_routes_are_bounded():
             content_type="application/json", **headers,
         )
     assert created.status_code == 201
-    assert set(created.json()) == {"id", "job_id", "status", "issued_at"}
+    assert set(created.json()) == {
+        "id", "job_id", "status", "issued_at", "result_available", "algorithm_label",
+    }
+    assert created.json()["result_available"] is False
+    assert created.json()["algorithm_label"] is None
     assert "private" not in created.content.decode().lower()
     issuance_id, job_id = created.json()["id"], created.json()["job_id"]
     detail = client.get(f"/api/v1/issuances/{issuance_id}")

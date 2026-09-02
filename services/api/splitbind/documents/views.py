@@ -1,6 +1,8 @@
 import uuid
+from datetime import timedelta
 
 from django.http import Http404
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect
 from rest_framework.permissions import IsAuthenticated
@@ -18,11 +20,12 @@ from splitbind.audit.services import record_event
 from splitbind.documents.serializers import (
     IssuanceCreateSerializer,
     VerificationCreateSerializer,
+    issuance_result_evidence,
     serialize_issuance,
     serialize_verification,
 )
 from splitbind.documents.services import get_issuance, get_verification
-from splitbind.integrations.storage.base import UploadRejected
+from splitbind.integrations.storage.base import StorageUnavailable, UploadRejected
 from splitbind.jobs.services import (
     JobConflict,
     WorkflowNotFound,
@@ -32,9 +35,14 @@ from splitbind.jobs.services import (
 from splitbind.openapi import (
     issuance_create_schema,
     issuance_detail_schema,
+    issuance_result_schema,
     verification_create_schema,
     verification_detail_schema,
 )
+from splitbind.uploads.services import get_storage
+
+
+ISSUANCE_RESULT_TTL = timedelta(minutes=5)
 
 
 def _serializer_denial(actor, action):
@@ -80,6 +88,36 @@ class IssuanceDetailView(APIView):
         except WorkflowNotFound:
             raise Http404
         return Response(serialize_issuance(record))
+
+
+class IssuanceResultView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @issuance_result_schema
+    def get(self, request, id):
+        try:
+            record = get_issuance(request.user, id)
+        except WorkflowNotFound:
+            raise Http404
+        evidence = issuance_result_evidence(record)
+        if evidence is None:
+            return Response({"code": "ISSUANCE_RESULT_UNAVAILABLE"}, status=409)
+        expires_at = timezone.now() + ISSUANCE_RESULT_TTL
+        try:
+            download_url = get_storage().presign_get(
+                key=evidence.output_object_key,
+                expires=ISSUANCE_RESULT_TTL,
+            )
+        except StorageUnavailable:
+            return Response({"code": "STORAGE_UNAVAILABLE"}, status=503)
+        except ValueError:
+            return Response({"code": "ISSUANCE_RESULT_UNAVAILABLE"}, status=409)
+        return Response(
+            {
+                "download_url": download_url,
+                "expires_at": expires_at.isoformat(),
+            }
+        )
 
 
 @method_decorator(csrf_protect, name="dispatch")

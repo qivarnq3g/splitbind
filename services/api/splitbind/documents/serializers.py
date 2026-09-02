@@ -2,6 +2,8 @@ import re
 
 from rest_framework import serializers
 
+from splitbind.jobs.models import JobStatus
+
 
 class IssuanceCreateSerializer(serializers.Serializer):
     recipient_id = serializers.UUIDField()
@@ -74,13 +76,39 @@ def _contract_metrics(value):
     }
 
 
+def issuance_result_evidence(record):
+    from splitbind.demo.capabilities import DEMO_ALGORITHM_LABEL
+    from splitbind.demo.models import DemoOutputState
+
+    evidence = getattr(record, "demo_result", None)
+    if (
+        evidence is None
+        or evidence.output_state != DemoOutputState.COMMITTED
+        or evidence.algorithm_label != DEMO_ALGORITHM_LABEL
+        or evidence.issuance_id != record.id
+        or evidence.organization_id != record.organization_id
+        or evidence.job.status != JobStatus.SUCCEEDED
+        or evidence.job.issuance_id != record.id
+        or not record.output_object_key
+        or not record.output_sha256
+        or record.output_deleted_at is not None
+        or evidence.output_object_key != record.output_object_key
+        or evidence.output_sha256 != record.output_sha256
+    ):
+        return None
+    return evidence
+
+
 def serialize_issuance(record, job=None):
     job = job or record.jobs.order_by("created_at").first()
+    evidence = issuance_result_evidence(record)
     return {
         "id": str(record.id),
         "job_id": str(job.id) if job else None,
         "status": job.status if job else None,
         "issued_at": record.issued_at.isoformat(),
+        "result_available": evidence is not None,
+        "algorithm_label": evidence.algorithm_label if evidence else None,
     }
 
 

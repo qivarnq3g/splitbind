@@ -184,6 +184,41 @@
                 }
             }
         },
+        "/api/v1/demo/capabilities": {
+            "get": {
+                "operationId": "demo_capabilities_retrieve",
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DemoCapability"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Authentication, permission, or CSRF denied."
+                    }
+                }
+            }
+        },
         "/api/v1/issuances": {
             "post": {
                 "operationId": "issuance_create",
@@ -355,6 +390,82 @@
                             }
                         },
                         "description": "Resource not found in the caller's scope."
+                    }
+                }
+            }
+        },
+        "/api/v1/issuances/{id}/result": {
+            "get": {
+                "operationId": "issuance_result_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/IssuanceResult"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Authentication, permission, or CSRF denied."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Resource not found in the caller's scope."
+                    },
+                    "409": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CodeError"
+                                }
+                            }
+                        },
+                        "description": "Workflow state or idempotency conflict."
+                    },
+                    "503": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CodeError"
+                                }
+                            }
+                        },
+                        "description": "Object storage is unavailable."
                     }
                 }
             }
@@ -1008,6 +1119,13 @@
     },
     "components": {
         "schemas": {
+            "AlgorithmLabelEnum": {
+                "enum": [
+                    "experimental_unreleased_fingerprint_v2"
+                ],
+                "type": "string",
+                "description": "* `experimental_unreleased_fingerprint_v2` - experimental_unreleased_fingerprint_v2"
+            },
             "AuditEvent": {
                 "type": "object",
                 "properties": {
@@ -1091,6 +1209,47 @@
                     "code"
                 ]
             },
+            "DemoCapability": {
+                "type": "object",
+                "properties": {
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "processing_limits": {
+                        "$ref": "#/components/schemas/DemoProcessingLimits"
+                    },
+                    "algorithm_label": {
+                        "$ref": "#/components/schemas/AlgorithmLabelEnum"
+                    }
+                },
+                "required": [
+                    "algorithm_label",
+                    "enabled",
+                    "processing_limits"
+                ]
+            },
+            "DemoProcessingLimits": {
+                "type": "object",
+                "properties": {
+                    "max_pdf_pages": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "max_pdf_bytes": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "max_image_pixels": {
+                        "type": "integer",
+                        "minimum": 1
+                    }
+                },
+                "required": [
+                    "max_image_pixels",
+                    "max_pdf_bytes",
+                    "max_pdf_pages"
+                ]
+            },
             "DetailError": {
                 "type": "object",
                 "properties": {
@@ -1132,12 +1291,25 @@
                     "issued_at": {
                         "type": "string",
                         "format": "date-time"
+                    },
+                    "result_available": {
+                        "type": "boolean"
+                    },
+                    "algorithm_label": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/AlgorithmLabelEnum"
+                            }
+                        ],
+                        "nullable": true
                     }
                 },
                 "required": [
+                    "algorithm_label",
                     "id",
                     "issued_at",
                     "job_id",
+                    "result_available",
                     "status"
                 ]
             },
@@ -1161,6 +1333,23 @@
                     "correlation_id",
                     "recipient_id",
                     "upload_id"
+                ]
+            },
+            "IssuanceResult": {
+                "type": "object",
+                "properties": {
+                    "download_url": {
+                        "type": "string",
+                        "format": "uri"
+                    },
+                    "expires_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                },
+                "required": [
+                    "download_url",
+                    "expires_at"
                 ]
             },
             "Job": {

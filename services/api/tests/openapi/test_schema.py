@@ -17,6 +17,7 @@ def test_schema_publishes_every_current_browser_facing_route(schema):
         "/api/v1/demo/capabilities",
         "/api/v1/issuances",
         "/api/v1/issuances/{id}",
+        "/api/v1/issuances/{id}/result",
         "/api/v1/jobs/{id}",
         "/api/v1/jobs/{id}/cancel",
         "/api/v1/uploads",
@@ -40,6 +41,7 @@ def test_schema_publishes_every_current_browser_facing_route(schema):
         ("/api/v1/uploads/{id}/complete", "post", {"200", "400", "403", "404", "429", "503"}),
         ("/api/v1/issuances", "post", {"201", "400", "403", "404", "409", "429"}),
         ("/api/v1/issuances/{id}", "get", {"200", "403", "404"}),
+        ("/api/v1/issuances/{id}/result", "get", {"200", "403", "404", "409", "503"}),
         ("/api/v1/verifications", "post", {"201", "400", "403", "404", "409", "429"}),
         ("/api/v1/verifications/{id}", "get", {"200", "403", "404"}),
         ("/api/v1/jobs/{id}", "get", {"200", "403", "404"}),
@@ -71,6 +73,8 @@ def test_schema_describes_session_cookie_and_csrf_boundaries(schema):
 def test_schema_exposes_structured_response_contracts(schema):
     components = schema["components"]["schemas"]
     assert components["UploadIntent"]["properties"]["upload_url"]["format"] == "uri"
+    assert components["Issuance"]["properties"]["result_available"]["type"] == "boolean"
+    assert components["IssuanceResult"]["properties"]["download_url"]["format"] == "uri"
 
     def enum_values(component, field):
         field_schema = components[component]["properties"][field]

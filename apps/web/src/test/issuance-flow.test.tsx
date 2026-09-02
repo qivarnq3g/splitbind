@@ -46,6 +46,29 @@ function session(role: "issuer" | "auditor") {
   };
 }
 
+function demoCapabilities(enabled: boolean) {
+  return {
+    enabled,
+    processing_limits: {
+      max_pdf_pages: 5,
+      max_pdf_bytes: 10 * 1024 * 1024,
+      max_image_pixels: 40_000_000,
+    },
+    algorithm_label: "experimental_unreleased_fingerprint_v2",
+  };
+}
+
+function issuance(resultAvailable: boolean, status = "succeeded") {
+  return {
+    id: ISSUANCE_ID,
+    job_id: JOB_ID,
+    status,
+    issued_at: "2026-08-30T12:01:00Z",
+    result_available: resultAvailable,
+    algorithm_label: resultAvailable ? "experimental_unreleased_fingerprint_v2" : null,
+  };
+}
+
 function renderApp(path = "/issue") {
   const queryClient = createQueryClient();
   const router = createMemoryRouter(appRoutes, { initialEntries: [path] });
@@ -148,7 +171,10 @@ describe("issuance browser workflow", () => {
 
     expect(await screen.findByText("Đang xử lý")).toBeVisible();
 
-    const workflow = observed.filter((request) => request.path !== "/api/v1/auth/session");
+    const workflow = observed.filter((request) => ![
+      "/api/v1/auth/session",
+      "/api/v1/demo/capabilities",
+    ].includes(request.path));
     expect(workflow.map((request) => request.path)).toEqual([
       "/api/v1/uploads",
       "/direct-upload",
@@ -194,7 +220,7 @@ describe("issuance browser workflow", () => {
     fireEvent.submit(screen.getByRole("button", { name: "Tạo bản cấp phát" }).closest("form")!);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Tệp vượt quá giới hạn 10 MiB");
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
   });
 
   it("clears upload progress when the direct upload fails", async () => {
@@ -277,6 +303,116 @@ describe("issuance browser workflow", () => {
     expect(await screen.findByText("Quyền chỉ đọc")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Tạo bản cấp phát" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Tệp PDF")).not.toBeInTheDocument();
+  });
+
+  it("shows the local experimental demo banner only when enabled", async () => {
+    const fetchMock = vi.fn<typeof globalThis.fetch>(async (input) => {
+      const request = input instanceof Request ? input : new Request(input);
+      const path = new URL(request.url).pathname;
+      if (path === "/api/v1/auth/session") return json(session("issuer"));
+      if (path === "/api/v1/demo/capabilities") return json(demoCapabilities(true));
+      if (path === `/api/v1/issuances/${ISSUANCE_ID}`) return json(issuance(false, "processing"));
+      return json({ detail: "Not found." }, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const view = renderApp(`/issuances/${ISSUANCE_ID}`);
+    expect(await screen.findByText("Chế độ demo cục bộ — vân tay thử nghiệm, chưa phát hành.")).toBeVisible();
+    expect(screen.getByText("Kết quả kỹ thuật không chứng minh ai đã làm rò rỉ, chỉnh sửa hoặc phân phối tài liệu.")).toBeVisible();
+
+    view.unmount();
+    cleanup();
+    fetchMock.mockImplementation(async (input) => {
+      const request = input instanceof Request ? input : new Request(input);
+      const path = new URL(request.url).pathname;
+      if (path === "/api/v1/auth/session") return json(session("issuer"));
+      if (path === "/api/v1/demo/capabilities") return json(demoCapabilities(false));
+      if (path === `/api/v1/issuances/${ISSUANCE_ID}`) return json(issuance(false, "processing"));
+      return json({ detail: "Not found." }, 404);
+    });
+    renderApp(`/issuances/${ISSUANCE_ID}`);
+    await screen.findByText("Kết quả PDF đang được xử lý.");
+    expect(screen.queryByText("Chế độ demo cục bộ — vân tay thử nghiệm, chưa phát hành.")).not.toBeInTheDocument();
+  });
+
+  it("shows an honest processing state without a download action", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async (input) => {
+      const request = input instanceof Request ? input : new Request(input);
+      const path = new URL(request.url).pathname;
+      if (path === "/api/v1/auth/session") return json(session("issuer"));
+      if (path === "/api/v1/demo/capabilities") return json(demoCapabilities(true));
+      if (path === `/api/v1/issuances/${ISSUANCE_ID}`) return json(issuance(false, "processing"));
+      return json({ detail: "Not found." }, 404);
+    }));
+    renderApp(`/issuances/${ISSUANCE_ID}`);
+
+    expect(await screen.findByText("Kết quả PDF đang được xử lý.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Tải PDF kết quả" })).not.toBeInTheDocument();
+  });
+
+  it("labels and downloads an available experimental result using a fresh URL", async () => {
+    const observed: string[] = [];
+    const fetchMock = vi.fn<typeof globalThis.fetch>(async (input) => {
+      const request = input instanceof Request ? input : new Request(input);
+      const path = new URL(request.url).pathname;
+      observed.push(path);
+      if (path === "/api/v1/auth/session") return json(session("issuer"));
+      if (path === "/api/v1/demo/capabilities") return json(demoCapabilities(true));
+      if (path === `/api/v1/issuances/${ISSUANCE_ID}`) return json(issuance(true));
+      if (path === `/api/v1/issuances/${ISSUANCE_ID}/result`) {
+        return json({
+          download_url: "https://storage.example.test/signed-result.pdf",
+          expires_at: "2026-08-30T12:06:00Z",
+        });
+      }
+      return json({ detail: "Not found." }, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    let downloadedHref = "";
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+      downloadedHref = this.href;
+    });
+    renderApp(`/issuances/${ISSUANCE_ID}`);
+
+    expect(await screen.findByText("Thử nghiệm — chưa phát hành")).toBeVisible();
+    expect(observed).not.toContain(`/api/v1/issuances/${ISSUANCE_ID}/result`);
+    fireEvent.click(screen.getByRole("button", { name: "Tải PDF kết quả" }));
+
+    await waitFor(() => expect(downloadedHref).toBe("https://storage.example.test/signed-result.pdf"));
+    expect(observed.filter((path) => path === `/api/v1/issuances/${ISSUANCE_ID}/result`)).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Đã mở bản tải" })).toBeVisible();
+  });
+
+  it("explains an unavailable finished output without inventing a URL", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async (input) => {
+      const request = input instanceof Request ? input : new Request(input);
+      const path = new URL(request.url).pathname;
+      if (path === "/api/v1/auth/session") return json(session("issuer"));
+      if (path === "/api/v1/demo/capabilities") return json(demoCapabilities(true));
+      if (path === `/api/v1/issuances/${ISSUANCE_ID}`) return json(issuance(false));
+      return json({ detail: "Not found." }, 404);
+    }));
+    renderApp(`/issuances/${ISSUANCE_ID}`);
+
+    expect(await screen.findByText("Kết quả PDF hiện không có sẵn. Hãy kiểm tra trạng thái công việc hoặc chạy lại quy trình demo.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Tải PDF kết quả" })).not.toBeInTheDocument();
+  });
+
+  it("keeps download errors safe and retryable", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async (input) => {
+      const request = input instanceof Request ? input : new Request(input);
+      const path = new URL(request.url).pathname;
+      if (path === "/api/v1/auth/session") return json(session("issuer"));
+      if (path === "/api/v1/demo/capabilities") return json(demoCapabilities(true));
+      if (path === `/api/v1/issuances/${ISSUANCE_ID}`) return json(issuance(true));
+      if (path === `/api/v1/issuances/${ISSUANCE_ID}/result`) return json({ code: "STORAGE_UNAVAILABLE" }, 503);
+      return json({ detail: "Not found." }, 404);
+    }));
+    renderApp(`/issuances/${ISSUANCE_ID}`);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Tải PDF kết quả" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Không thể tạo liên kết tải lúc này. Hãy thử lại.");
+    expect(screen.getByRole("button", { name: "Thử tải lại" })).toBeVisible();
   });
 });
 

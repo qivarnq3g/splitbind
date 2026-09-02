@@ -63,6 +63,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/demo/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["demo_capabilities_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/issuances": {
         parameters: {
             query?: never;
@@ -87,6 +103,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["issuance_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/issuances/{id}/result": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["issuance_result_retrieve"];
         put?: never;
         post?: never;
         delete?: never;
@@ -227,6 +259,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description * `experimental_unreleased_fingerprint_v2` - experimental_unreleased_fingerprint_v2
+         * @enum {string}
+         */
+        AlgorithmLabelEnum: "experimental_unreleased_fingerprint_v2";
         AuditEvent: {
             /** Format: uuid */
             id: string;
@@ -252,6 +289,16 @@ export interface components {
         CodeError: {
             code: string;
         };
+        DemoCapability: {
+            enabled: boolean;
+            processing_limits: components["schemas"]["DemoProcessingLimits"];
+            algorithm_label: components["schemas"]["AlgorithmLabelEnum"];
+        };
+        DemoProcessingLimits: {
+            max_pdf_pages: number;
+            max_pdf_bytes: number;
+            max_image_pixels: number;
+        };
         DetailError: {
             detail: string;
         };
@@ -268,6 +315,8 @@ export interface components {
             status: components["schemas"]["JobStatusEnum"] | null;
             /** Format: date-time */
             issued_at: string;
+            result_available: boolean;
+            algorithm_label: components["schemas"]["AlgorithmLabelEnum"] | null;
         };
         IssuanceCreateRequest: {
             /** Format: uuid */
@@ -276,6 +325,12 @@ export interface components {
             upload_id: string;
             /** Format: uuid */
             correlation_id: string;
+        };
+        IssuanceResult: {
+            /** Format: uri */
+            download_url: string;
+            /** Format: date-time */
+            expires_at: string;
         };
         Job: {
             /** Format: uuid */
@@ -594,6 +649,34 @@ export interface operations {
             };
         };
     };
+    demo_capabilities_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemoCapability"];
+                };
+            };
+            /** @description Authentication, permission, or CSRF denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DetailError"];
+                };
+            };
+        };
+    };
     issuance_create: {
         parameters: {
             query?: never;
@@ -704,6 +787,63 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DetailError"];
+                };
+            };
+        };
+    };
+    issuance_result_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuanceResult"];
+                };
+            };
+            /** @description Authentication, permission, or CSRF denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DetailError"];
+                };
+            };
+            /** @description Resource not found in the caller's scope. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DetailError"];
+                };
+            };
+            /** @description Workflow state or idempotency conflict. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CodeError"];
+                };
+            };
+            /** @description Object storage is unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CodeError"];
                 };
             };
         };

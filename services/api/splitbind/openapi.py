@@ -80,6 +80,16 @@ class IssuanceSerializer(serializers.Serializer):
     job_id = serializers.UUIDField(allow_null=True)
     status = serializers.ChoiceField(choices=JobStatus.values, allow_null=True)
     issued_at = serializers.DateTimeField()
+    result_available = serializers.BooleanField()
+    algorithm_label = serializers.ChoiceField(
+        choices=["experimental_unreleased_fingerprint_v2"],
+        allow_null=True,
+    )
+
+
+class IssuanceResultSerializer(serializers.Serializer):
+    download_url = serializers.URLField()
+    expires_at = serializers.DateTimeField()
 
 
 class SuspiciousRegionSerializer(serializers.Serializer):
@@ -226,6 +236,16 @@ issuance_create_schema = extend_schema(
 )
 issuance_detail_schema = extend_schema(
     operation_id="issuance_retrieve", responses={200: IssuanceSerializer, 403: DETAIL_403, 404: DETAIL_404}
+)
+issuance_result_schema = extend_schema(
+    operation_id="issuance_result_retrieve",
+    responses={
+        200: IssuanceResultSerializer,
+        403: DETAIL_403,
+        404: DETAIL_404,
+        409: CODE_409,
+        503: CODE_503,
+    },
 )
 verification_create_schema = extend_schema(
     operation_id="verification_create", parameters=[CSRF_HEADER], request=VerificationCreateSerializer,

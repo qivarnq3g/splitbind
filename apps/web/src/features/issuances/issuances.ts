@@ -25,3 +25,26 @@ export async function getIssuance(id: string, signal?: AbortSignal) {
   if (!result.data) throw new SafeApiError(safeApiMessage(result.response.status, result.error));
   return result.data;
 }
+
+export async function getIssuanceResult(id: string, signal?: AbortSignal) {
+  const result = await api.GET("/api/v1/issuances/{id}/result", {
+    params: { path: { id } },
+    signal,
+  });
+  if (!result.data) {
+    throw new SafeApiError("Không thể tạo liên kết tải lúc này. Hãy thử lại.");
+  }
+  return result.data;
+}
+
+export function openIssuanceResult(downloadUrl: string) {
+  const parsed = new URL(downloadUrl);
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new SafeApiError("Liên kết tải không hợp lệ. Hãy thử lại.");
+  }
+  const anchor = document.createElement("a");
+  anchor.href = parsed.href;
+  anchor.download = "splitbind-result.pdf";
+  anchor.rel = "noopener noreferrer";
+  anchor.click();
+}

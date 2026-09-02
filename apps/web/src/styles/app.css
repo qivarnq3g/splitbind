@@ -142,6 +142,21 @@ a:active {
   min-width: 0;
 }
 
+.demo-banner {
+  display: grid;
+  gap: var(--space-2xs);
+  padding: var(--space-sm) max(var(--space-md), env(safe-area-inset-right));
+  border-block-end: var(--rule-thin) solid var(--color-rule);
+  background: var(--color-paper-2);
+  color: var(--color-ink-2);
+  font-size: var(--text-sm);
+}
+
+.demo-banner strong {
+  color: var(--color-ink);
+  font-family: var(--font-display);
+}
+
 .workspace-page,
 .login-page,
 .session-loading {
@@ -429,6 +444,18 @@ progress {
 .result-note {
   max-width: 65ch;
   color: var(--color-muted);
+}
+
+.result-actions {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.result-download {
+  width: 12rem;
+  max-width: 100%;
 }
 
 .evidence-summary {
