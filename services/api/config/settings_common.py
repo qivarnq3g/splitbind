@@ -95,8 +95,10 @@ def load_demo_mode(environment: str, value: object) -> bool:
         enabled = False
     else:
         raise ImproperlyConfigured("SPLITBIND_DEMO_MODE must be exactly true or false")
-    if environment == "production" and enabled:
-        raise ImproperlyConfigured("SPLITBIND_DEMO_MODE cannot be enabled in production")
+    if enabled and environment not in {"local", "offline"}:
+        raise ImproperlyConfigured(
+            "SPLITBIND_DEMO_MODE may be enabled only in local or offline environments"
+        )
     return enabled
 
 

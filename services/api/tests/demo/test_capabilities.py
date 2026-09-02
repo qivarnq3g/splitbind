@@ -14,7 +14,7 @@ from splitbind.access.models import Organization, Role
 API_ROOT = Path(__file__).resolve().parents[2]
 
 
-def production_environment(*, demo_mode: str) -> dict[str, str]:
+def runtime_environment(*, environment_name: str, demo_mode: str) -> dict[str, str]:
     environment = dict(os.environ)
     environment.pop("NEON_DATABASE_HOST", None)
     environment.pop("SPLITBIND_DATABASE_HOST", None)
@@ -22,7 +22,7 @@ def production_environment(*, demo_mode: str) -> dict[str, str]:
         {
             "DJANGO_SECRET_KEY": "fixed-synthetic-test-secret",
             "DATABASE_URL": "postgresql://user:password@db.example.test/splitbind?sslmode=require",
-            "ENVIRONMENT": "production",
+            "ENVIRONMENT": environment_name,
             "MAX_PDF_BYTES": str(10 * 1024 * 1024),
             "MAX_PDF_PAGES": "50",
             "MAX_IMAGE_PIXELS": "40000000",
@@ -39,23 +39,41 @@ def test_test_settings_disable_demo_mode_by_default():
     assert settings.SPLITBIND_DEMO_MODE is False
 
 
-def test_production_settings_reject_enabled_demo_mode():
+@pytest.mark.parametrize("environment_name", ["production", "test", "staging"])
+def test_only_local_or_offline_settings_may_enable_demo_mode(environment_name):
     result = subprocess.run(
         [sys.executable, "-c", "import config.settings"],
         cwd=API_ROOT,
-        env=production_environment(demo_mode="true"),
+        env=runtime_environment(environment_name=environment_name, demo_mode="true"),
         capture_output=True,
         text=True,
         check=False,
     )
 
     assert result.returncode != 0
-    assert "SPLITBIND_DEMO_MODE cannot be enabled in production" in result.stderr
+    assert "SPLITBIND_DEMO_MODE may be enabled only in local or offline environments" in result.stderr
+
+
+@pytest.mark.parametrize("environment_name", ["local", "offline"])
+def test_local_and_offline_settings_may_enable_demo_mode(environment_name):
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import config.settings; assert config.settings.SPLITBIND_DEMO_MODE is True",
+        ],
+        cwd=API_ROOT,
+        env=runtime_environment(environment_name=environment_name, demo_mode="true"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_settings_reject_unrecognized_demo_mode_value():
-    environment = production_environment(demo_mode="enabled")
-    environment["ENVIRONMENT"] = "local"
+    environment = runtime_environment(environment_name="local", demo_mode="enabled")
     result = subprocess.run(
         [sys.executable, "-c", "import config.settings"],
         cwd=API_ROOT,
