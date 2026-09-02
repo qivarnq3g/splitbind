@@ -2,12 +2,12 @@ import json
 import time
 from dataclasses import dataclass
 from datetime import timedelta, timezone as datetime_timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import connection, transaction
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 from jsonschema import Draft202012Validator, FormatChecker
 
@@ -54,6 +54,15 @@ def _lock_jobs(queryset):
     if connection.features.has_select_for_update_skip_locked:
         return queryset.select_for_update(skip_locked=True)
     return queryset.select_for_update()
+
+
+def _lock_job_rows(queryset):
+    options = {}
+    if connection.features.has_select_for_update_skip_locked:
+        options["skip_locked"] = True
+    if connection.features.has_select_for_update_of:
+        options["of"] = ("self",)
+    return queryset.select_for_update(**options)
 
 
 def claim_next_job():
@@ -280,7 +289,13 @@ def _prepare_stale_recovery(job_id: UUID, stale_before):
             DemoOutputState.UPLOADING,
             DemoOutputState.CLEANUP_REQUIRED,
         }:
-            return "cleanup", claim, evidence.cleanup_failures
+            recovery_claim, prior_cleanup_failures = (
+                demo_issuance._claim_stale_output_recovery(
+                    claim,
+                    recovery_token=uuid4(),
+                )
+            )
+            return "cleanup", recovery_claim, prior_cleanup_failures
         if evidence.output_state in {
             DemoOutputState.RESERVED,
             DemoOutputState.CLEANED,
@@ -333,21 +348,27 @@ def _recover_stale_job(*, job_id: UUID, stale_before, storage):
     action, claim, prior_cleanup_failures = prepared
     if action != "cleanup":
         return None
-    cleanup_failures, code = demo_issuance._compensate_owned_output(
-        storage=storage,
-        claim=claim,
-        cleaned_code=STALE_JOB_ERROR_CODE,
-        cleanup_failed_code=STALE_CLEANUP_ERROR_CODE,
-        prior_cleanup_failures=prior_cleanup_failures,
-    )
-    if code == STALE_CLEANUP_ERROR_CODE:
-        return StaleRecoveryResult(claim.job_id, JobKind.ISSUANCE, code)
-    demo_issuance._record_failed_job(
+    demo_issuance._authorize_stale_output_delete(
         claim,
-        demo_issuance.DemoIssuanceError(
-            STALE_JOB_ERROR_CODE,
-            cleanup_failures=cleanup_failures,
-        ),
+        cleanup_failures=prior_cleanup_failures,
+    )
+    try:
+        storage.delete(key=claim.output_object_key)
+    except Exception:
+        demo_issuance._record_stale_output_delete_failure(
+            claim,
+            prior_cleanup_failures=prior_cleanup_failures,
+            safe_error_code=STALE_CLEANUP_ERROR_CODE,
+        )
+        return StaleRecoveryResult(
+            claim.job_id,
+            JobKind.ISSUANCE,
+            STALE_CLEANUP_ERROR_CODE,
+        )
+    demo_issuance._acknowledge_stale_output_delete(
+        claim,
+        cleanup_failures=prior_cleanup_failures,
+        safe_error_code=STALE_JOB_ERROR_CODE,
     )
     return StaleRecoveryResult(
         claim.job_id,
@@ -372,12 +393,18 @@ def reconcile_stale_jobs(
         raise ValueError("stale reconciliation limit is out of bounds")
     observed_now = now or timezone.now()
     stale_before = observed_now - STALE_PROCESSING_AGE
+    issuance_owner = DemoIssuanceResult.objects.filter(job_id=OuterRef("pk"))
+    verification_owner = DemoVerificationResult.objects.filter(job_id=OuterRef("pk"))
     with transaction.atomic():
         candidate_ids = list(
-            _lock_jobs(
-                Job.objects.filter(
-                    Q(demo_issuance_result__isnull=False)
-                    | Q(demo_verification_result__isnull=False),
+            _lock_job_rows(
+                Job.objects.annotate(
+                    has_demo_issuance_owner=Exists(issuance_owner),
+                    has_demo_verification_owner=Exists(verification_owner),
+                )
+                .filter(
+                    Q(has_demo_issuance_owner=True)
+                    | Q(has_demo_verification_owner=True),
                     status=JobStatus.PROCESSING,
                     updated_at__lt=stale_before,
                 )

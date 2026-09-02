@@ -6,7 +6,7 @@ import re
 import tempfile
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import cv2
@@ -20,8 +20,10 @@ from splitbind.demo.models import (
     DEMO_CANONICAL_CANVAS,
     DEMO_FROZEN_CANDIDATE_IDENTIFIER,
     DEMO_LIMITATIONS,
+    DEMO_STALE_RECOVERY_FENCE_CODE,
     DemoIssuanceResult,
     DemoOutputState,
+    _allow_demo_result_recovery_transfer,
     _allow_demo_result_write,
 )
 from splitbind.demo.results import IssuanceProcessingResult
@@ -276,6 +278,112 @@ def _compensate_owned_output(
     return prior_cleanup_failures, cleaned_code
 
 
+@transaction.atomic
+def _claim_stale_output_recovery(
+    claim: _ProcessingClaim,
+    *,
+    recovery_token: uuid.UUID,
+) -> tuple[_ProcessingClaim, int]:
+    if not isinstance(recovery_token, uuid.UUID) or recovery_token == claim.owner_token:
+        raise DemoIssuanceError("DEMO_OUTPUT_OWNERSHIP_INVALID")
+    job = _locked_job(claim.job_id)
+    issuance, document = _locked_issuance_document(job)
+    _validate_claim_binding(claim, job, issuance, document)
+    evidence = _locked_evidence(claim)
+    if (
+        job.status != JobStatus.PROCESSING
+        or evidence.output_state
+        not in {DemoOutputState.UPLOADING, DemoOutputState.CLEANUP_REQUIRED}
+        or issuance.output_object_key is not None
+        or issuance.output_sha256 is not None
+    ):
+        raise DemoIssuanceError("DEMO_OUTPUT_OWNERSHIP_INVALID")
+    prior_cleanup_failures = evidence.cleanup_failures
+    evidence.owner_token = recovery_token
+    evidence.output_state = DemoOutputState.CLEANUP_REQUIRED
+    evidence.safe_error_code = DEMO_STALE_RECOVERY_FENCE_CODE
+    with _allow_demo_result_recovery_transfer(), _allow_demo_result_write():
+        evidence.save(
+            update_fields=[
+                "owner_token",
+                "output_state",
+                "safe_error_code",
+                "updated_at",
+            ]
+        )
+    return replace(claim, owner_token=recovery_token), prior_cleanup_failures
+
+
+@transaction.atomic
+def _authorize_stale_output_delete(claim: _ProcessingClaim, *, cleanup_failures: int) -> None:
+    job = _locked_job(claim.job_id)
+    issuance, document = _locked_issuance_document(job)
+    _validate_claim_binding(claim, job, issuance, document)
+    evidence = _locked_evidence(claim)
+    if (
+        job.status != JobStatus.PROCESSING
+        or evidence.output_state != DemoOutputState.CLEANUP_REQUIRED
+        or evidence.safe_error_code != DEMO_STALE_RECOVERY_FENCE_CODE
+        or evidence.cleanup_failures != cleanup_failures
+        or issuance.output_object_key is not None
+        or issuance.output_sha256 is not None
+    ):
+        raise DemoIssuanceError("DEMO_OUTPUT_OWNERSHIP_INVALID")
+
+
+@transaction.atomic
+def _record_stale_output_delete_failure(
+    claim: _ProcessingClaim,
+    *,
+    prior_cleanup_failures: int,
+    safe_error_code: str,
+) -> int:
+    _authorize_stale_output_delete(
+        claim,
+        cleanup_failures=prior_cleanup_failures,
+    )
+    evidence = _locked_evidence(claim)
+    evidence.cleanup_failures = prior_cleanup_failures + 1
+    evidence.safe_error_code = safe_error_code
+    with _allow_demo_result_write():
+        evidence.save(
+            update_fields=[
+                "cleanup_failures",
+                "safe_error_code",
+                "updated_at",
+            ]
+        )
+    return evidence.cleanup_failures
+
+
+@transaction.atomic
+def _acknowledge_stale_output_delete(
+    claim: _ProcessingClaim,
+    *,
+    cleanup_failures: int,
+    safe_error_code: str,
+) -> None:
+    _authorize_stale_output_delete(
+        claim,
+        cleanup_failures=cleanup_failures,
+    )
+    job = _locked_job(claim.job_id)
+    evidence = _locked_evidence(claim)
+    evidence.output_state = DemoOutputState.CLEANED
+    evidence.safe_error_code = safe_error_code
+    with _allow_demo_result_write():
+        evidence.save(
+            update_fields=[
+                "output_state",
+                "safe_error_code",
+                "updated_at",
+            ]
+        )
+    transition_job(job, JobStatus.FAILED)
+    job.safe_error_code = safe_error_code
+    job.save(update_fields=["status", "safe_error_code", "updated_at"])
+
+
 def _cleanup_workspace(workspace) -> int:
     try:
         workspace.cleanup()
@@ -308,6 +416,15 @@ def _begin_output_upload(claim: _ProcessingClaim) -> bool:
 @transaction.atomic
 def _record_failed_job(claim: _ProcessingClaim, error: DemoIssuanceError) -> None:
     job = _locked_job(claim.job_id)
+    current_evidence = (
+        DemoIssuanceResult.objects.select_for_update().filter(job_id=claim.job_id).first()
+    )
+    if (
+        current_evidence is not None
+        and current_evidence.owner_token != claim.owner_token
+        and current_evidence.output_state == DemoOutputState.CLEANUP_REQUIRED
+    ):
+        return
     evidence = _locked_evidence(claim)
     if job.status != JobStatus.PROCESSING:
         return
@@ -460,6 +577,7 @@ def _load_replay_result(
         or evidence.attempt != job.attempt
         or issuance.output_object_key != evidence.output_object_key
         or issuance.output_sha256 != evidence.output_sha256
+        or evidence.input_sha256 != document.expected_source_sha256
         or document.page_count != evidence.page_count
         or not receipt_exists
     ):

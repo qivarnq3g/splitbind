@@ -29,6 +29,7 @@ DEMO_LIMITATIONS = (
     "evidence.not_proof_of_leak_edit_or_distribution",
 )
 DEMO_VERIFICATION_LIMITATIONS = (*DEMO_LIMITATIONS, "integrity.not_evaluated")
+DEMO_STALE_RECOVERY_FENCE_CODE = "DEMO_STALE_RECOVERY_FENCED"
 _DEMO_VERIFICATION_EVIDENCE_KEYS = {
     "algorithm_label",
     "decode_status",
@@ -119,6 +120,10 @@ class DemoIssuanceResultManager(
 
 
 _demo_result_write = ContextVar("demo_result_write", default=False)
+_demo_result_recovery_transfer = ContextVar(
+    "demo_result_recovery_transfer",
+    default=False,
+)
 
 
 @contextmanager
@@ -128,6 +133,15 @@ def _allow_demo_result_write():
         yield
     finally:
         _demo_result_write.reset(token)
+
+
+@contextmanager
+def _allow_demo_result_recovery_transfer():
+    token = _demo_result_recovery_transfer.set(True)
+    try:
+        yield
+    finally:
+        _demo_result_recovery_transfer.reset(token)
 
 
 class DemoIssuanceResult(ValidatedOrganizationOwnedModel):
@@ -279,7 +293,13 @@ class DemoIssuanceResult(ValidatedOrganizationOwnedModel):
             raise ValidationError("uncommitted demo result cannot claim success evidence")
         if (
             self.output_state == DemoOutputState.CLEANUP_REQUIRED
-            and (self.cleanup_failures < 1 or self.safe_error_code is None)
+            and (
+                self.safe_error_code is None
+                or (
+                    self.safe_error_code != DEMO_STALE_RECOVERY_FENCE_CODE
+                    and self.cleanup_failures < 1
+                )
+            )
         ):
             raise ValidationError("cleanup-required demo result needs durable failure evidence")
 
@@ -297,10 +317,19 @@ class DemoIssuanceResult(ValidatedOrganizationOwnedModel):
                 "output_object_key",
                 "created_at",
             }
-            if any(
-                getattr(self, field) != getattr(persisted, field)
+            changed_identity = {
+                field
                 for field in identity_fields
-            ):
+                if getattr(self, field) != getattr(persisted, field)
+            }
+            recovery_transfer = (
+                _demo_result_recovery_transfer.get()
+                and changed_identity == {"owner_token"}
+                and persisted.output_state
+                in {DemoOutputState.UPLOADING, DemoOutputState.CLEANUP_REQUIRED}
+                and self.output_state == DemoOutputState.CLEANUP_REQUIRED
+            )
+            if changed_identity and not recovery_transfer:
                 raise ValidationError("demo issuance result ownership is immutable")
             if persisted.output_state == DemoOutputState.COMMITTED:
                 raise ValidationError("committed demo issuance result evidence is immutable")

@@ -12,6 +12,7 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from splitbind.access.models import Organization, Recipient, Role, User
+from splitbind.demo import issuance as issuance_module
 from splitbind.demo.issuance import _receipt_id as issuance_receipt_id
 from splitbind.demo.models import (
     DEMO_CANONICAL_CANVAS,
@@ -175,7 +176,13 @@ def _make_stale(job, *, age=timedelta(minutes=16)):
     return job
 
 
-def _own_issuance(job, *, output_state=DemoOutputState.RESERVED, committed=False):
+def _own_issuance(
+    job,
+    *,
+    output_state=DemoOutputState.RESERVED,
+    committed=False,
+    input_sha256=None,
+):
     issuance = Issuance.objects.get(pk=job.issuance_id)
     document = Document.objects.get(pk=issuance.document_id)
     output_key = f"outputs/issuance/{job.organization_id}/{issuance.id}.pdf"
@@ -191,7 +198,7 @@ def _own_issuance(job, *, output_state=DemoOutputState.RESERVED, committed=False
             "candidate_identifier": DEMO_FROZEN_CANDIDATE_IDENTIFIER,
             "canvas_height": DEMO_CANONICAL_CANVAS[0],
             "canvas_width": DEMO_CANONICAL_CANVAS[1],
-            "input_sha256": document.expected_source_sha256,
+            "input_sha256": input_sha256 or document.expected_source_sha256,
             "output_sha256": issuance.output_sha256,
             "page_count": 1,
             "processing_ms": 1,
@@ -696,3 +703,173 @@ def test_stale_reconciliation_is_bounded_and_uses_stable_order(worker_storage):
     assert len(outcomes) == 1
     assert older.status == JobStatus.FAILED
     assert newer.status == JobStatus.PROCESSING
+
+
+@pytest.mark.django_db
+@override_settings(SPLITBIND_DEMO_MODE=True)
+def test_stale_recovery_fences_original_commit_before_exact_output_delete(
+    worker_storage,
+    monkeypatch,
+):
+    job, _event = _created_issuance_job()
+    job = _make_stale(job)
+    evidence = _own_issuance(job, output_state=DemoOutputState.UPLOADING)
+    issuance = Issuance.objects.get(pk=job.issuance_id)
+    document = Document.objects.get(pk=issuance.document_id)
+    claim = issuance_module._ProcessingClaim(
+        job_id=job.id,
+        organization_id=job.organization_id,
+        issuance_id=issuance.id,
+        document_id=document.id,
+        attempt=job.attempt,
+        source_object_key=document.source_object_key,
+        expected_source_sha256=document.expected_source_sha256,
+        output_object_key=evidence.output_object_key,
+        owner_token=evidence.owner_token,
+    )
+    worker_storage.inject_object_bytes(
+        key=evidence.output_object_key,
+        content_type="application/pdf",
+        data=b"original worker output",
+        client_sha256_metadata="d" * 64,
+    )
+    observed_states = []
+    commit_codes = []
+    cleanup_codes = []
+    original_delete = worker_storage.delete
+
+    def original_worker_attempts_commit_during_delete(*, key):
+        job.refresh_from_db()
+        evidence.refresh_from_db()
+        observed_states.append(
+            (
+                job.status,
+                evidence.output_state,
+                evidence.safe_error_code,
+                evidence.owner_token != claim.owner_token,
+            )
+        )
+        try:
+            issuance_module._commit_issuance_result(
+                claim=claim,
+                input_sha256=document.expected_source_sha256,
+                output_sha256="d" * 64,
+                page_count=1,
+                candidate_identifier=DEMO_FROZEN_CANDIDATE_IDENTIFIER,
+                processing_ms=1,
+            )
+        except issuance_module.DemoIssuanceError as error:
+            commit_codes.append(error.code)
+            try:
+                issuance_module._compensate_owned_output(
+                    storage=worker_storage,
+                    claim=claim,
+                    cleaned_code="DEMO_RESULT_COMMIT_FAILED",
+                    cleanup_failed_code="DEMO_RESULT_COMMIT_OUTPUT_CLEANUP_FAILED",
+                )
+            except issuance_module.DemoIssuanceError as cleanup_error:
+                cleanup_codes.append(cleanup_error.code)
+                issuance_module._record_failed_job(claim, cleanup_error)
+        else:
+            commit_codes.append("SUCCEEDED")
+        job.refresh_from_db()
+        observed_states.append((job.status,))
+        original_delete(key=key)
+
+    monkeypatch.setattr(
+        worker_storage,
+        "delete",
+        original_worker_attempts_commit_during_delete,
+    )
+
+    from splitbind.demo.worker import reconcile_stale_jobs
+
+    outcomes = reconcile_stale_jobs(storage=worker_storage)
+
+    job.refresh_from_db()
+    issuance.refresh_from_db()
+    evidence.refresh_from_db()
+    assert observed_states == [
+        (
+            JobStatus.PROCESSING,
+            DemoOutputState.CLEANUP_REQUIRED,
+            "DEMO_STALE_RECOVERY_FENCED",
+            True,
+        ),
+        (JobStatus.PROCESSING,),
+    ]
+    assert commit_codes == ["DEMO_OUTPUT_OWNERSHIP_INVALID"]
+    assert cleanup_codes == ["DEMO_OUTPUT_OWNERSHIP_INVALID"]
+    assert outcomes[0].safe_code == "DEMO_STALE_JOB_FAILED"
+    assert job.status == JobStatus.FAILED
+    assert issuance.output_object_key is None
+    assert issuance.output_sha256 is None
+    assert evidence.output_state == DemoOutputState.CLEANED
+    assert evidence.output_object_key not in worker_storage.objects
+
+
+@pytest.mark.django_db
+@override_settings(SPLITBIND_DEMO_MODE=True)
+def test_stale_candidate_query_uses_exists_without_nullable_outer_join(worker_storage):
+    from splitbind.demo.worker import reconcile_stale_jobs
+
+    with CaptureQueriesContext(connection) as queries:
+        reconcile_stale_jobs(storage=worker_storage, limit=1)
+
+    candidate_sql = next(
+        query["sql"]
+        for query in queries.captured_queries
+        if 'FROM "jobs_job"' in query["sql"]
+    ).upper()
+    assert "EXISTS" in candidate_sql
+    assert "LEFT OUTER JOIN" not in candidate_sql
+
+
+@pytest.mark.django_db(transaction=True)
+@override_settings(SPLITBIND_DEMO_MODE=True)
+def test_postgresql_stale_candidate_lock_runtime_gate(worker_storage):
+    if connection.vendor != "postgresql":
+        pytest.skip(
+            "SQLite cannot prove PostgreSQL FOR UPDATE OF or nullable-join behavior"
+        )
+    job, _event = _created_verification_job()
+    job = _make_stale(job)
+    _own_verification(job)
+
+    from splitbind.demo.worker import reconcile_stale_jobs
+
+    outcomes = reconcile_stale_jobs(storage=worker_storage, limit=1)
+
+    job.refresh_from_db()
+    assert outcomes[0].job_id == job.id
+    assert job.status == JobStatus.FAILED
+
+
+@pytest.mark.django_db
+@override_settings(SPLITBIND_DEMO_MODE=True)
+def test_stale_committed_issuance_with_mismatched_input_hash_fails_and_keeps_output(
+    worker_storage,
+):
+    job, _event = _created_issuance_job()
+    job = _make_stale(job)
+    evidence = _own_issuance(
+        job,
+        output_state=DemoOutputState.COMMITTED,
+        committed=True,
+        input_sha256="c" * 64,
+    )
+    worker_storage.inject_object_bytes(
+        key=evidence.output_object_key,
+        content_type="application/pdf",
+        data=b"retained committed output",
+        client_sha256_metadata="b" * 64,
+    )
+
+    call_command("run_demo_worker", "--once", stdout=io.StringIO())
+
+    job.refresh_from_db()
+    evidence.refresh_from_db()
+    assert job.status == JobStatus.FAILED
+    assert job.safe_error_code == "DEMO_STALE_RESULT_INVALID"
+    assert evidence.output_state == DemoOutputState.COMMITTED
+    assert evidence.output_object_key in worker_storage.objects
