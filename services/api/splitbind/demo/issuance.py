@@ -6,6 +6,7 @@ import re
 import tempfile
 import time
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 import cv2
@@ -15,7 +16,16 @@ from django.conf import settings
 from django.db import transaction
 
 from splitbind.demo.capabilities import DEMO_ALGORITHM_LABEL
+from splitbind.demo.models import (
+    DEMO_CANONICAL_CANVAS,
+    DEMO_FROZEN_CANDIDATE_IDENTIFIER,
+    DEMO_LIMITATIONS,
+    DemoIssuanceResult,
+    DemoOutputState,
+    _allow_demo_result_write,
+)
 from splitbind.demo.results import IssuanceProcessingResult
+from splitbind.documents.models import Document, Issuance
 from splitbind.integrations.storage.base import StorageUnavailable, UploadRejected
 from splitbind.jobs.models import Job, JobKind, JobResultReceipt, JobStatus
 from splitbind.jobs.state import transition_job
@@ -26,19 +36,11 @@ from splitbind_ref.fingerprint_v2_profile import candidate_identifier_v2, load_v
 DEMO_MAX_PDF_BYTES = 10 * 1024 * 1024
 DEMO_MAX_PAGES = 5
 DEMO_MAX_RASTER_PIXELS = 40_000_000
-CANONICAL_CANVAS = (2304, 1152)
+CANONICAL_CANVAS = DEMO_CANONICAL_CANVAS
 SOURCE_RENDER_SCALE = 2.0
 FINGERPRINT_KEY_ENV = "SPLITBIND_DEMO_FINGERPRINT_KEY_HEX"
-FROZEN_CANDIDATE_IDENTIFIER_HEX = (
-    "5342463201e7490f80b69ef1a3289afce40ef02989c9a4d89f00b916055cbf1c4"
-    "c83a97b880000000240380000000000003ff8000000000000000001800000001200"
-    "00000300000003"
-)
-LIMITATIONS = (
-    "fingerprint.experimental_unreleased_v2",
-    "fingerprint.not_gate_g1_evidence",
-    "evidence.not_proof_of_leak_edit_or_distribution",
-)
+FROZEN_CANDIDATE_IDENTIFIER_HEX = DEMO_FROZEN_CANDIDATE_IDENTIFIER
+LIMITATIONS = DEMO_LIMITATIONS
 
 
 class DemoIssuanceError(RuntimeError):
@@ -48,42 +50,105 @@ class DemoIssuanceError(RuntimeError):
         self.cleanup_failures = cleanup_failures
 
 
+@dataclass(frozen=True, slots=True)
+class _ProcessingClaim:
+    job_id: uuid.UUID
+    organization_id: uuid.UUID
+    issuance_id: uuid.UUID
+    document_id: uuid.UUID
+    attempt: int
+    source_object_key: str
+    expected_source_sha256: str
+    output_object_key: str
+    owner_token: uuid.UUID
+
+
 def process_issuance_job(*, job_id, storage) -> IssuanceProcessingResult:
+    if not settings.SPLITBIND_DEMO_MODE:
+        raise DemoIssuanceError("DEMO_MODE_DISABLED")
     started = time.monotonic()
-    job = Job.objects.select_related("issuance__document").get(pk=job_id)
-    _validate_processing_job(job)
-    if _cancel_before_work(job.id):
+    acquired = _acquire_processing_claim(job_id=job_id, owner_token=uuid.uuid4())
+    if isinstance(acquired, IssuanceProcessingResult):
+        return acquired
+    if acquired is None:
         raise DemoIssuanceError("DEMO_JOB_CANCELLED")
 
     try:
-        return _process_issuance_job(job=job, storage=storage, started=started)
+        return _process_issuance_job(claim=acquired, storage=storage, started=started)
     except DemoIssuanceError as error:
         if error.code not in {
             "DEMO_JOB_CANCELLED",
             "DEMO_JOB_CANCELLED_OUTPUT_CLEANUP_FAILED",
         }:
-            _record_failed_job(job.id, error.code)
+            _record_failed_job(acquired, error)
         raise
     except Exception as error:
         wrapped = DemoIssuanceError("DEMO_ISSUANCE_PROCESSING_FAILED")
-        _record_failed_job(job.id, wrapped.code)
+        _record_failed_job(acquired, wrapped)
         raise wrapped from error
 
 
-def _process_issuance_job(*, job: Job, storage, started: float) -> IssuanceProcessingResult:
-    issuance = job.issuance
-    document = issuance.document
-    fingerprint_key = _load_fingerprint_key()
+@transaction.atomic
+def _acquire_processing_claim(*, job_id, owner_token):
+    job = _locked_job(job_id)
+    issuance, document = _locked_issuance_document(job)
+    _validate_locked_binding(job, issuance, document)
+
+    if job.status == JobStatus.SUCCEEDED:
+        return _load_replay_result(job, issuance, document)
+    if job.status != JobStatus.PROCESSING:
+        raise DemoIssuanceError("DEMO_ISSUANCE_JOB_INVALID")
+    if job.cancel_requested_at is not None:
+        transition_job(job, JobStatus.CANCELLED)
+        job.save(update_fields=["status", "updated_at"])
+        return None
+
+    existing = (
+        DemoIssuanceResult.objects.select_for_update().filter(job_id=job.id).first()
+    )
+    if existing is not None:
+        raise DemoIssuanceError("DEMO_JOB_RESULT_OWNED")
+
     output_key = f"outputs/issuance/{job.organization_id}/{issuance.id}.pdf"
-    workspace = tempfile.TemporaryDirectory(prefix=f"splitbind-demo-{job.id}-")
+    evidence = DemoIssuanceResult(
+        organization_id=job.organization_id,
+        job=job,
+        issuance=issuance,
+        attempt=job.attempt,
+        owner_token=owner_token,
+        output_object_key=output_key,
+    )
+    with _allow_demo_result_write():
+        evidence.save()
+    return _ProcessingClaim(
+        job_id=job.id,
+        organization_id=job.organization_id,
+        issuance_id=issuance.id,
+        document_id=document.id,
+        attempt=job.attempt,
+        source_object_key=document.source_object_key,
+        expected_source_sha256=document.expected_source_sha256,
+        output_object_key=output_key,
+        owner_token=owner_token,
+    )
+
+
+def _process_issuance_job(
+    *,
+    claim: _ProcessingClaim,
+    storage,
+    started: float,
+) -> IssuanceProcessingResult:
+    fingerprint_key = _load_fingerprint_key()
+    workspace = tempfile.TemporaryDirectory(prefix=f"splitbind-demo-{claim.job_id}-")
     workspace_path = Path(workspace.name)
 
     try:
         try:
             downloaded = storage.download_bytes(
-                key=document.source_object_key,
+                key=claim.source_object_key,
                 max_bytes=min(settings.MAX_PDF_BYTES, DEMO_MAX_PDF_BYTES),
-                expected_sha256=document.expected_source_sha256,
+                expected_sha256=claim.expected_source_sha256,
             )
         except UploadRejected as error:
             code = (
@@ -102,24 +167,26 @@ def _process_issuance_job(*, job: Job, storage, started: float) -> IssuanceProce
         source_path.write_bytes(downloaded.data)
         output_bytes, page_count, candidate_identifier = _build_issuance_pdf(
             source_path.read_bytes(),
-            issuance_id=issuance.id,
+            issuance_id=claim.issuance_id,
             fingerprint_key=fingerprint_key,
         )
         output_path.write_bytes(output_bytes)
+        if not _begin_output_upload(claim):
+            raise DemoIssuanceError("DEMO_JOB_CANCELLED")
         try:
             with output_path.open("rb") as output_stream:
                 uploaded = storage.upload_bytes(
-                    key=output_key,
+                    key=claim.output_object_key,
                     content_type="application/pdf",
                     chunks=iter(lambda: output_stream.read(64 * 1024), b""),
                     max_bytes=min(settings.MAX_PDF_BYTES, DEMO_MAX_PDF_BYTES),
                 )
-        except (StorageUnavailable, UploadRejected) as error:
-            cleanup_failures = _compensate_output(storage, output_key)
-            code = (
-                "DEMO_OUTPUT_STORAGE_CLEANUP_FAILED"
-                if cleanup_failures
-                else "DEMO_OUTPUT_STORAGE_FAILED"
+        except Exception as error:
+            cleanup_failures, code = _compensate_owned_output(
+                storage=storage,
+                claim=claim,
+                cleaned_code="DEMO_OUTPUT_STORAGE_FAILED",
+                cleanup_failed_code="DEMO_OUTPUT_STORAGE_CLEANUP_FAILED",
             )
             raise DemoIssuanceError(code, cleanup_failures=cleanup_failures) from error
     except Exception as error:
@@ -128,11 +195,9 @@ def _process_issuance_job(*, job: Job, storage, started: float) -> IssuanceProce
             prior_cleanup_failures = (
                 error.cleanup_failures if isinstance(error, DemoIssuanceError) else 0
             )
-            code = (
-                "DEMO_WORKSPACE_AND_OUTPUT_CLEANUP_FAILED"
-                if prior_cleanup_failures
-                else "DEMO_WORKSPACE_CLEANUP_FAILED"
-            )
+            code = "DEMO_WORKSPACE_CLEANUP_FAILED"
+            if prior_cleanup_failures:
+                code = "DEMO_WORKSPACE_AND_OUTPUT_CLEANUP_FAILED"
             raise DemoIssuanceError(
                 code,
                 cleanup_failures=prior_cleanup_failures + workspace_cleanup_failures,
@@ -141,66 +206,74 @@ def _process_issuance_job(*, job: Job, storage, started: float) -> IssuanceProce
 
     workspace_cleanup_failures = _cleanup_workspace(workspace)
     if workspace_cleanup_failures:
-        output_cleanup_failures = _compensate_output(storage, output_key)
-        code = (
-            "DEMO_WORKSPACE_AND_OUTPUT_CLEANUP_FAILED"
-            if output_cleanup_failures
-            else "DEMO_WORKSPACE_CLEANUP_FAILED"
+        cleanup_failures, code = _compensate_owned_output(
+            storage=storage,
+            claim=claim,
+            cleaned_code="DEMO_WORKSPACE_CLEANUP_FAILED",
+            cleanup_failed_code="DEMO_WORKSPACE_AND_OUTPUT_CLEANUP_FAILED",
+            prior_cleanup_failures=workspace_cleanup_failures,
         )
         raise DemoIssuanceError(
             code,
-            cleanup_failures=workspace_cleanup_failures + output_cleanup_failures,
+            cleanup_failures=cleanup_failures,
         )
 
+    processing_ms = max(0, round((time.monotonic() - started) * 1000))
     try:
         committed = _commit_issuance_result(
-            job_id=job.id,
-            organization_id=job.organization_id,
-            issuance_id=issuance.id,
-            output_key=output_key,
+            claim=claim,
+            input_sha256=downloaded.actual_sha256,
             output_sha256=uploaded.actual_sha256,
             page_count=page_count,
+            candidate_identifier=candidate_identifier,
+            processing_ms=processing_ms,
         )
     except Exception as error:
-        cleanup_failures = _compensate_output(storage, output_key)
-        code = (
-            "DEMO_RESULT_COMMIT_OUTPUT_CLEANUP_FAILED"
-            if cleanup_failures
-            else "DEMO_RESULT_COMMIT_FAILED"
+        cleanup_failures, code = _compensate_owned_output(
+            storage=storage,
+            claim=claim,
+            cleaned_code="DEMO_RESULT_COMMIT_FAILED",
+            cleanup_failed_code="DEMO_RESULT_COMMIT_OUTPUT_CLEANUP_FAILED",
         )
         raise DemoIssuanceError(code, cleanup_failures=cleanup_failures) from error
-    if not committed:
-        cleanup_failures = _compensate_output(storage, output_key)
-        code = (
-            "DEMO_JOB_CANCELLED_OUTPUT_CLEANUP_FAILED"
-            if cleanup_failures
-            else "DEMO_JOB_CANCELLED"
+    if committed is None:
+        cleanup_failures, code = _compensate_owned_output(
+            storage=storage,
+            claim=claim,
+            cleaned_code="DEMO_JOB_CANCELLED",
+            cleanup_failed_code="DEMO_JOB_CANCELLED_OUTPUT_CLEANUP_FAILED",
         )
         raise DemoIssuanceError(code, cleanup_failures=cleanup_failures)
-
-    return IssuanceProcessingResult(
-        organization_id=job.organization_id,
-        job_id=job.id,
-        issuance_id=issuance.id,
-        input_sha256=downloaded.actual_sha256,
-        output_sha256=uploaded.actual_sha256,
-        output_object_key=output_key,
-        algorithm_label=DEMO_ALGORITHM_LABEL,
-        candidate_identifier=candidate_identifier,
-        canonical_canvas=CANONICAL_CANVAS,
-        pages_processed=page_count,
-        processing_ms=max(0, round((time.monotonic() - started) * 1000)),
-        limitations=LIMITATIONS,
-        cleanup_failures=0,
-    )
+    return committed
 
 
-def _compensate_output(storage, output_key: str) -> int:
+def _compensate_owned_output(
+    *,
+    storage,
+    claim: _ProcessingClaim,
+    cleaned_code: str,
+    cleanup_failed_code: str,
+    prior_cleanup_failures: int = 0,
+) -> tuple[int, str]:
+    _authorize_output_cleanup(claim)
     try:
-        storage.delete(key=output_key)
+        storage.delete(key=claim.output_object_key)
     except Exception:
-        return 1
-    return 0
+        cleanup_failures = prior_cleanup_failures + 1
+        _persist_output_cleanup(
+            claim,
+            output_state=DemoOutputState.CLEANUP_REQUIRED,
+            safe_error_code=cleanup_failed_code,
+            cleanup_failures=cleanup_failures,
+        )
+        return cleanup_failures, cleanup_failed_code
+    _persist_output_cleanup(
+        claim,
+        output_state=DemoOutputState.CLEANED,
+        safe_error_code=cleaned_code,
+        cleanup_failures=prior_cleanup_failures,
+    )
+    return prior_cleanup_failures, cleaned_code
 
 
 def _cleanup_workspace(workspace) -> int:
@@ -211,39 +284,206 @@ def _cleanup_workspace(workspace) -> int:
     return 0
 
 
-def _validate_processing_job(job: Job) -> None:
-    if not settings.SPLITBIND_DEMO_MODE:
-        raise DemoIssuanceError("DEMO_MODE_DISABLED")
-    if (
-        job.kind != JobKind.ISSUANCE
-        or job.status != JobStatus.PROCESSING
-        or job.issuance_id is None
-        or job.issuance.organization_id != job.organization_id
-        or job.issuance.document.organization_id != job.organization_id
-    ):
-        raise DemoIssuanceError("DEMO_ISSUANCE_JOB_INVALID")
-
-
 @transaction.atomic
-def _cancel_before_work(job_id) -> bool:
-    job = Job.objects.select_for_update().get(pk=job_id)
-    if job.status != JobStatus.PROCESSING:
-        raise DemoIssuanceError("DEMO_ISSUANCE_JOB_INVALID")
-    if job.cancel_requested_at is None:
+def _begin_output_upload(claim: _ProcessingClaim) -> bool:
+    job = _locked_job(claim.job_id)
+    issuance, document = _locked_issuance_document(job)
+    _validate_claim_binding(claim, job, issuance, document)
+    evidence = _locked_evidence(claim)
+    if job.status != JobStatus.PROCESSING or evidence.output_state != DemoOutputState.RESERVED:
+        raise DemoIssuanceError("DEMO_OUTPUT_OWNERSHIP_INVALID")
+    if job.cancel_requested_at is not None:
+        transition_job(job, JobStatus.CANCELLED)
+        job.save(update_fields=["status", "updated_at"])
+        evidence.output_state = DemoOutputState.CLEANED
+        with _allow_demo_result_write():
+            evidence.save(update_fields=["output_state", "updated_at"])
         return False
-    transition_job(job, JobStatus.CANCELLED)
-    job.save(update_fields=["status", "updated_at"])
+    evidence.output_state = DemoOutputState.UPLOADING
+    with _allow_demo_result_write():
+        evidence.save(update_fields=["output_state", "updated_at"])
     return True
 
 
 @transaction.atomic
-def _record_failed_job(job_id, code: str) -> None:
-    job = Job.objects.select_for_update().get(pk=job_id)
+def _record_failed_job(claim: _ProcessingClaim, error: DemoIssuanceError) -> None:
+    job = _locked_job(claim.job_id)
+    evidence = _locked_evidence(claim)
     if job.status != JobStatus.PROCESSING:
         return
     transition_job(job, JobStatus.FAILED)
-    job.safe_error_code = code
+    job.safe_error_code = error.code
     job.save(update_fields=["status", "safe_error_code", "updated_at"])
+    if evidence.output_state == DemoOutputState.RESERVED:
+        evidence.output_state = DemoOutputState.CLEANED
+    elif evidence.output_state == DemoOutputState.UPLOADING:
+        evidence.output_state = DemoOutputState.CLEANUP_REQUIRED
+    evidence.safe_error_code = error.code
+    evidence.cleanup_failures = error.cleanup_failures
+    with _allow_demo_result_write():
+        evidence.save(
+            update_fields=[
+                "output_state",
+                "safe_error_code",
+                "cleanup_failures",
+                "updated_at",
+            ]
+        )
+
+
+@transaction.atomic
+def _authorize_output_cleanup(claim: _ProcessingClaim) -> None:
+    job = _locked_job(claim.job_id)
+    issuance, document = _locked_issuance_document(job)
+    _validate_claim_binding(claim, job, issuance, document)
+    evidence = _locked_evidence(claim)
+    if (
+        evidence.output_state
+        not in {DemoOutputState.UPLOADING, DemoOutputState.CLEANUP_REQUIRED}
+        or issuance.output_object_key is not None
+        or job.status == JobStatus.SUCCEEDED
+    ):
+        raise DemoIssuanceError("DEMO_OUTPUT_OWNERSHIP_INVALID")
+
+
+@transaction.atomic
+def _persist_output_cleanup(
+    claim: _ProcessingClaim,
+    *,
+    output_state: str,
+    safe_error_code: str,
+    cleanup_failures: int,
+) -> None:
+    job = _locked_job(claim.job_id)
+    issuance, document = _locked_issuance_document(job)
+    _validate_claim_binding(claim, job, issuance, document)
+    evidence = _locked_evidence(claim)
+    if evidence.output_state not in {
+        DemoOutputState.UPLOADING,
+        DemoOutputState.CLEANUP_REQUIRED,
+    }:
+        raise DemoIssuanceError("DEMO_OUTPUT_OWNERSHIP_INVALID")
+    evidence.output_state = output_state
+    evidence.safe_error_code = safe_error_code
+    evidence.cleanup_failures = cleanup_failures
+    with _allow_demo_result_write():
+        evidence.save(
+            update_fields=[
+                "output_state",
+                "safe_error_code",
+                "cleanup_failures",
+                "updated_at",
+            ]
+        )
+    if job.status == JobStatus.CANCELLED:
+        job.safe_error_code = safe_error_code if cleanup_failures else None
+        job.save(update_fields=["safe_error_code", "updated_at"])
+
+
+def _locked_job(job_id) -> Job:
+    return (
+        Job.objects.filter(issuance__isnull=False)
+        .select_for_update(of=("self",))
+        .get(pk=job_id)
+    )
+
+
+def _locked_issuance_document(job: Job) -> tuple[Issuance, Document]:
+    issuance = Issuance.objects.select_for_update().get(pk=job.issuance_id)
+    document = Document.objects.select_for_update().get(pk=issuance.document_id)
+    return issuance, document
+
+
+def _validate_locked_binding(job: Job, issuance: Issuance, document: Document) -> None:
+    if (
+        job.kind != JobKind.ISSUANCE
+        or job.issuance_id != issuance.id
+        or issuance.organization_id != job.organization_id
+        or document.id != issuance.document_id
+        or document.organization_id != job.organization_id
+    ):
+        raise DemoIssuanceError("DEMO_ISSUANCE_JOB_INVALID")
+
+
+def _validate_claim_binding(
+    claim: _ProcessingClaim,
+    job: Job,
+    issuance: Issuance,
+    document: Document,
+) -> None:
+    _validate_locked_binding(job, issuance, document)
+    if (
+        job.id != claim.job_id
+        or job.organization_id != claim.organization_id
+        or issuance.id != claim.issuance_id
+        or document.id != claim.document_id
+        or job.attempt != claim.attempt
+    ):
+        raise DemoIssuanceError("DEMO_OUTPUT_OWNERSHIP_INVALID")
+
+
+def _locked_evidence(claim: _ProcessingClaim) -> DemoIssuanceResult:
+    evidence = DemoIssuanceResult.objects.select_for_update().get(job_id=claim.job_id)
+    if (
+        evidence.organization_id != claim.organization_id
+        or evidence.issuance_id != claim.issuance_id
+        or evidence.attempt != claim.attempt
+        or evidence.owner_token != claim.owner_token
+        or evidence.output_object_key != claim.output_object_key
+    ):
+        raise DemoIssuanceError("DEMO_OUTPUT_OWNERSHIP_INVALID")
+    return evidence
+
+
+def _receipt_id(job: Job) -> uuid.UUID:
+    return uuid.uuid5(
+        uuid.NAMESPACE_URL,
+        f"splitbind-demo-issuance:{job.id}:{job.attempt}",
+    )
+
+
+def _load_replay_result(
+    job: Job,
+    issuance: Issuance,
+    document: Document,
+) -> IssuanceProcessingResult:
+    evidence = DemoIssuanceResult.objects.select_for_update().get(job_id=job.id)
+    receipt_exists = JobResultReceipt.objects.select_for_update().filter(
+        message_id=_receipt_id(job),
+        organization_id=job.organization_id,
+        job_id=job.id,
+    ).exists()
+    if (
+        evidence.output_state != DemoOutputState.COMMITTED
+        or evidence.organization_id != job.organization_id
+        or evidence.issuance_id != issuance.id
+        or evidence.attempt != job.attempt
+        or issuance.output_object_key != evidence.output_object_key
+        or issuance.output_sha256 != evidence.output_sha256
+        or document.page_count != evidence.page_count
+        or not receipt_exists
+    ):
+        raise DemoIssuanceError("DEMO_ISSUANCE_RESULT_INVALID")
+    evidence.full_clean()
+    return _result_from_evidence(evidence)
+
+
+def _result_from_evidence(evidence: DemoIssuanceResult) -> IssuanceProcessingResult:
+    return IssuanceProcessingResult(
+        organization_id=evidence.organization_id,
+        job_id=evidence.job_id,
+        issuance_id=evidence.issuance_id,
+        input_sha256=evidence.input_sha256,
+        output_sha256=evidence.output_sha256,
+        output_object_key=evidence.output_object_key,
+        algorithm_label=evidence.algorithm_label,
+        candidate_identifier=evidence.candidate_identifier,
+        canonical_canvas=(evidence.canvas_height, evidence.canvas_width),
+        pages_processed=evidence.page_count,
+        processing_ms=evidence.processing_ms,
+        limitations=tuple(evidence.limitations),
+        cleanup_failures=evidence.cleanup_failures,
+    )
 
 
 def _load_fingerprint_key() -> bytes:
@@ -457,50 +697,70 @@ def _pdf_stream(contents: bytes) -> bytes:
 @transaction.atomic
 def _commit_issuance_result(
     *,
-    job_id,
-    organization_id,
-    issuance_id,
-    output_key: str,
+    claim: _ProcessingClaim,
+    input_sha256: str,
     output_sha256: str,
     page_count: int,
-) -> bool:
-    job = (
-        Job.objects.select_for_update()
-        .select_related("issuance__document")
-        .get(pk=job_id)
-    )
-    if (
-        job.organization_id != organization_id
-        or job.kind != JobKind.ISSUANCE
-        or job.status != JobStatus.PROCESSING
-        or job.issuance_id != issuance_id
-        or job.issuance.organization_id != organization_id
-        or job.issuance.document.organization_id != organization_id
-    ):
+    candidate_identifier: str,
+    processing_ms: int,
+) -> IssuanceProcessingResult | None:
+    job = _locked_job(claim.job_id)
+    issuance, document = _locked_issuance_document(job)
+    _validate_claim_binding(claim, job, issuance, document)
+    evidence = _locked_evidence(claim)
+    if job.status != JobStatus.PROCESSING:
         raise DemoIssuanceError("DEMO_ISSUANCE_RESULT_INVALID")
     if job.cancel_requested_at is not None:
         transition_job(job, JobStatus.CANCELLED)
         job.save(update_fields=["status", "updated_at"])
-        return False
+        return None
 
-    issuance = job.issuance
-    document = issuance.document
-    if issuance.output_object_key is not None or issuance.output_sha256 is not None:
+    if (
+        evidence.output_state != DemoOutputState.UPLOADING
+        or issuance.output_object_key is not None
+        or issuance.output_sha256 is not None
+    ):
         raise DemoIssuanceError("DEMO_ISSUANCE_RESULT_INVALID")
-    issuance.output_object_key = output_key
+    issuance.output_object_key = claim.output_object_key
     issuance.output_sha256 = output_sha256
     issuance.save(update_fields=["output_object_key", "output_sha256"])
     document.page_count = page_count
     document.save(update_fields=["page_count"])
     JobResultReceipt.objects.create(
-        message_id=uuid.uuid5(
-            uuid.NAMESPACE_URL,
-            f"splitbind-demo-issuance:{job.id}:{job.attempt}",
-        ),
-        organization_id=organization_id,
+        message_id=_receipt_id(job),
+        organization_id=claim.organization_id,
         job=job,
     )
+    evidence.output_state = DemoOutputState.COMMITTED
+    evidence.algorithm_label = DEMO_ALGORITHM_LABEL
+    evidence.candidate_identifier = candidate_identifier
+    evidence.canvas_height, evidence.canvas_width = CANONICAL_CANVAS
+    evidence.input_sha256 = input_sha256
+    evidence.output_sha256 = output_sha256
+    evidence.page_count = page_count
+    evidence.processing_ms = processing_ms
+    evidence.limitations = list(LIMITATIONS)
+    evidence.cleanup_failures = 0
+    evidence.safe_error_code = None
+    with _allow_demo_result_write():
+        evidence.save(
+            update_fields=[
+                "output_state",
+                "algorithm_label",
+                "candidate_identifier",
+                "canvas_height",
+                "canvas_width",
+                "input_sha256",
+                "output_sha256",
+                "page_count",
+                "processing_ms",
+                "limitations",
+                "cleanup_failures",
+                "safe_error_code",
+                "updated_at",
+            ]
+        )
     transition_job(job, JobStatus.SUCCEEDED)
     job.safe_error_code = None
     job.save(update_fields=["status", "safe_error_code", "updated_at"])
-    return True
+    return _result_from_evidence(evidence)

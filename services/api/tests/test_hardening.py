@@ -17,6 +17,7 @@ from splitbind.access.models import (
 from splitbind.audit.models import AuditEvent, AuditOutcome
 from splitbind.audit.services import record_event
 from splitbind.documents.models import Document, Issuance, Manifest, Verification
+from splitbind.demo.models import DemoIssuanceResult
 from splitbind.jobs.models import Job, JobKind, JobResultReceipt
 from splitbind.outbox.models import OutboxEvent
 from splitbind.uploads.models import UploadPurpose, UploadRequest
@@ -129,6 +130,7 @@ def test_tenant_bound_models_share_the_validated_persistence_boundary():
         Verification,
         Job,
         JobResultReceipt,
+        DemoIssuanceResult,
         OutboxEvent,
         AuditEvent,
     ]

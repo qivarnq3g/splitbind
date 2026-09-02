@@ -1,11 +1,15 @@
 import hashlib
 import tempfile
+import threading
 import uuid
 from datetime import timedelta
 from pathlib import Path
 
 import pypdfium2 as pdfium
 import pytest
+from django.core.exceptions import ValidationError
+from django.db import close_old_connections, connection
+from django.db.models import QuerySet
 from django.test import override_settings
 from django.utils import timezone
 
@@ -17,7 +21,7 @@ from splitbind.demo.issuance import (
     _build_issuance_pdf,
     process_issuance_job,
 )
-from splitbind.documents.models import Document, Issuance
+from splitbind.documents.models import Document, Issuance, Manifest
 from splitbind.integrations.storage.fake import FakeObjectStorage
 from splitbind.jobs.models import Job, JobKind, JobResultReceipt, JobStatus
 from splitbind.uploads.models import PromotionStatus, UploadPurpose, UploadRequest
@@ -138,6 +142,38 @@ def test_same_input_identity_and_key_produce_identical_output_bytes():
 
 @pytest.mark.django_db
 @override_settings(SPLITBIND_DEMO_MODE=True)
+def test_result_commit_locks_job_without_nullable_join(
+    processing_issuance,
+    monkeypatch,
+):
+    job, issuance, _document, _storage = processing_issuance
+    monkeypatch.setenv("SPLITBIND_DEMO_FINGERPRINT_KEY_HEX", "11" * 32)
+    lock_calls = []
+    related_calls = []
+    real_select_for_update = QuerySet.select_for_update
+    real_select_related = QuerySet.select_related
+
+    def record_select_for_update(queryset, *args, **kwargs):
+        lock_calls.append((queryset.model, kwargs.get("of", ())))
+        return real_select_for_update(queryset, *args, **kwargs)
+
+    def record_select_related(queryset, *fields):
+        related_calls.append((queryset.model, fields))
+        return real_select_related(queryset, *fields)
+
+    monkeypatch.setattr(QuerySet, "select_for_update", record_select_for_update)
+    monkeypatch.setattr(QuerySet, "select_related", record_select_related)
+
+    process_issuance_job(job_id=job.id, storage=_storage)
+
+    assert (Job, ("self",)) in lock_calls
+    assert (Job, ("issuance__document",)) not in related_calls
+    assert any(model is Issuance for model, _of in lock_calls)
+    assert any(model is Document for model, _of in lock_calls)
+
+
+@pytest.mark.django_db
+@override_settings(SPLITBIND_DEMO_MODE=True)
 def test_real_one_page_issuance_stores_image_only_pdf_and_commits_exact_result(
     processing_issuance,
     monkeypatch,
@@ -172,6 +208,30 @@ def test_real_one_page_issuance_stores_image_only_pdf_and_commits_exact_result(
         "fingerprint.not_gate_g1_evidence",
         "evidence.not_proof_of_leak_edit_or_distribution",
     )
+    evidence = job.demo_issuance_result
+    assert evidence.organization_id == job.organization_id
+    assert evidence.issuance_id == issuance.id
+    assert evidence.attempt == job.attempt
+    assert evidence.output_state == "committed"
+    assert evidence.output_object_key == result.output_object_key
+    assert evidence.input_sha256 == result.input_sha256
+    assert evidence.output_sha256 == result.output_sha256
+    assert evidence.algorithm_label == result.algorithm_label
+    assert evidence.candidate_identifier == result.candidate_identifier
+    assert (evidence.canvas_height, evidence.canvas_width) == result.canonical_canvas
+    assert evidence.page_count == result.pages_processed
+    assert evidence.processing_ms == result.processing_ms
+    assert evidence.limitations == list(result.limitations)
+    assert evidence.cleanup_failures == 0
+    assert evidence.safe_error_code is None
+    assert not Manifest.objects.filter(issuance=issuance).exists()
+    evidence.full_clean()
+
+    evidence.algorithm_label = "promoted_algorithm"
+    with pytest.raises(ValidationError, match="immutable"):
+        evidence.save(update_fields=["algorithm_label"])
+    with pytest.raises(ValidationError, match="immutable"):
+        type(evidence).objects.filter(pk=evidence.pk).update(processing_ms=0)
 
     output_pdf = pdfium.PdfDocument(output_bytes)
     try:
@@ -358,6 +418,33 @@ def test_output_provider_failure_never_claims_partial_success(processing_issuanc
     assert_failed_without_result(processing_issuance, "DEMO_OUTPUT_STORAGE_FAILED")
 
 
+@pytest.mark.django_db
+@override_settings(SPLITBIND_DEMO_MODE=True)
+def test_ambiguous_runtime_upload_failure_compensates_stored_object(
+    processing_issuance,
+    monkeypatch,
+):
+    job, issuance, _document, storage = processing_issuance
+    monkeypatch.setenv("SPLITBIND_DEMO_FINGERPRINT_KEY_HEX", "11" * 32)
+    real_upload = storage.upload_bytes
+
+    def store_then_raise(**kwargs):
+        real_upload(**kwargs)
+        raise RuntimeError("private provider failure after write")
+
+    monkeypatch.setattr(storage, "upload_bytes", store_then_raise)
+
+    with pytest.raises(DemoIssuanceError, match="^DEMO_OUTPUT_STORAGE_FAILED$"):
+        process_issuance_job(job_id=job.id, storage=storage)
+
+    assert_failed_without_result(processing_issuance, "DEMO_OUTPUT_STORAGE_FAILED")
+    evidence = job.demo_issuance_result
+    assert evidence.output_state == "cleaned"
+    assert evidence.output_object_key == (
+        f"outputs/issuance/{job.organization_id}/{issuance.id}.pdf"
+    )
+
+
 @pytest.mark.django_db(transaction=True)
 @override_settings(SPLITBIND_DEMO_MODE=True)
 def test_result_commit_failure_rolls_back_database_and_compensates_exact_output(
@@ -408,6 +495,160 @@ def test_cancellation_rechecked_before_commit_deletes_uploaded_output(
     assert document.page_count is None
     assert not JobResultReceipt.objects.filter(job_id=job.id).exists()
     assert output_key not in storage.objects
+
+
+@pytest.mark.django_db
+@override_settings(SPLITBIND_DEMO_MODE=True)
+def test_cancellation_delete_failure_persists_exact_cleanup_ownership(
+    processing_issuance,
+    monkeypatch,
+):
+    job, issuance, document, storage = processing_issuance
+    monkeypatch.setenv("SPLITBIND_DEMO_FINGERPRINT_KEY_HEX", "11" * 32)
+    real_upload = storage.upload_bytes
+
+    def upload_then_cancel(**kwargs):
+        uploaded = real_upload(**kwargs)
+        Job.objects.filter(pk=job.id).update(cancel_requested_at=timezone.now())
+        storage.fail_next("delete", "private cleanup failure")
+        return uploaded
+
+    monkeypatch.setattr(storage, "upload_bytes", upload_then_cancel)
+
+    with pytest.raises(
+        DemoIssuanceError,
+        match="^DEMO_JOB_CANCELLED_OUTPUT_CLEANUP_FAILED$",
+    ) as captured:
+        process_issuance_job(job_id=job.id, storage=storage)
+
+    assert captured.value.cleanup_failures == 1
+    job.refresh_from_db()
+    issuance.refresh_from_db()
+    document.refresh_from_db()
+    output_key = f"outputs/issuance/{job.organization_id}/{issuance.id}.pdf"
+    evidence = job.demo_issuance_result
+    assert job.status == JobStatus.CANCELLED
+    assert job.safe_error_code == "DEMO_JOB_CANCELLED_OUTPUT_CLEANUP_FAILED"
+    assert evidence.output_state == "cleanup_required"
+    assert evidence.output_object_key == output_key
+    assert evidence.owner_token is not None
+    assert evidence.cleanup_failures == 1
+    assert evidence.safe_error_code == "DEMO_JOB_CANCELLED_OUTPUT_CLEANUP_FAILED"
+    assert issuance.output_object_key is None
+    assert issuance.output_sha256 is None
+    assert document.page_count is None
+    assert not JobResultReceipt.objects.filter(job_id=job.id).exists()
+    assert output_key in storage.objects
+
+
+@pytest.mark.django_db
+@override_settings(SPLITBIND_DEMO_MODE=True)
+def test_reentrant_duplicate_cannot_upload_or_delete_winner(
+    processing_issuance,
+    monkeypatch,
+):
+    job, issuance, _document, storage = processing_issuance
+    monkeypatch.setenv("SPLITBIND_DEMO_FINGERPRINT_KEY_HEX", "11" * 32)
+    real_upload = storage.upload_bytes
+    reentered = False
+    duplicate_codes = []
+
+    def reenter_before_first_upload(**kwargs):
+        nonlocal reentered
+        if not reentered:
+            reentered = True
+            try:
+                process_issuance_job(job_id=job.id, storage=storage)
+            except DemoIssuanceError as error:
+                duplicate_codes.append(error.code)
+        return real_upload(**kwargs)
+
+    monkeypatch.setattr(storage, "upload_bytes", reenter_before_first_upload)
+
+    result = process_issuance_job(job_id=job.id, storage=storage)
+
+    job.refresh_from_db()
+    issuance.refresh_from_db()
+    assert duplicate_codes == ["DEMO_JOB_RESULT_OWNED"]
+    assert job.status == JobStatus.SUCCEEDED
+    assert issuance.output_object_key == result.output_object_key
+    assert result.output_object_key in storage.objects
+    assert JobResultReceipt.objects.filter(job_id=job.id).count() == 1
+
+
+@pytest.mark.django_db
+@override_settings(SPLITBIND_DEMO_MODE=True)
+def test_successful_replay_returns_persisted_result_without_storage_access(
+    processing_issuance,
+    monkeypatch,
+):
+    job, _issuance, _document, storage = processing_issuance
+    monkeypatch.setenv("SPLITBIND_DEMO_FINGERPRINT_KEY_HEX", "11" * 32)
+    first = process_issuance_job(job_id=job.id, storage=storage)
+    storage.fail_next("download_bytes", "replay must not read storage")
+    storage.fail_next("upload_bytes", "replay must not write storage")
+    storage.fail_next("delete", "replay must not delete storage")
+
+    replay = process_issuance_job(job_id=job.id, storage=storage)
+
+    assert replay == first
+    assert JobResultReceipt.objects.filter(job_id=job.id).count() == 1
+
+
+@pytest.mark.django_db(transaction=True)
+@override_settings(SPLITBIND_DEMO_MODE=True)
+def test_postgresql_result_lock_runtime_gate(processing_issuance, monkeypatch):
+    if connection.vendor != "postgresql":
+        pytest.skip(
+            "SQLite cannot prove PostgreSQL FOR UPDATE OF or concurrent row-lock behavior"
+        )
+    job, issuance, _document, storage = processing_issuance
+    monkeypatch.setenv("SPLITBIND_DEMO_FINGERPRINT_KEY_HEX", "11" * 32)
+    barrier = threading.Barrier(2)
+    result_values = []
+    error_codes = []
+    unexpected_errors = []
+    upload_count = 0
+    upload_count_lock = threading.Lock()
+    real_upload = storage.upload_bytes
+
+    def counted_upload(**kwargs):
+        nonlocal upload_count
+        with upload_count_lock:
+            upload_count += 1
+        return real_upload(**kwargs)
+
+    def invoke():
+        close_old_connections()
+        try:
+            barrier.wait(timeout=5)
+            result_values.append(process_issuance_job(job_id=job.id, storage=storage))
+        except DemoIssuanceError as error:
+            error_codes.append(error.code)
+        except Exception as error:
+            unexpected_errors.append(error)
+        finally:
+            close_old_connections()
+
+    monkeypatch.setattr(storage, "upload_bytes", counted_upload)
+    threads = [threading.Thread(target=invoke) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+
+    assert all(not thread.is_alive() for thread in threads)
+    assert unexpected_errors == []
+    assert error_codes in ([], ["DEMO_JOB_RESULT_OWNED"])
+    assert len(result_values) in (1, 2)
+    assert all(result == result_values[0] for result in result_values)
+    assert upload_count == 1
+    job.refresh_from_db()
+    issuance.refresh_from_db()
+    assert job.status == JobStatus.SUCCEEDED
+    assert issuance.output_object_key == result_values[0].output_object_key
+    assert issuance.output_object_key in storage.objects
+    assert JobResultReceipt.objects.filter(job_id=job.id).count() == 1
 
 
 @pytest.mark.django_db(transaction=True)

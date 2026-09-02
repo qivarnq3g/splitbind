@@ -19,6 +19,7 @@ from splitbind.documents.models import (
     Verification,
     VerificationStatus,
 )
+from splitbind.demo.models import DemoIssuanceResult
 from splitbind.jobs.models import Job, JobKind, JobResultReceipt, JobStatus
 from splitbind.outbox.models import OutboxEvent
 from splitbind.uploads.models import UploadPurpose, UploadRequest
@@ -551,6 +552,7 @@ def test_models_have_no_binary_or_private_key_fields():
         Verification,
         Job,
         JobResultReceipt,
+        DemoIssuanceResult,
         OutboxEvent,
         AuditEvent,
     ]
@@ -574,6 +576,7 @@ def test_initial_migration_graph_contains_every_domain_model():
         "uploads": {"uploadrequest"},
         "documents": {"document", "issuance", "manifest", "verification"},
         "jobs": {"job", "jobresultreceipt"},
+        "demo": {"demoissuanceresult"},
         "outbox": {"outboxevent"},
         "audit": {"auditevent"},
     }
