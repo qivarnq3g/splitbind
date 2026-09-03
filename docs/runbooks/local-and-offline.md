@@ -2,6 +2,38 @@
 
 This runbook describes the P2 Compose boundaries. P2 provides static topology and parser validation only. P3 supplies matching container builds and hardening, B1/B6 supply application health behavior, and P7 supplies the release image inventory and offline-demo script. Do not treat a successful `docker compose config` render as runtime health evidence.
 
+## Demo trình bày trong năm phút
+
+Demo trình bày nhanh này khác với offline release drill do P7 sở hữu. Nó chạy Django API, đúng một `run_demo_worker` và Vite trực tiếp từ toolchain đã chuẩn bị trong repository; Compose project riêng `splitbind-demo` chỉ chạy `minio-demo` tại `127.0.0.1:9000`. SQLite, secret tổng hợp, PID state và log nằm trong `artifacts/demo/`, vốn bị Git bỏ qua. Đây là runtime trình bày cục bộ, không phải bằng chứng concurrency của PostgreSQL, RabbitMQ, Rust worker hay production.
+
+Trước khi chạy, chuẩn bị Python 3.11 `.venv` với extra `demo,test`, dependency workspace Node 24/npm 12, Docker Compose phù hợp, Docker daemon đang chạy và image chính xác `minio/minio:RELEASE.2025-09-07T16-13-09Z` đã nạp cục bộ. Runner kiểm tra toàn bộ điều kiện trước khi tạo state; nó không cài package, pull/build image, triển khai tài nguyên hay liên hệ Azure, R2, Key Vault hoặc DNS công khai.
+
+Từ thư mục gốc repository, chạy:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File infra/scripts/run_demo.ps1
+```
+
+Chỉ sau khi MinIO, API và Vite sẵn sàng có quan sát, runner mới in URL `http://127.0.0.1:5173`, username `demo-admin`, mật khẩu tổng hợp, vị trí log và lệnh dừng. Nếu thiếu Python dependency, cài từ nguồn package đã được cho phép bằng lệnh runner nêu; nếu Docker daemon chưa chạy, khởi động Docker Desktop ở chế độ Linux containers; nếu thiếu image, dùng `docker load` với archive cục bộ đã phê duyệt. Không đổi runner để tự tải dependency hoặc image.
+
+Luồng trình bày khoảng năm phút:
+
+1. Mở URL runner in ra và đăng nhập bằng credential tổng hợp vừa được in.
+2. Mở **Cấp phát**, dùng UUID người nhận tổng hợp do runner/seed cung cấp, chọn một PDF tổng hợp nhỏ không chứa dữ liệu thật, rồi gửi yêu cầu.
+3. Theo dõi bốn giai đoạn job đến khi thành công và tải PDF đã đánh dấu bằng nút trên trang kết quả.
+4. Mở **Xác minh**, tải chính PDF vừa nhận, chờ job hoàn tất và mở kết quả kiểm chứng.
+5. Giải thích riêng các fact về exact hash, fingerprint, manifest và giới hạn. Nhãn thuật toán luôn là `experimental_unreleased_fingerprint_v2`; không có fingerprint profile được promote và demo không tạo bằng chứng manifest ký. Kết quả không chứng minh ai đã làm rò rỉ, chỉnh sửa hoặc phân phối tài liệu.
+
+Dừng đúng instance demo bằng:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File infra/scripts/run_demo.ps1 -Stop
+```
+
+Lệnh dừng revalidate executable identity và start time trước khi dừng từng PID, rồi hạ đúng Compose project `splitbind-demo` mà không dùng `--volumes`. SQLite và secret tổng hợp được giữ lại để restart có thể lặp lại; xóa chúng chỉ khi đã xác minh đích chính xác và chấp nhận mất state demo. Nếu startup thất bại, runner rollback chỉ các process/service do lần gọi đó tạo và giữ log để chẩn đoán.
+
+Tại lần xác minh Task 7, Docker CLI và Compose có mặt nhưng daemon không hoạt động. Vì vậy parser/static contract và đường lỗi prerequisite đã được quan sát, còn startup runtime MinIO/API/worker/Vite end-to-end chưa được xác minh trên host đó.
+
 ## Local profiles
 
 Run commands from the repository root. The local topology publishes only Caddy on `http://localhost:8080`; PostgreSQL, MinIO, RabbitMQ, the API, outbox publisher, and worker remain on the private Compose network.

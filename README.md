@@ -6,6 +6,22 @@ SplitBind là hệ thống truy vết toàn vẹn văn bản dành cho bài tậ
 
 > Trạng thái: MVP đang được triển khai. Repository đã có reference implementation, Django control plane, OpenAPI/typed TypeScript client và giao diện React cho đăng nhập, cấp phát, kiểm chứng, theo dõi job và đọc bằng chứng kỹ thuật; worker Rust, kết quả xử lý thực tế, tải tệp kết quả và deployment vẫn chưa hoàn thành.
 
+## Demo trình bày cục bộ
+
+Sau khi chuẩn bị đúng Python 3.11 `.venv`, dependency Node và image MinIO đã nạp sẵn, chạy từ thư mục gốc:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File infra/scripts/run_demo.ps1
+```
+
+Runner chỉ khởi động Django API, một demo worker và Vite trên máy host, cùng profile Compose riêng chứa MinIO tại `127.0.0.1:9000`. Runner không cài package, tải image hay liên hệ dịch vụ cloud; nếu thiếu điều kiện, thông báo lỗi sẽ nêu hành động cục bộ cần thực hiện. Khi sẵn sàng, runner in URL `http://127.0.0.1:5173`, tài khoản tổng hợp, mật khẩu tổng hợp, thư mục log và lệnh dừng chính xác:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File infra/scripts/run_demo.ps1 -Stop
+```
+
+Xem [runbook local/offline](docs/runbooks/local-and-offline.md#demo-trình-bày-trong-năm-phút) để thực hiện luồng cấp phát rồi kiểm chứng. Demo dùng `experimental_unreleased_fingerprint_v2`: không có profile được promote hay manifest ký, và kết quả không thể chứng minh ai đã làm rò rỉ, chỉnh sửa hoặc phân phối tài liệu.
+
 ## Chức năng lõi
 
 - Cấp phát PDF có robust fingerprint riêng cho từng người nhận
