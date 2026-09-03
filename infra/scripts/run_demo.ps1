@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [switch]$Stop
+    [switch]$Stop,
+    [switch]$TestLibraryOnly
 )
 
 Set-StrictMode -Version Latest
@@ -11,11 +12,12 @@ $DemoMinioImage = "minio/minio:RELEASE.2025-09-07T16-13-09Z"
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $ComposeFile = Join-Path $RepoRoot "infra\compose\compose.local.yaml"
 $DemoRoot = Join-Path $RepoRoot "artifacts\demo"
+$MinioDataPath = Join-Path $DemoRoot "minio-data"
 $EnvironmentFile = Join-Path $DemoRoot "demo.env"
 $StateFile = Join-Path $DemoRoot "process-state.json"
 $LogDirectory = Join-Path $DemoRoot "logs"
 $Python = Join-Path $RepoRoot ".venv\Scripts\python.exe"
-$Node = (Get-Command node -ErrorAction SilentlyContinue).Source
+$Node = $null
 $ViteEntry = Join-Path $RepoRoot "node_modules\vite\bin\vite.js"
 $StopCommand = "powershell -ExecutionPolicy Bypass -File infra/scripts/run_demo.ps1 -Stop"
 
@@ -27,6 +29,53 @@ function Assert-RepositoryRoot {
     }
     if ((Get-Location).Path -ne $RepoRoot) {
         throw "Run this command from the repository root: $RepoRoot"
+    }
+}
+
+function Assert-ContainedNonReparsePath([string]$Path, [string]$Root) {
+    $rootPath = [System.IO.Path]::GetFullPath($Root).TrimEnd('\')
+    $candidatePath = [System.IO.Path]::GetFullPath($Path)
+    $prefix = $rootPath + '\'
+    if ($candidatePath -ne $rootPath -and
+        -not $candidatePath.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Demo path escapes its trusted root: $candidatePath"
+    }
+    $rootItem = Get-Item -Force -LiteralPath $rootPath -ErrorAction SilentlyContinue
+    if ($null -ne $rootItem -and ($rootItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+        throw "Demo path root cannot be a reparse point: $rootPath"
+    }
+    $relative = $candidatePath.Substring($rootPath.Length).TrimStart('\')
+    $current = $rootPath
+    foreach ($component in @($relative.Split(@('\'), [System.StringSplitOptions]::RemoveEmptyEntries))) {
+        $current = Join-Path $current $component
+        $item = Get-Item -Force -LiteralPath $current -ErrorAction SilentlyContinue
+        if ($null -eq $item) {
+            break
+        }
+        if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+            throw "Demo path cannot traverse a reparse point: $current"
+        }
+    }
+    return $candidatePath
+}
+
+function Assert-DemoRuntimePaths {
+    foreach ($path in @(
+        (Join-Path $RepoRoot "artifacts"),
+        $DemoRoot,
+        $MinioDataPath,
+        $LogDirectory,
+        $EnvironmentFile,
+        $StateFile,
+        (Join-Path $DemoRoot "db.sqlite3"),
+        (Join-Path $LogDirectory "api.stdout.log"),
+        (Join-Path $LogDirectory "api.stderr.log"),
+        (Join-Path $LogDirectory "worker.stdout.log"),
+        (Join-Path $LogDirectory "worker.stderr.log"),
+        (Join-Path $LogDirectory "vite.stdout.log"),
+        (Join-Path $LogDirectory "vite.stderr.log")
+    )) {
+        Assert-ContainedNonReparsePath -Path $path -Root $RepoRoot | Out-Null
     }
 }
 
@@ -43,14 +92,28 @@ function New-RandomHex([int]$ByteCount) {
 }
 
 function Write-Utf8NoBom([string]$Path, [string[]]$Lines) {
+    Assert-ContainedNonReparsePath -Path $Path -Root $RepoRoot | Out-Null
     $encoding = New-Object System.Text.UTF8Encoding($false)
-    [System.IO.File]::WriteAllLines($Path, $Lines, $encoding)
+    $temporaryPath = "$Path.$([Guid]::NewGuid().ToString('N')).tmp"
+    Assert-ContainedNonReparsePath -Path $temporaryPath -Root $RepoRoot | Out-Null
+    try {
+        [System.IO.File]::WriteAllLines($temporaryPath, $Lines, $encoding)
+        Assert-ContainedNonReparsePath -Path $Path -Root $RepoRoot | Out-Null
+        Move-Item -LiteralPath $temporaryPath -Destination $Path -Force
+    }
+    finally {
+        if (Test-Path -LiteralPath $temporaryPath -PathType Leaf) {
+            Assert-ContainedNonReparsePath -Path $temporaryPath -Root $RepoRoot | Out-Null
+            Remove-Item -LiteralPath $temporaryPath -Force
+        }
+    }
 }
 
 function Import-DemoEnvironment {
     if (-not (Test-Path -LiteralPath $EnvironmentFile -PathType Leaf)) {
         return
     }
+    Assert-ContainedNonReparsePath -Path $EnvironmentFile -Root $RepoRoot | Out-Null
     $allowedEnvironmentKeys = @{
         DEMO_MINIO_IMAGE = $true
         DEMO_MINIO_ROOT_USER = $true
@@ -80,8 +143,11 @@ function Import-DemoEnvironment {
 }
 
 function Initialize-DemoEnvironment {
+    Assert-DemoRuntimePaths
     New-Item -ItemType Directory -Force -Path $DemoRoot | Out-Null
     New-Item -ItemType Directory -Force -Path $LogDirectory | Out-Null
+    New-Item -ItemType Directory -Force -Path $MinioDataPath | Out-Null
+    Assert-DemoRuntimePaths
     if (-not (Test-Path -LiteralPath $EnvironmentFile -PathType Leaf)) {
         $lines = @(
             "DEMO_MINIO_IMAGE=$DemoMinioImage",
@@ -105,7 +171,16 @@ function Set-CommonRuntimeEnvironment {
     $env:OBJECT_STORAGE_BUCKET = "splitbind-demo"
     $env:OBJECT_STORAGE_ACCESS_KEY = $env:DEMO_MINIO_ROOT_USER
     $env:OBJECT_STORAGE_SECRET_KEY = $env:DEMO_MINIO_ROOT_PASSWORD
+    $env:DEMO_MINIO_DATA_PATH = $MinioDataPath
     $env:PYTHONPATH = Join-Path $RepoRoot "research\python\src"
+}
+
+function Resolve-NodeExecutable {
+    $command = Get-Command node -ErrorAction SilentlyContinue
+    if ($null -eq $command) {
+        throw "Node.js is missing. Install the repository-pinned Node 24 release and retry."
+    }
+    return $command.Source
 }
 
 function Assert-Prerequisites {
@@ -115,6 +190,7 @@ function Assert-Prerequisites {
         if ($PSVersionTable.PSVersion.Major -lt 5) {
             throw "PowerShell 5.1 or newer is required. Start Windows PowerShell 5.1+ and retry."
         }
+        $script:Node = Resolve-NodeExecutable
         if (-not (Test-Path -LiteralPath $Python -PathType Leaf)) {
             throw "Python virtualenv is missing. Create .venv with Python 3.11, then install: .venv\Scripts\python.exe -m pip install -c services/api/constraints-py311.txt '.\services\api[demo,test]'"
         }
@@ -132,9 +208,6 @@ function Assert-Prerequisites {
         }
         finally {
             $env:PYTHONPATH = $priorPythonPath
-        }
-        if ([string]::IsNullOrWhiteSpace($Node)) {
-            throw "Node.js is missing. Install the repository-pinned Node 24 release and retry."
         }
         $nodeVersion = (& $Node --version 2>&1 | Out-String).Trim()
         $npmVersion = (& npm --version 2>&1 | Out-String).Trim()
@@ -166,6 +239,7 @@ function Assert-Prerequisites {
         $env:DEMO_MINIO_IMAGE = $DemoMinioImage
         $env:DEMO_MINIO_ROOT_USER = "splitbind_preflight"
         $env:DEMO_MINIO_ROOT_PASSWORD = "synthetic-preflight-only-not-a-secret"
+        $env:DEMO_MINIO_DATA_PATH = $MinioDataPath
         & docker compose --project-name $DemoProjectName -f $ComposeFile --profile demo config --quiet *> $null
         if ($LASTEXITCODE -ne 0) {
             throw "The demo Compose profile is invalid. Run docker compose -f infra/compose/compose.local.yaml --profile demo config and inspect the local error."
@@ -176,13 +250,63 @@ function Assert-Prerequisites {
     }
 }
 
-function Test-LocalHttp([string]$Uri, [int]$TimeoutSeconds = 2) {
+function Test-ApiReadinessResponse($Response) {
+    if ($null -eq $Response -or $Response.StatusCode -ne 200) {
+        return $false
+    }
     try {
-        $response = Invoke-WebRequest -UseBasicParsing -Uri $Uri -TimeoutSec $TimeoutSeconds
-        return $response.StatusCode -ge 200 -and $response.StatusCode -lt 500
+        $payload = $Response.Content | ConvertFrom-Json
+        $properties = @($payload.PSObject.Properties)
+        return $properties.Count -eq 1 -and
+            $properties[0].Name -eq "status" -and
+            $payload.status -eq "ok"
     }
     catch {
         return $false
+    }
+}
+
+function Test-ViteReadinessResponse($Response) {
+    return $null -ne $Response -and
+        $Response.StatusCode -eq 200 -and
+        $Response.Content -match '<div\s+id=["'']root["'']\s*>\s*</div>' -and
+        $Response.Content -match '<script\s+type=["'']module["'']\s+src=["'']/src/main\.tsx["'']'
+}
+
+function Test-MinIOReadinessResponse($Response) {
+    return $null -ne $Response -and
+        $Response.StatusCode -eq 200 -and
+        [string]::IsNullOrWhiteSpace([string]$Response.Content)
+}
+
+function Get-LocalHttpResponse([string]$Uri, [int]$TimeoutSeconds = 2) {
+    try {
+        return Invoke-WebRequest -UseBasicParsing -Uri $Uri -TimeoutSec $TimeoutSeconds
+    }
+    catch {
+        return $null
+    }
+}
+
+function Test-ApiReadiness {
+    return Test-ApiReadinessResponse (Get-LocalHttpResponse "http://127.0.0.1:8000/health/live")
+}
+
+function Test-ViteReadiness {
+    return Test-ViteReadinessResponse (Get-LocalHttpResponse "http://127.0.0.1:5173")
+}
+
+function Test-MinIOReadiness {
+    return Test-MinIOReadinessResponse (Get-LocalHttpResponse "http://127.0.0.1:9000/minio/health/live")
+}
+
+function Test-LocalHttp([string]$Uri, [int]$TimeoutSeconds = 2) {
+    $response = Get-LocalHttpResponse -Uri $Uri -TimeoutSeconds $TimeoutSeconds
+    switch ($Uri) {
+        "http://127.0.0.1:8000/health/live" { return Test-ApiReadinessResponse $response }
+        "http://127.0.0.1:5173" { return Test-ViteReadinessResponse $response }
+        "http://127.0.0.1:9000/minio/health/live" { return Test-MinIOReadinessResponse $response }
+        default { return $false }
     }
 }
 
@@ -197,7 +321,33 @@ function Wait-LocalHttp([string]$Uri, [int]$TimeoutSeconds, [string]$Component) 
     throw "$Component did not become ready within $TimeoutSeconds seconds. Inspect $LogDirectory."
 }
 
+function Test-DemoComposeRunning {
+    $priorErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $output = (& docker compose --project-name $DemoProjectName -f $ComposeFile --profile demo ps --status running --format json minio-demo 2>$null | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($output)) {
+            return $false
+        }
+        $items = @($output | ConvertFrom-Json)
+        return $items.Count -eq 1 -and
+            $items[0].Service -eq "minio-demo" -and
+            $items[0].State -eq "running" -and
+            ([string]$items[0].Name).StartsWith("$DemoProjectName-")
+    }
+    catch {
+        return $false
+    }
+    finally {
+        $ErrorActionPreference = $priorErrorActionPreference
+    }
+}
+
 function Test-TrackedProcessIdentity($Entry) {
+    return (Get-TrackedProcessStatus $Entry).Status -eq "matched"
+}
+
+function Get-TrackedProcessStatus($Entry) {
     try {
         $process = Get-Process -Id ([int]$Entry.pid) -ErrorAction Stop
         $expectedPath = [System.IO.Path]::GetFullPath([string]$Entry.expected_executable)
@@ -207,12 +357,23 @@ function Test-TrackedProcessIdentity($Entry) {
             [System.Globalization.CultureInfo]::InvariantCulture,
             [System.Globalization.DateTimeStyles]::RoundtripKind
         ).ToUniversalTime()
-        return $actualPath -eq $expectedPath -and
-            $process.StartTime.ToUniversalTime().Ticks -eq $expectedStart.Ticks
+        if ($actualPath -eq $expectedPath -and
+            $process.StartTime.ToUniversalTime().Ticks -eq $expectedStart.Ticks) {
+            return [pscustomobject]@{ Status = "matched"; Process = $process }
+        }
+        return [pscustomobject]@{ Status = "mismatch"; Process = $process }
     }
     catch {
-        return $false
+        return [pscustomobject]@{ Status = "missing"; Process = $null }
     }
+}
+
+function Request-TrackedProcessStop($Process) {
+    Stop-Process -InputObject $Process
+}
+
+function Wait-TrackedProcessExit($Process, [int]$TimeoutMilliseconds) {
+    return $Process.WaitForExit($TimeoutMilliseconds)
 }
 
 function Save-ProcessState([object[]]$Processes) {
@@ -241,19 +402,44 @@ function Read-ProcessState {
 }
 
 function Stop-DemoProcesses($State) {
+    $remaining = @()
+    $errors = @()
     if ($null -eq $State) {
-        return
+        return [pscustomobject]@{ Remaining = @(); Errors = @() }
     }
     foreach ($entry in @($State.processes)) {
-        if (-not (Test-TrackedProcessIdentity $entry)) {
-            Write-Warning "Did not stop stale or mismatched PID $($entry.pid) ($($entry.name))."
+        $status = Get-TrackedProcessStatus $entry
+        if ($status.Status -eq "missing") {
             continue
         }
-        $process = Get-Process -Id ([int]$entry.pid) -ErrorAction Stop
-        Stop-Process -InputObject $process
-        if (-not $process.WaitForExit(5000)) {
-            throw "Demo PID $($entry.pid) did not stop within five seconds. Inspect it before retrying."
+        if ($status.Status -ne "matched") {
+            $remaining += $entry
+            $errors += "PID $($entry.pid) ($($entry.name)) no longer matches its recorded identity and was not stopped"
+            continue
         }
+        try {
+            Request-TrackedProcessStop $status.Process
+            if (-not (Wait-TrackedProcessExit $status.Process 5000)) {
+                $remaining += $entry
+                $errors += "PID $($entry.pid) ($($entry.name)) did not stop within five seconds"
+            }
+        }
+        catch {
+            $remaining += $entry
+            $errors += "PID $($entry.pid) ($($entry.name)) could not be stopped safely"
+        }
+    }
+    return [pscustomobject]@{ Remaining = @($remaining); Errors = @($errors) }
+}
+
+function Save-RemainingProcessState([object[]]$Entries) {
+    if (@($Entries).Count -gt 0) {
+        Save-ProcessState $Entries
+        return
+    }
+    if (Test-Path -LiteralPath $StateFile -PathType Leaf) {
+        Assert-ContainedNonReparsePath -Path $StateFile -Root $RepoRoot | Out-Null
+        Remove-Item -LiteralPath $StateFile -Force
     }
 }
 
@@ -266,6 +452,9 @@ function Stop-DemoCompose {
     }
     if ([string]::IsNullOrWhiteSpace($env:DEMO_MINIO_ROOT_PASSWORD)) {
         $env:DEMO_MINIO_ROOT_PASSWORD = "synthetic-stop-placeholder"
+    }
+    if ([string]::IsNullOrWhiteSpace($env:DEMO_MINIO_DATA_PATH)) {
+        $env:DEMO_MINIO_DATA_PATH = $MinioDataPath
     }
     & docker compose --project-name $DemoProjectName -f $ComposeFile --profile demo down --remove-orphans
     if ($LASTEXITCODE -ne 0) {
@@ -281,11 +470,31 @@ function Test-DemoComposeExists {
 function Stop-Demo {
     Import-DemoEnvironment
     $state = Read-ProcessState
-    Stop-DemoProcesses $state
-    if (Test-Path -LiteralPath $StateFile -PathType Leaf) {
-        Remove-Item -LiteralPath $StateFile -Force
+    $processResult = [pscustomobject]@{ Remaining = @(); Errors = @() }
+    $errors = @()
+    try {
+        $processResult = Stop-DemoProcesses $state
+        $errors += @($processResult.Errors)
     }
-    Stop-DemoCompose
+    finally {
+        try {
+            Save-RemainingProcessState @($processResult.Remaining)
+        }
+        catch {
+            $errors += $_.Exception.Message
+        }
+        finally {
+            try {
+                Stop-DemoCompose
+            }
+            catch {
+                $errors += $_.Exception.Message
+            }
+        }
+    }
+    if ($errors.Count -gt 0) {
+        throw ($errors -join "; ")
+    }
     Write-Output "Stopped only the SplitBind demo processes and Compose project."
     Write-Output "Retained synthetic credentials and SQLite state: $DemoRoot"
 }
@@ -294,13 +503,19 @@ function Test-HealthyDemoState($State) {
     if ($null -eq $State -or @($State.processes).Count -ne 3) {
         return $false
     }
+    $names = @($State.processes | ForEach-Object { $_.name } | Sort-Object)
+    if (($names -join ",") -ne "api,vite,worker") {
+        return $false
+    }
     foreach ($entry in @($State.processes)) {
-        if (-not (Test-TrackedProcessIdentity $entry)) {
+        if ((Get-TrackedProcessStatus $entry).Status -ne "matched") {
             return $false
         }
     }
-    return (Test-LocalHttp "http://127.0.0.1:8000/health/live") -and
-        (Test-LocalHttp "http://127.0.0.1:5173")
+    return (Test-DemoComposeRunning) -and
+        (Test-MinIOReadiness) -and
+        (Test-ApiReadiness) -and
+        (Test-ViteReadiness)
 }
 
 function New-TrackedEntry([string]$Name, $Process, [string]$ExpectedExecutable) {
@@ -316,30 +531,110 @@ function Start-DemoProcess(
     [string]$Name,
     [string]$FilePath,
     [string[]]$ArgumentList,
-    [string]$WorkingDirectory
+    [string]$WorkingDirectory,
+    [hashtable]$Environment
 ) {
+    Assert-ContainedNonReparsePath -Path $LogDirectory -Root $RepoRoot | Out-Null
     $stdout = Join-Path $LogDirectory "$Name.stdout.log"
     $stderr = Join-Path $LogDirectory "$Name.stderr.log"
-    return Start-Process -FilePath $FilePath -ArgumentList $ArgumentList `
-        -WorkingDirectory $WorkingDirectory -WindowStyle Hidden -PassThru `
-        -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+    Assert-ContainedNonReparsePath -Path $stdout -Root $RepoRoot | Out-Null
+    Assert-ContainedNonReparsePath -Path $stderr -Root $RepoRoot | Out-Null
+
+    $snapshot = @{}
+    foreach ($entry in [System.Environment]::GetEnvironmentVariables().GetEnumerator()) {
+        $snapshot[[string]$entry.Key] = [string]$entry.Value
+    }
+    $systemNames = @(
+        "COMSPEC", "NUMBER_OF_PROCESSORS", "OS", "PATH", "PATHEXT",
+        "PROCESSOR_ARCHITECTURE", "SystemDrive", "SystemRoot", "TEMP", "TMP", "WINDIR"
+    )
+    $childEnvironment = @{}
+    foreach ($name in $systemNames) {
+        $value = [System.Environment]::GetEnvironmentVariable($name, "Process")
+        if (-not [string]::IsNullOrWhiteSpace($value)) {
+            $childEnvironment[$name] = $value
+        }
+    }
+    foreach ($entry in $Environment.GetEnumerator()) {
+        $childEnvironment[[string]$entry.Key] = [string]$entry.Value
+    }
+    try {
+        foreach ($name in @($snapshot.Keys)) {
+            [System.Environment]::SetEnvironmentVariable($name, $null, "Process")
+        }
+        foreach ($entry in $childEnvironment.GetEnumerator()) {
+            [System.Environment]::SetEnvironmentVariable($entry.Key, $entry.Value, "Process")
+        }
+        return Start-Process -FilePath $FilePath -ArgumentList $ArgumentList `
+            -WorkingDirectory $WorkingDirectory -WindowStyle Hidden -PassThru `
+            -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+    }
+    finally {
+        foreach ($name in @([System.Environment]::GetEnvironmentVariables().Keys)) {
+            [System.Environment]::SetEnvironmentVariable([string]$name, $null, "Process")
+        }
+        foreach ($entry in $snapshot.GetEnumerator()) {
+            [System.Environment]::SetEnvironmentVariable($entry.Key, $entry.Value, "Process")
+        }
+    }
+}
+
+function Get-ApiChildEnvironment {
+    return @{
+        ENVIRONMENT = "local"
+        SPLITBIND_DEMO_MODE = "true"
+        SPLITBIND_DEMO_DATABASE_PATH = $env:SPLITBIND_DEMO_DATABASE_PATH
+        DJANGO_SETTINGS_MODULE = "config.settings_demo"
+        DJANGO_SECRET_KEY = $env:DJANGO_SECRET_KEY
+        OBJECT_STORAGE_ENDPOINT = $env:OBJECT_STORAGE_ENDPOINT
+        OBJECT_STORAGE_BUCKET = $env:OBJECT_STORAGE_BUCKET
+        OBJECT_STORAGE_ACCESS_KEY = $env:OBJECT_STORAGE_ACCESS_KEY
+        OBJECT_STORAGE_SECRET_KEY = $env:OBJECT_STORAGE_SECRET_KEY
+        PYTHONPATH = $env:PYTHONPATH
+        PYTHONIOENCODING = "utf-8"
+    }
+}
+
+function Get-WorkerChildEnvironment {
+    $environment = Get-ApiChildEnvironment
+    $environment["SPLITBIND_DEMO_FINGERPRINT_KEY_HEX"] = $env:SPLITBIND_DEMO_FINGERPRINT_KEY_HEX
+    return $environment
+}
+
+function Get-ViteChildEnvironment {
+    return @{
+        NODE_ENV = "development"
+    }
 }
 
 function Rollback-Startup([object[]]$Processes, [bool]$ComposeStarted) {
-    if (@($Processes).Count -gt 0) {
-        $state = [ordered]@{ processes = @($Processes) }
-        Stop-DemoProcesses $state
+    $state = [ordered]@{ processes = @($Processes) }
+    $processResult = [pscustomobject]@{ Remaining = @(); Errors = @() }
+    $errors = @()
+    try {
+        $processResult = Stop-DemoProcesses $state
+        $errors += @($processResult.Errors)
     }
-    if ($ComposeStarted) {
+    finally {
         try {
-            Stop-DemoCompose
+            Save-RemainingProcessState @($processResult.Remaining)
         }
         catch {
-            Write-Warning $_.Exception.Message
+            $errors += $_.Exception.Message
+        }
+        finally {
+            if ($ComposeStarted) {
+                try {
+                    Stop-DemoCompose
+                }
+                catch {
+                    $errors += $_.Exception.Message
+                }
+            }
         }
     }
-    if (Test-Path -LiteralPath $StateFile -PathType Leaf) {
-        Remove-Item -LiteralPath $StateFile -Force
+    if ($errors.Count -gt 0) {
+        throw ($errors -join "; ")
     }
 }
 
@@ -351,26 +646,58 @@ function Write-ReadySummary {
     Write-Output "Stop: $StopCommand"
 }
 
+if ($TestLibraryOnly) {
+    if ($env:SPLITBIND_DEMO_TEST_LIBRARY -ne "true") {
+        throw "TestLibraryOnly is restricted to the repository test harness."
+    }
+    return
+}
+
 try {
     Assert-RepositoryRoot
+    Assert-DemoRuntimePaths
     if ($Stop) {
         Stop-Demo
         exit 0
     }
 
     Import-DemoEnvironment
+    if (Test-Path -LiteralPath $EnvironmentFile -PathType Leaf) {
+        Set-CommonRuntimeEnvironment
+    }
     $existingState = Read-ProcessState
     if ($null -ne $existingState -and (Test-HealthyDemoState $existingState)) {
-        Set-CommonRuntimeEnvironment
         Write-ReadySummary
         exit 0
     }
 
     Assert-Prerequisites
     if ($null -ne $existingState) {
-        Stop-DemoProcesses $existingState
-        Remove-Item -LiteralPath $StateFile -Force
-        Stop-DemoCompose
+        $staleResult = [pscustomobject]@{ Remaining = @(); Errors = @() }
+        $staleErrors = @()
+        try {
+            $staleResult = Stop-DemoProcesses $existingState
+            $staleErrors += @($staleResult.Errors)
+        }
+        finally {
+            try {
+                Save-RemainingProcessState @($staleResult.Remaining)
+            }
+            catch {
+                $staleErrors += $_.Exception.Message
+            }
+            finally {
+                try {
+                    Stop-DemoCompose
+                }
+                catch {
+                    $staleErrors += $_.Exception.Message
+                }
+            }
+        }
+        if ($staleErrors.Count -gt 0) {
+            throw ($staleErrors -join "; ")
+        }
     }
     elseif (Test-DemoComposeExists) {
         Stop-DemoCompose
@@ -401,7 +728,10 @@ client = boto3.client(
 bucket = os.environ["OBJECT_STORAGE_BUCKET"]
 try:
     client.head_bucket(Bucket=bucket)
-except Exception:
+except Exception as error:
+    code = str(getattr(error, "response", {}).get("Error", {}).get("Code", ""))
+    if code not in {"404", "NoSuchBucket", "NotFound"}:
+        raise
     client.create_bucket(Bucket=bucket)
 client.put_bucket_cors(Bucket=bucket, CORSConfiguration={"CORSRules": [{
     "AllowedOrigins": ["http://127.0.0.1:5173", "http://localhost:5173"],
@@ -425,49 +755,39 @@ client.put_bucket_cors(Bucket=bucket, CORSConfiguration={"CORSRules": [{
             throw "Synthetic demo seeding failed. Inspect the command output."
         }
 
-        $demoFingerprintKey = $env:SPLITBIND_DEMO_FINGERPRINT_KEY_HEX
-        $demoLoginPassword = $env:SPLITBIND_DEMO_LOGIN_PASSWORD
-        $env:SPLITBIND_DEMO_FINGERPRINT_KEY_HEX = $null
-        $env:SPLITBIND_DEMO_LOGIN_PASSWORD = $null
         $apiProcess = Start-DemoProcess -Name "api" -FilePath $Python `
             -ArgumentList @("services/api/manage.py", "runserver", "127.0.0.1:8000", "--noreload", "--settings=config.settings_demo") `
-            -WorkingDirectory $RepoRoot
+            -WorkingDirectory $RepoRoot -Environment (Get-ApiChildEnvironment)
         $startedProcesses += New-TrackedEntry -Name "api" -Process $apiProcess -ExpectedExecutable $Python
         Save-ProcessState $startedProcesses
 
-        $env:SPLITBIND_DEMO_FINGERPRINT_KEY_HEX = $demoFingerprintKey
         $workerProcess = Start-DemoProcess -Name "worker" -FilePath $Python `
             -ArgumentList @("services/api/manage.py", "run_demo_worker", "--settings=config.settings_demo") `
-            -WorkingDirectory $RepoRoot
+            -WorkingDirectory $RepoRoot -Environment (Get-WorkerChildEnvironment)
         $startedProcesses += New-TrackedEntry -Name "worker" -Process $workerProcess -ExpectedExecutable $Python
         Save-ProcessState $startedProcesses
 
-        $viteSecrets = @{
-            DEMO_MINIO_ROOT_PASSWORD = $env:DEMO_MINIO_ROOT_PASSWORD
-            DJANGO_SECRET_KEY = $env:DJANGO_SECRET_KEY
-            OBJECT_STORAGE_ACCESS_KEY = $env:OBJECT_STORAGE_ACCESS_KEY
-            OBJECT_STORAGE_SECRET_KEY = $env:OBJECT_STORAGE_SECRET_KEY
-            SPLITBIND_DEMO_FINGERPRINT_KEY_HEX = $env:SPLITBIND_DEMO_FINGERPRINT_KEY_HEX
-        }
-        foreach ($name in $viteSecrets.Keys) {
-            [System.Environment]::SetEnvironmentVariable($name, $null, "Process")
-        }
         $viteProcess = Start-DemoProcess -Name "vite" -FilePath $Node `
-            -ArgumentList @($ViteEntry, "--host", "127.0.0.1", "--port", "5173", "--strictPort") `
-            -WorkingDirectory $RepoRoot
+            -ArgumentList @("`"$ViteEntry`"", "--host", "127.0.0.1", "--port", "5173", "--strictPort") `
+            -WorkingDirectory $RepoRoot -Environment (Get-ViteChildEnvironment)
         $startedProcesses += New-TrackedEntry -Name "vite" -Process $viteProcess -ExpectedExecutable $Node
         Save-ProcessState $startedProcesses
-        foreach ($name in $viteSecrets.Keys) {
-            [System.Environment]::SetEnvironmentVariable($name, $viteSecrets[$name], "Process")
-        }
-        $env:SPLITBIND_DEMO_LOGIN_PASSWORD = $demoLoginPassword
-
         Wait-LocalHttp -Uri "http://127.0.0.1:8000/health/live" -TimeoutSeconds 45 -Component "Django API"
         Wait-LocalHttp -Uri "http://127.0.0.1:5173" -TimeoutSeconds 45 -Component "Vite"
+        $finalState = [pscustomobject]@{ processes = @($startedProcesses) }
+        if (-not (Test-HealthyDemoState $finalState)) {
+            throw "Final demo identity/readiness validation failed. Inspect $LogDirectory."
+        }
         Write-ReadySummary
     }
     catch {
-        Rollback-Startup -Processes $startedProcesses -ComposeStarted $composeStarted
+        $startupError = $_.Exception.Message
+        try {
+            Rollback-Startup -Processes $startedProcesses -ComposeStarted $composeStarted
+        }
+        catch {
+            throw "$startupError Rollback also reported: $($_.Exception.Message)"
+        }
         throw
     }
 }

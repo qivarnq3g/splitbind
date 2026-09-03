@@ -3,6 +3,7 @@ import os
 import pathlib
 import shutil
 import subprocess
+import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -10,6 +11,38 @@ RUNNER = ROOT / "infra" / "scripts" / "run_demo.ps1"
 COMPOSE = ROOT / "infra" / "compose" / "compose.local.yaml"
 CONFIG_ENV = ROOT / "infra" / "compose" / "config-test.env"
 VITE_CONFIG = ROOT / "apps" / "web" / "vite.config.ts"
+HARNESS = ROOT / "tests" / "platform" / "demo_runner_harness.ps1"
+
+
+def run_harness(scenario, scratch, *, dump_environment_script=None):
+    powershell = shutil.which("pwsh") or shutil.which("powershell")
+    command = [
+        powershell,
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        str(HARNESS),
+        "-Runner",
+        str(RUNNER),
+        "-Scenario",
+        scenario,
+        "-ScratchRoot",
+        str(scratch),
+    ]
+    if dump_environment_script is not None:
+        command.extend(["-DumpEnvironmentScript", str(dump_environment_script)])
+    result = subprocess.run(
+        command,
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise AssertionError(result.stdout + result.stderr)
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    return json.loads(lines[-1])
 
 
 def render_compose(*profiles):
@@ -35,6 +68,17 @@ def published_ports(service):
 
 
 class DemoRunnerContractTest(unittest.TestCase):
+    def setUp(self):
+        temporary_parent = ROOT / "tmp"
+        temporary_parent.mkdir(exist_ok=True)
+        self.temporary = tempfile.TemporaryDirectory(
+            prefix="demo-runner-", dir=temporary_parent
+        )
+        self.scratch = pathlib.Path(self.temporary.name)
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
     def test_demo_profile_isolated_to_loopback_minio(self):
         demo = render_compose("demo")
 
@@ -45,6 +89,10 @@ class DemoRunnerContractTest(unittest.TestCase):
         self.assertTrue(service["image"].startswith("minio/minio:RELEASE."))
         self.assertEqual(published_ports(service), {9000})
         self.assertEqual(service["ports"][0].get("host_ip"), "127.0.0.1")
+        self.assertEqual(len(service.get("volumes", [])), 1)
+        self.assertEqual(service["volumes"][0]["type"], "bind")
+        self.assertEqual(service["volumes"][0]["target"], "/data")
+        self.assertIn("artifacts/demo", service["volumes"][0]["source"].replace("\\", "/"))
         self.assertNotIn("minio-demo", render_compose("core")["services"])
         self.assertNotIn("minio-demo", render_compose("full")["services"])
 
@@ -121,6 +169,70 @@ class DemoRunnerContractTest(unittest.TestCase):
         self.assertIn("infra/scripts/run_demo.ps1 -Stop", source)
         self.assertLess(ready_api, browser_output)
         self.assertLess(ready_web, browser_output)
+
+    def test_readiness_requires_exact_status_and_service_payload(self):
+        observed = run_harness("readiness", self.scratch)
+
+        self.assertEqual(
+            observed,
+            {
+                "api_good": True,
+                "api_wrong_body": False,
+                "api_wrong_status": False,
+                "vite_good": True,
+                "vite_wrong": False,
+                "minio_good": True,
+                "minio_wrong": False,
+            },
+        )
+
+    def test_healthy_reuse_requires_minio_and_final_worker_identity(self):
+        observed = run_harness("healthy-state", self.scratch)
+
+        self.assertEqual(
+            observed,
+            {"healthy": True, "worker_dead": False, "minio_missing": False},
+        )
+
+    def test_cleanup_is_exhaustive_and_retains_timeout_and_mismatch_state(self):
+        observed = run_harness("cleanup", self.scratch)
+
+        self.assertEqual(observed["stop_requests"], [1, 2])
+        self.assertEqual(observed["compose_stops"], 1)
+        self.assertEqual(observed["retained_pids"], [1, 3])
+        self.assertIn("PID 1", observed["error"])
+        self.assertIn("PID 3", observed["error"])
+
+    def test_child_process_gets_minimal_environment_without_vite_or_cloud_sentinels(self):
+        dump_script = self.scratch / "dump-environment.ps1"
+        dump_script.write_text(
+            "Get-ChildItem Env: | Sort-Object Name | ForEach-Object { "
+            "Write-Output ($_.Name + '=' + $_.Value) }\n",
+            encoding="utf-8",
+        )
+
+        observed = run_harness(
+            "child-environment", self.scratch, dump_environment_script=dump_script
+        )
+
+        self.assertTrue(observed["exited"])
+        self.assertTrue(observed["has_expected"])
+        self.assertFalse(observed["has_vite_secret"])
+        self.assertFalse(observed["has_cloud_secret"])
+
+    def test_missing_node_is_actionable_and_does_not_mutate_demo_state(self):
+        observed = run_harness("missing-node", self.scratch)
+
+        self.assertIn("Node.js is missing", observed["error"])
+        self.assertIn("Node 24", observed["error"])
+        self.assertFalse(observed["demo_created"])
+
+    def test_reparse_chain_and_leaf_are_rejected_before_external_write(self):
+        observed = run_harness("reparse", self.scratch)
+
+        self.assertTrue(observed["junction_rejected"])
+        self.assertTrue(observed["leaf_rejected"])
+        self.assertTrue(observed["outside_unchanged"])
 
 
 if __name__ == "__main__":

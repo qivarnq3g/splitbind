@@ -148,3 +148,49 @@ def test_seed_demo_requires_an_explicit_password(monkeypatch):
 
     with pytest.raises(Exception, match="SPLITBIND_DEMO_LOGIN_PASSWORD_REQUIRED"):
         call_command("seed_demo", stdout=io.StringIO())
+
+
+@pytest.mark.django_db
+@override_settings(ENVIRONMENT="local", SPLITBIND_DEMO_MODE=True)
+def test_seed_demo_reactivates_the_canonical_synthetic_administrator(monkeypatch):
+    monkeypatch.setenv("SPLITBIND_DEMO_LOGIN_PASSWORD", "Replacement-password-123")
+    organization = Organization.objects.create(
+        slug="splitbind-demo", name="SplitBind Synthetic Demo"
+    )
+    user = User.objects.create_user(
+        username="demo-admin",
+        password="Old-password-123",
+        organization=organization,
+        role=Role.ADMINISTRATOR,
+    )
+    user.is_active = False
+    user.save(update_fields=["is_active"])
+
+    call_command("seed_demo", stdout=io.StringIO())
+
+    user.refresh_from_db()
+    assert user.is_active is True
+    assert user.check_password("Replacement-password-123")
+
+
+@pytest.mark.django_db
+@override_settings(ENVIRONMENT="local", SPLITBIND_DEMO_MODE=True)
+def test_seed_demo_organization_name_conflict_rolls_back_password(monkeypatch):
+    monkeypatch.setenv("SPLITBIND_DEMO_LOGIN_PASSWORD", "Replacement-password-123")
+    organization = Organization.objects.create(
+        slug="splitbind-demo", name="Not the canonical synthetic organization"
+    )
+    user = User.objects.create_user(
+        username="demo-admin",
+        password="Old-password-123",
+        organization=organization,
+        role=Role.ADMINISTRATOR,
+    )
+
+    with pytest.raises(Exception, match="DEMO_SEED_CONFLICT"):
+        call_command("seed_demo", stdout=io.StringIO())
+
+    user.refresh_from_db()
+    assert user.check_password("Old-password-123")
+    assert organization.name == "Not the canonical synthetic organization"
+    assert Recipient.objects.filter(organization=organization).count() == 0

@@ -6,6 +6,12 @@ from django.db import transaction
 
 from splitbind.access.models import Organization, Recipient, Role, User
 
+DEMO_ORGANIZATION_NAME = "SplitBind Synthetic Demo"
+DEMO_ORGANIZATION_SLUG = "splitbind-demo"
+DEMO_USERNAME = "demo-admin"
+DEMO_RECIPIENT_REFERENCE = "synthetic-recipient-001"
+DEMO_RECIPIENT_NAME = "Người nhận tổng hợp 001"
+
 
 class Command(BaseCommand):
     help = "Seed the local presentation database with synthetic identities."
@@ -22,11 +28,13 @@ class Command(BaseCommand):
 
         with transaction.atomic():
             organization, _ = Organization.objects.get_or_create(
-                slug="splitbind-demo",
-                defaults={"name": "SplitBind Synthetic Demo"},
+                slug=DEMO_ORGANIZATION_SLUG,
+                defaults={"name": DEMO_ORGANIZATION_NAME},
             )
+            if organization.name != DEMO_ORGANIZATION_NAME:
+                raise CommandError("DEMO_SEED_CONFLICT")
             user, created = User.objects.get_or_create(
-                username="demo-admin",
+                username=DEMO_USERNAME,
                 defaults={
                     "organization": organization,
                     "role": Role.ADMINISTRATOR,
@@ -41,17 +49,18 @@ class Command(BaseCommand):
             ):
                 raise CommandError("DEMO_SEED_CONFLICT")
             user.is_staff = True
+            user.is_active = True
             user.set_password(password)
-            user.save(update_fields=["is_staff", "password"])
+            user.save(update_fields=["is_staff", "is_active", "password"])
 
             recipient, _ = Recipient.objects.get_or_create(
                 organization=organization,
-                external_reference="synthetic-recipient-001",
-                defaults={"display_name": "Người nhận tổng hợp 001"},
+                external_reference=DEMO_RECIPIENT_REFERENCE,
+                defaults={"display_name": DEMO_RECIPIENT_NAME},
             )
-            if recipient.display_name != "Người nhận tổng hợp 001":
+            if recipient.display_name != DEMO_RECIPIENT_NAME:
                 raise CommandError("DEMO_SEED_CONFLICT")
 
         self.stdout.write(
-            f"username=demo-admin recipient_id={recipient.id} status=ready"
+            f"username={DEMO_USERNAME} recipient_id={recipient.id} status=ready"
         )

@@ -4,7 +4,7 @@
 
 SplitBind là hệ thống truy vết toàn vẹn văn bản dành cho bài tập lớn môn An toàn thông tin của Nhóm 9. Hệ thống cấp một dấu vân tay riêng cho từng bản PDF gửi tới người nhận, sau đó hỗ trợ xác minh nguồn phát hành và dấu hiệu chỉnh sửa trên tài liệu nghi vấn.
 
-> Trạng thái: MVP đang được triển khai. Repository đã có reference implementation, Django control plane, OpenAPI/typed TypeScript client và giao diện React cho đăng nhập, cấp phát, kiểm chứng, theo dõi job và đọc bằng chứng kỹ thuật; worker Rust, kết quả xử lý thực tế, tải tệp kết quả và deployment vẫn chưa hoàn thành.
+> Trạng thái: MVP đang được triển khai. Repository đã có reference implementation, Django control plane, OpenAPI/typed TypeScript client và giao diện React cho đăng nhập, cấp phát, kiểm chứng, theo dõi job và đọc bằng chứng kỹ thuật. Luồng trình bày cục bộ dùng Python demo worker thử nghiệm và chưa có runtime end-to-end evidence trên host kiểm thử; Rust worker cùng processing/deployment production vẫn chưa hoàn thành.
 
 ## Demo trình bày cục bộ
 
@@ -14,7 +14,7 @@ Sau khi chuẩn bị đúng Python 3.11 `.venv`, dependency Node và image MinIO
 powershell -ExecutionPolicy Bypass -File infra/scripts/run_demo.ps1
 ```
 
-Runner chỉ khởi động Django API, một demo worker và Vite trên máy host, cùng profile Compose riêng chứa MinIO tại `127.0.0.1:9000`. Runner không cài package, tải image hay liên hệ dịch vụ cloud; nếu thiếu điều kiện, thông báo lỗi sẽ nêu hành động cục bộ cần thực hiện. Khi sẵn sàng, runner in URL `http://127.0.0.1:5173`, tài khoản tổng hợp, mật khẩu tổng hợp, thư mục log và lệnh dừng chính xác:
+Runner chỉ khởi động Django API, một demo worker và Vite trên máy host, cùng profile Compose riêng chứa MinIO tại `127.0.0.1:9000`; dữ liệu MinIO được giữ trong `artifacts/demo/minio-data/`. Runner không cài package, tải image hay liên hệ dịch vụ cloud; nếu thiếu điều kiện, thông báo lỗi sẽ nêu hành động cục bộ cần thực hiện. Runner chỉ in URL `http://127.0.0.1:5173`, tài khoản tổng hợp, mật khẩu tổng hợp, thư mục log và lệnh dừng chính xác sau khi revalidate cả ba PID, Compose/MinIO, API và Vite:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File infra/scripts/run_demo.ps1 -Stop
