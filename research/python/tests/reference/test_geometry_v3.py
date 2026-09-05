@@ -9,6 +9,7 @@ import pytest
 import splitbind_ref.geometry_v3 as geometry_module
 from splitbind_ref.fingerprint_v3_profile import load_v3_profiles, v2_pilot_profile
 from splitbind_ref.geometry_v3 import geometry_hypotheses_v3
+from splitbind_ref.synchronization import SyncTemplate
 from splitbind_ref.synchronization_v2 import AlignmentV2Result
 
 
@@ -21,8 +22,8 @@ def profile():
 
 
 @pytest.fixture(autouse=True)
-def disable_pilot_fallback(monkeypatch):
-    """Keep shape-prior tests independent of the slower V2 pilot estimator."""
+def disable_sync_fallback(monkeypatch):
+    """Keep shape-prior tests independent of the slower V2 sync estimator."""
 
     monkeypatch.setattr(
         geometry_module,
@@ -137,10 +138,23 @@ def test_geometry_rejects_over_40_megapixels_before_materializing_the_view(profi
         geometry_hypotheses_v3(oversized, KEY, 0, (1, 1), profile)
 
 
-def test_geometry_places_shape_priors_before_one_valid_pilot_fallback(
+def test_geometry_rejects_canonical_canvas_over_40_megapixels(profile):
+    """Catches an unbounded canonical output allocation beyond the pixel ceiling."""
+
+    with pytest.raises(ValueError, match="40-megapixel"):
+        geometry_hypotheses_v3(
+            np.zeros((1, 1, 3), np.uint8),
+            KEY,
+            0,
+            (40_000_001, 1),
+            profile,
+        )
+
+
+def test_geometry_places_shape_priors_before_one_valid_sync_fallback(
     profile, monkeypatch
 ):
-    """Catches fallback-first ordering or use of a non-mapped V2 profile."""
+    """Catches fallback-first ordering, dropped ORB input, or invented provenance."""
 
     page = _checkerboard(96, 192)
     canonical_shape = (144, 288)
@@ -149,15 +163,31 @@ def test_geometry_places_shape_priors_before_one_valid_pilot_fallback(
         dtype=np.float64,
     )
     fallback_image = np.full((144, 288, 3), 17, np.uint8)
+    orb_template = SyncTemplate(
+        canonical_shape,
+        np.array(
+            [[12.0, 12.0], [275.0, 12.0], [275.0, 131.0], [12.0, 131.0]],
+            dtype=np.float32,
+        ),
+        np.zeros((4, 32), dtype=np.uint8),
+    )
     observed = {}
 
-    def aligned(attacked, key, page_index, pilot_profile, canonical):
+    def aligned(
+        attacked,
+        key,
+        page_index,
+        pilot_profile,
+        canonical,
+        received_orb_template=None,
+    ):
         observed["arguments"] = (
             attacked,
             key,
             page_index,
             pilot_profile,
             canonical,
+            received_orb_template,
         )
         return AlignmentV2Result(
             fallback_image, fallback_matrix, 0.63, 2, "aligned"
@@ -166,10 +196,10 @@ def test_geometry_places_shape_priors_before_one_valid_pilot_fallback(
     monkeypatch.setattr(geometry_module, "align_page_v2", aligned)
 
     hypotheses = geometry_hypotheses_v3(
-        page, KEY, 7, canonical_shape, profile
+        page, KEY, 7, canonical_shape, profile, orb_template=orb_template
     )
 
-    assert [hypothesis.kind for hypothesis in hypotheses] == ["pure_resize", "pilot"]
+    assert [hypothesis.kind for hypothesis in hypotheses] == ["pure_resize", "sync"]
     np.testing.assert_array_equal(hypotheses[1].image, fallback_image)
     assert hypotheses[1].score == pytest.approx(0.63)
     assert observed["arguments"][0] is page
@@ -178,6 +208,7 @@ def test_geometry_places_shape_priors_before_one_valid_pilot_fallback(
         7,
         v2_pilot_profile(profile),
         canonical_shape,
+        orb_template,
     )
 
 

@@ -11,6 +11,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from .fingerprint_v3_profile import FingerprintV3Profile, v2_pilot_profile
+from .synchronization import SyncTemplate
 from .synchronization_v2 import align_page_v2
 
 
@@ -20,7 +21,7 @@ _MATRIX_QUANTIZATION_DECIMALS = 8
 
 @dataclass(frozen=True, slots=True)
 class GeometryHypothesisV3:
-    kind: Literal["identity", "pure_resize", "center_crop", "pilot", "orb"]
+    kind: Literal["identity", "pure_resize", "center_crop", "sync"]
     image: NDArray[np.uint8]
     source_to_canonical: NDArray[np.float64]
     score: float
@@ -32,6 +33,7 @@ def geometry_hypotheses_v3(
     page_index: int,
     canonical_shape: tuple[int, int],
     profile: FingerprintV3Profile,
+    orb_template: SyncTemplate | None = None,
 ) -> tuple[GeometryHypothesisV3, ...]:
     """Return a bounded, shape-prior-first set of canonical V3 candidates."""
 
@@ -49,7 +51,7 @@ def geometry_hypotheses_v3(
     seen_matrices: set[tuple[float, ...]] = set()
 
     def add(
-        kind: Literal["identity", "pure_resize", "center_crop", "pilot", "orb"],
+        kind: Literal["identity", "pure_resize", "center_crop", "sync"],
         image: NDArray[np.uint8],
         matrix: NDArray[np.float64],
         score: float,
@@ -143,6 +145,7 @@ def geometry_hypotheses_v3(
         page_index,
         pilot_profile,
         target_shape,
+        orb_template,
     )
     if (
         fallback.reason == "aligned"
@@ -151,7 +154,7 @@ def geometry_hypotheses_v3(
         and math.isfinite(float(fallback.pilot_score))
     ):
         add(
-            "pilot",
+            "sync",
             fallback.image,
             fallback.homography,
             float(fallback.pilot_score),
