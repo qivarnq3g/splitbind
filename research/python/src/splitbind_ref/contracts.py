@@ -93,7 +93,7 @@ def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in pairs:
         if key in result:
-            raise ValueError(f"duplicate JSON key {key!r} in V2 fingerprint candidate contract")
+            raise ValueError(f"duplicate JSON key {key!r} in fingerprint candidate contract")
         result[key] = value
     return result
 

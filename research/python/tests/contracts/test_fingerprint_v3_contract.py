@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,13 @@ from splitbind_ref.fingerprint_v3_profile import (
 
 ROOT = Path(__file__).resolve().parents[4]
 V3_PATH = ROOT / "contracts" / "algorithm" / "fingerprint-candidates.v3.json"
+V3_CONTRACT_SHA256 = "14a47ced36eede7a4342c6ee280a59758747415a3b28331cfb16ab2e4f16ea23"
+V3_FIRST_IDENTIFIER_HEX = (
+    "534246330114a47ced36eede7a4342c6ee280a59758747415a3b28331cfb16ab2e4f16ea23000000"
+    "03404000000000000040000000000000004010000000000000000000403fe8000000000000000000"
+    "10000000ef000001800000001200000003000000033fe33333333333333fc999999999999a000000"
+    "083f50624dd2f1a9fc000000013febb67ae8584caa0000000b494e5445525f4355424943"
+)
 
 
 @pytest.fixture(autouse=True)
@@ -36,6 +44,50 @@ def test_v3_contract_expands_a_bounded_deterministic_grid():
     assert len({candidate_identifier_v3(profile) for profile in profiles}) == len(profiles)
     assert all(profile.schema_version == 3 for profile in profiles)
     assert all(profile.max_geometry_hypotheses == 8 for profile in profiles)
+
+
+def test_v3_contract_and_first_identifier_are_golden_lf_big_endian_bytes():
+    """Locks the contract digest and the complete cross-language identity layout."""
+
+    raw = V3_PATH.read_bytes()
+    assert b"\r" not in raw
+    assert sha256(raw).hexdigest() == V3_CONTRACT_SHA256
+    assert contracts.fingerprint_candidates_v3_bytes() == raw
+
+    identifier = candidate_identifier_v3(load_v3_profiles()[0])
+    assert len(identifier) == 156
+    assert identifier.hex() == V3_FIRST_IDENTIFIER_HEX
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("contract_sha256", b"\x01" * 32),
+        ("qim_delta", 33.0),
+        ("pilot_strength_rms", 2.5),
+        ("spread_delta", 5.0),
+        ("spread_chips_per_bit", 65),
+        ("saturated_fraction_min", 0.8),
+        ("saturation_low", 15),
+        ("saturation_high", 238),
+        ("tile_size_px", 512),
+        ("tiles_per_page", 19),
+        ("payload_repetitions", 5),
+        ("bit_replication", 4),
+        ("bit_confidence_min", 0.61),
+        ("pilot_score_min", 0.21),
+        ("max_geometry_hypotheses", 7),
+        ("geometry_ratio_tolerance", 0.002),
+        ("crop_retained_scales", (0.8,)),
+        ("resize_interpolation", "INTER_LINEAR"),
+    ],
+)
+def test_v3_candidate_identity_covers_every_mutable_serialized_field(field, value):
+    profile = load_v3_profiles()[0]
+
+    assert candidate_identifier_v3(replace(profile, **{field: value})) != (
+        candidate_identifier_v3(profile)
+    )
 
 
 def test_v3_candidate_identity_covers_spread_and_geometry_fields():

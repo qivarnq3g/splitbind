@@ -79,6 +79,8 @@ def load_v3_profiles() -> tuple[FingerprintV3Profile, ...]:
     if tile_sizes != _EXPECTED_TILE_SIZES or repetitions != _EXPECTED_REPETITIONS:
         raise ValueError("sweep must use the frozen V3 tile sizes and repetitions")
 
+    if b"\r" in raw:
+        raise ValueError("V3 fingerprint candidate contract must use LF line endings")
     contract_sha256 = sha256(raw).digest()
     profiles = tuple(
         FingerprintV3Profile(
