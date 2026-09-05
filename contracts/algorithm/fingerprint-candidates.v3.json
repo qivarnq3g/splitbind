@@ -1,0 +1,24 @@
+{
+  "schema_version": 3,
+  "fixed": {
+    "qim_delta": 32.0,
+    "pilot_strength_rms": 2.0,
+    "spread_delta": 4.0,
+    "spread_chips_per_bit": 64,
+    "saturated_fraction_min": 0.75,
+    "saturation_low": 16,
+    "saturation_high": 239,
+    "tiles_per_page": 18,
+    "bit_replication": 3,
+    "bit_confidence_min": 0.6,
+    "pilot_score_min": 0.2,
+    "max_geometry_hypotheses": 8,
+    "geometry_ratio_tolerance": 0.001,
+    "crop_retained_scales": [0.8660254037844386],
+    "resize_interpolation": "INTER_CUBIC"
+  },
+  "sweep": {
+    "tile_size_px": [384, 512],
+    "payload_repetitions": [3, 5]
+  }
+}
