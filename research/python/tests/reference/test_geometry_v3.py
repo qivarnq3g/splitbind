@@ -268,3 +268,52 @@ def test_geometry_stops_at_profile_limit_before_running_fallback(profile, monkey
     )
 
     assert [hypothesis.kind for hypothesis in hypotheses] == ["identity"]
+
+
+def test_geometry_search_does_not_invent_sync_when_limit_skips_fallback(
+    profile, monkeypatch
+):
+    """Catches fabricated alignment evidence when shape priors fill the limit."""
+
+    limited_profile = replace(profile, max_geometry_hypotheses=1)
+
+    def forbidden_fallback(*_args, **_kwargs):
+        raise AssertionError("fallback must not run after the hypothesis limit")
+
+    monkeypatch.setattr(geometry_module, "align_page_v2", forbidden_fallback)
+
+    result = geometry_module.search_geometry_v3(
+        np.zeros((64, 128, 3), np.uint8),
+        KEY,
+        0,
+        (64, 128),
+        limited_profile,
+    )
+
+    assert [hypothesis.kind for hypothesis in result.hypotheses] == ["identity"]
+    assert result.sync_reason is None
+
+
+@pytest.mark.parametrize("reason", ["insufficient_sync_evidence", "geometry_rejected"])
+def test_geometry_search_retains_observed_empty_fallback_reason(profile, monkeypatch, reason):
+    monkeypatch.setattr(
+        geometry_module, "align_page_v2",
+        lambda *_args: AlignmentV2Result(None, None, 0.0, 1, reason),
+    )
+    result = geometry_module.search_geometry_v3(
+        np.zeros((64, 100, 3), np.uint8), KEY, 0, (96, 192), profile
+    )
+    assert result.hypotheses == ()
+    assert result.sync_reason == reason
+
+
+def test_geometry_search_retains_shape_prior_when_fallback_rejected(profile, monkeypatch):
+    monkeypatch.setattr(
+        geometry_module, "align_page_v2",
+        lambda *_args: AlignmentV2Result(None, None, 0.0, 1, "geometry_rejected"),
+    )
+    result = geometry_module.search_geometry_v3(
+        np.zeros((64, 128, 3), np.uint8), KEY, 0, (64, 128), profile
+    )
+    assert [item.kind for item in result.hypotheses] == ["identity"]
+    assert result.sync_reason == "geometry_rejected"

@@ -27,6 +27,14 @@ class GeometryHypothesisV3:
     score: float
 
 
+@dataclass(frozen=True, slots=True)
+class GeometrySearchV3:
+    hypotheses: tuple[GeometryHypothesisV3, ...]
+    sync_reason: (
+        Literal["aligned", "insufficient_sync_evidence", "geometry_rejected"] | None
+    )
+
+
 def geometry_hypotheses_v3(
     page: NDArray[np.uint8],
     key: bytes,
@@ -36,6 +44,19 @@ def geometry_hypotheses_v3(
     orb_template: SyncTemplate | None = None,
 ) -> tuple[GeometryHypothesisV3, ...]:
     """Return a bounded, shape-prior-first set of canonical V3 candidates."""
+
+    return search_geometry_v3(page, key, page_index, canonical_shape, profile, orb_template).hypotheses
+
+
+def search_geometry_v3(
+    page: NDArray[np.uint8],
+    key: bytes,
+    page_index: int,
+    canonical_shape: tuple[int, int],
+    profile: FingerprintV3Profile,
+    orb_template: SyncTemplate | None = None,
+) -> GeometrySearchV3:
+    """Keep accepted priors and the observed sync reason as separate evidence."""
 
     attacked = _validate_page(page)
     canonical_height, canonical_width = _validate_shape(canonical_shape)
@@ -101,7 +122,7 @@ def geometry_hypotheses_v3(
         add("pure_resize", resized, resize_matrix, 1.0)
 
     if len(hypotheses) >= profile.max_geometry_hypotheses:
-        return tuple(hypotheses)
+        return GeometrySearchV3(tuple(hypotheses), None)
 
     if ratios_agree and source_height <= canonical_height and source_width <= canonical_width:
         for retained_scale in profile.crop_retained_scales:
@@ -137,7 +158,7 @@ def geometry_hypotheses_v3(
                 break
 
     if len(hypotheses) >= profile.max_geometry_hypotheses:
-        return tuple(hypotheses)
+        return GeometrySearchV3(tuple(hypotheses), None)
 
     fallback = align_page_v2(
         attacked,
@@ -159,7 +180,7 @@ def geometry_hypotheses_v3(
             fallback.homography,
             float(fallback.pilot_score),
         )
-    return tuple(hypotheses)
+    return GeometrySearchV3(tuple(hypotheses), fallback.reason)
 
 
 def _validate_page(page: object) -> NDArray[np.uint8]:
