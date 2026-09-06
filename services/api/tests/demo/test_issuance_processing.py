@@ -1,17 +1,25 @@
 import hashlib
+import io
 import tempfile
 import threading
 import uuid
 from datetime import timedelta
 from pathlib import Path
 
+import numpy as np
 import pypdfium2 as pdfium
 import pytest
+import django
+from pypdf import PdfReader
+from pypdf import PdfWriter
+from pypdf.generic import NameObject, NumberObject
 from django.core.exceptions import ValidationError
 from django.db import close_old_connections, connection
 from django.db.models import QuerySet
 from django.test import override_settings
 from django.utils import timezone
+
+django.setup()
 
 from splitbind.access.models import Organization, Recipient, Role, User
 from splitbind.demo import issuance as issuance_module
@@ -19,11 +27,15 @@ from splitbind.demo.issuance import (
     FROZEN_CANDIDATE_IDENTIFIER_HEX,
     DemoIssuanceError,
     _build_issuance_pdf,
+    _canonicalize_page,
+    _select_frozen_candidate,
     process_issuance_job,
 )
 from splitbind.documents.models import Document, Issuance, Manifest
 from splitbind.integrations.storage.fake import FakeObjectStorage
 from splitbind.jobs.models import Job, JobKind, JobResultReceipt, JobStatus
+from splitbind_ref.fingerprint_v2 import decode_fingerprint_v2
+from splitbind_bench.pdf_fidelity import assess_pdf_fidelity
 from splitbind.uploads.models import PromotionStatus, UploadPurpose, UploadRequest
 
 from .fixtures import blank_pdf_bytes, encrypted_pdf_bytes, synthetic_pdf_bytes
@@ -174,7 +186,7 @@ def test_result_commit_locks_job_without_nullable_join(
 
 @pytest.mark.django_db
 @override_settings(SPLITBIND_DEMO_MODE=True)
-def test_real_one_page_issuance_stores_image_only_pdf_and_commits_exact_result(
+def test_real_one_page_issuance_preserves_page_size_and_uses_lossless_image(
     processing_issuance,
     monkeypatch,
 ):
@@ -238,7 +250,7 @@ def test_real_one_page_issuance_stores_image_only_pdf_and_commits_exact_result(
         assert len(output_pdf) == 1
         page = output_pdf[0]
         try:
-            assert page.get_size() == (1152.0, 2304.0)
+            assert page.get_size() == (288.0, 384.0)
             assert [item.type for item in page.get_objects()] == [
                 pdfium.raw.FPDF_PAGEOBJ_IMAGE
             ]
@@ -249,13 +261,127 @@ def test_real_one_page_issuance_stores_image_only_pdf_and_commits_exact_result(
                 text_page.close()
             rendered = page.render(scale=1)
             try:
-                assert (rendered.height, rendered.width) == (2304, 1152)
+                assert (rendered.height, rendered.width) == (384, 288)
             finally:
                 rendered.close()
         finally:
             page.close()
     finally:
         output_pdf.close()
+
+
+@pytest.mark.parametrize("page_count", [2, 5])
+def test_multi_page_artifact_keeps_every_page_image_only_and_page_index_decodable(
+    page_count,
+):
+    issuance_id = uuid.UUID("22222222-2222-4222-8222-222222222222")
+    fingerprint_key = b"m" * 32
+    output_bytes, actual_page_count, candidate_identifier = _build_issuance_pdf(
+        synthetic_pdf_bytes(page_count=page_count),
+        issuance_id=issuance_id,
+        fingerprint_key=fingerprint_key,
+    )
+    candidate, expected_identifier = _select_frozen_candidate()
+
+    assert actual_page_count == page_count
+    assert candidate_identifier == expected_identifier
+    output_pdf = pdfium.PdfDocument(output_bytes)
+    try:
+        assert len(output_pdf) == page_count
+        for page_index in range(page_count):
+            page = output_pdf[page_index]
+            try:
+                assert page.get_size() == (288.0, 384.0)
+                assert [item.type for item in page.get_objects()] == [
+                    pdfium.raw.FPDF_PAGEOBJ_IMAGE
+                ]
+                text_page = page.get_textpage()
+                try:
+                    assert text_page.count_chars() == 0
+                finally:
+                    text_page.close()
+                rendered = page.render(
+                    scale=2,
+                    fill_color=(255, 255, 255, 255),
+                    draw_annots=True,
+                )
+                try:
+                    assert (rendered.height, rendered.width) == (768, 576)
+                    raster = np.asarray(rendered.to_numpy(), dtype=np.uint8).copy()
+                finally:
+                    rendered.close()
+                if raster.shape[2] == 4:
+                    raster = raster[:, :, :3]
+                decision = decode_fingerprint_v2(
+                    np.ascontiguousarray(_canonicalize_page(raster).canvas),
+                    fingerprint_key,
+                    page_index,
+                    (2304, 1152),
+                    (candidate,),
+                )
+                assert decision.status == "decoded"
+                assert decision.issuance_id == issuance_id
+            finally:
+                page.close()
+    finally:
+        output_pdf.close()
+
+
+def test_output_page_image_is_flate_compressed_not_lossy_jpeg():
+    output, _page_count, _candidate = _build_issuance_pdf(
+        synthetic_pdf_bytes(),
+        issuance_id=uuid.UUID("33333333-3333-4333-8333-333333333333"),
+        fingerprint_key=b"f" * 32,
+    )
+    reader = PdfReader(__import__("io").BytesIO(output), strict=True)
+    image = reader.pages[0]["/Resources"]["/XObject"]["/Im0"].get_object()
+    assert image["/Filter"] == "/FlateDecode"
+    assert image["/ColorSpace"] == "/DeviceRGB"
+
+
+def test_output_preserves_rotated_physical_size_and_user_unit():
+    source_reader = PdfReader(io.BytesIO(synthetic_pdf_bytes()), strict=True)
+    source_page = source_reader.pages[0]
+    source_page.rotate(90)
+    source_page[NameObject("/UserUnit")] = NumberObject(2)
+    writer = PdfWriter()
+    writer.add_page(source_page)
+    source = io.BytesIO()
+    writer.write(source)
+
+    output, page_count, _candidate = _build_issuance_pdf(
+        source.getvalue(),
+        issuance_id=uuid.UUID("44444444-4444-4444-8444-444444444444"),
+        fingerprint_key=b"u" * 32,
+    )
+
+    document = pdfium.PdfDocument(output)
+    try:
+        assert page_count == 1
+        assert document.get_page_size(0) == (768.0, 576.0)
+    finally:
+        document.close()
+
+
+def test_vector_fixture_final_pdf_meets_fidelity_gate():
+    source = (
+        Path(__file__).resolve().parents[4]
+        / "fixtures"
+        / "corpus"
+        / "generated"
+        / "clean-one-page-vector.pdf"
+    ).read_bytes()
+    output, _page_count, _candidate = _build_issuance_pdf(
+        source,
+        issuance_id=uuid.UUID("55555555-5555-4555-8555-555555555555"),
+        fingerprint_key=b"v" * 32,
+    )
+
+    report = assess_pdf_fidelity(source, output)
+
+    assert report["passed"] is True
+    assert report["pages"][0]["psnr_db"] >= 38
+    assert report["pages"][0]["ssim"] >= 0.95
 
 
 @pytest.mark.django_db

@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import math
+from io import BytesIO
 import os
 import re
 import tempfile
 import time
 import uuid
+import zlib
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 import cv2
 import numpy as np
 import pypdfium2 as pdfium
+from pypdf import PdfReader
+from pypdf.errors import PyPdfError
 from django.conf import settings
 from django.db import transaction
 
@@ -65,11 +69,25 @@ class _ProcessingClaim:
     owner_token: uuid.UUID
 
 
-def process_issuance_job(*, job_id, storage) -> IssuanceProcessingResult:
+@dataclass(frozen=True, slots=True)
+class _CanonicalizedPage:
+    canvas: np.ndarray
+    left: int
+    top: int
+    width: int
+    height: int
+
+
+def process_issuance_job(
+    *, job_id, storage, owner_token: uuid.UUID | None = None
+) -> IssuanceProcessingResult:
     if not settings.SPLITBIND_DEMO_MODE:
         raise DemoIssuanceError("DEMO_MODE_DISABLED")
     started = time.monotonic()
-    acquired = _acquire_processing_claim(job_id=job_id, owner_token=uuid.uuid4())
+    acquired = _acquire_processing_claim(
+        job_id=job_id,
+        owner_token=owner_token or uuid.uuid4(),
+    )
     if isinstance(acquired, IssuanceProcessingResult):
         return acquired
     if acquired is None:
@@ -109,7 +127,25 @@ def _acquire_processing_claim(*, job_id, owner_token):
         DemoIssuanceResult.objects.select_for_update().filter(job_id=job.id).first()
     )
     if existing is not None:
-        raise DemoIssuanceError("DEMO_JOB_RESULT_OWNED")
+        if (
+            existing.owner_token != owner_token
+            or existing.output_state != DemoOutputState.RESERVED
+            or existing.organization_id != job.organization_id
+            or existing.issuance_id != issuance.id
+            or existing.attempt != job.attempt
+        ):
+            raise DemoIssuanceError("DEMO_JOB_RESULT_OWNED")
+        return _ProcessingClaim(
+            job_id=job.id,
+            organization_id=job.organization_id,
+            issuance_id=issuance.id,
+            document_id=document.id,
+            attempt=job.attempt,
+            source_object_key=document.source_object_key,
+            expected_source_sha256=document.expected_source_sha256,
+            output_object_key=existing.output_object_key,
+            owner_token=owner_token,
+        )
 
     output_key = f"outputs/issuance/{job.organization_id}/{issuance.id}.pdf"
     evidence = DemoIssuanceResult(
@@ -369,8 +405,8 @@ def _acknowledge_stale_output_delete(
     )
     job = _locked_job(claim.job_id)
     evidence = _locked_evidence(claim)
-    evidence.output_state = DemoOutputState.CLEANED
-    evidence.safe_error_code = safe_error_code
+    evidence.output_state = DemoOutputState.CLEANUP_REQUIRED
+    evidence.safe_error_code = DEMO_STALE_RECOVERY_FENCE_CODE
     with _allow_demo_result_write():
         evidence.save(
             update_fields=[
@@ -650,14 +686,18 @@ def _build_issuance_pdf(
         page_count = len(input_pdf)
         if not 1 <= page_count <= DEMO_MAX_PAGES:
             raise DemoIssuanceError("DEMO_PDF_PAGE_LIMIT")
-        _validate_raster_budget(input_pdf)
+        page_units = _source_page_units(source_pdf, page_count)
+        _validate_raster_budget(input_pdf, page_units)
+        input_pdf.init_forms()
 
-        encoded_pages: list[tuple[bytes, int, int]] = []
+        encoded_pages: list[tuple[bytes, int, int, float, float]] = []
         for page_index in range(page_count):
             source_page = input_pdf[page_index]
             try:
+                page_width, page_height = source_page.get_size()
+                user_unit = page_units[page_index]
                 bitmap = source_page.render(
-                    scale=SOURCE_RENDER_SCALE,
+                    scale=SOURCE_RENDER_SCALE * user_unit,
                     fill_color=(255, 255, 255, 255),
                     draw_annots=True,
                 )
@@ -667,9 +707,9 @@ def _build_issuance_pdf(
                     bitmap.close()
             finally:
                 source_page.close()
-            canvas = _canonicalize_page(rendered)
+            canonical = _canonicalize_page(rendered)
             embedded = embed_fingerprint_v2(
-                canvas,
+                canonical.canvas,
                 FingerprintV2Context(
                     issuance_id=issuance_id,
                     fingerprint_key=fingerprint_key,
@@ -677,59 +717,102 @@ def _build_issuance_pdf(
                 ),
                 candidate,
             ).image
-            encoded_pages.append(_encode_jpeg_page(embedded))
+            content = embedded[
+                canonical.top : canonical.top + canonical.height,
+                canonical.left : canonical.left + canonical.width,
+            ]
+            source_height, source_width = rendered.shape[:2]
+            if content.shape[:2] != (source_height, source_width):
+                content = cv2.resize(
+                    content,
+                    (source_width, source_height),
+                    interpolation=cv2.INTER_CUBIC,
+                )
+            encoded_pages.append(
+                _encode_lossless_page(
+                    content,
+                    page_width_pt=page_width * user_unit,
+                    page_height_pt=page_height * user_unit,
+                )
+            )
 
         return _serialize_image_only_pdf(encoded_pages), page_count, candidate_identifier
     finally:
         input_pdf.close()
 
 
-def _validate_raster_budget(document: pdfium.PdfDocument) -> None:
+def _source_page_units(source_pdf: bytes, page_count: int) -> tuple[float, ...]:
+    try:
+        with BytesIO(source_pdf) as stream:
+            reader = PdfReader(stream, strict=True)
+            if reader.is_encrypted or len(reader.pages) != page_count:
+                raise DemoIssuanceError("DEMO_PDF_INVALID")
+            units = tuple(float(page.user_unit) for page in reader.pages)
+    except DemoIssuanceError:
+        raise
+    except (PyPdfError, TypeError, ValueError, OverflowError) as error:
+        raise DemoIssuanceError("DEMO_PDF_INVALID") from error
+    if any(not math.isfinite(unit) or not 0 < unit <= 75_000 for unit in units):
+        raise DemoIssuanceError("DEMO_PDF_INVALID")
+    return units
+
+
+def _validate_raster_budget(
+    document: pdfium.PdfDocument, page_units: tuple[float, ...]
+) -> None:
     canvas_pixels = CANONICAL_CANVAS[0] * CANONICAL_CANVAS[1]
     cumulative_pixels = 0
     for page_index in range(len(document)):
         width, height = document.get_page_size(page_index)
         if not all(math.isfinite(value) and value > 0 for value in (width, height)):
             raise DemoIssuanceError("DEMO_PDF_INVALID")
-        render_width = math.ceil(width * SOURCE_RENDER_SCALE)
-        render_height = math.ceil(height * SOURCE_RENDER_SCALE)
+        user_unit = page_units[page_index]
+        render_width = math.ceil(width * SOURCE_RENDER_SCALE * user_unit)
+        render_height = math.ceil(height * SOURCE_RENDER_SCALE * user_unit)
         cumulative_pixels += max(render_width * render_height, canvas_pixels)
         if cumulative_pixels > DEMO_MAX_RASTER_PIXELS:
             raise DemoIssuanceError("DEMO_PDF_RASTER_LIMIT")
 
 
-def _canonicalize_page(rendered: np.ndarray) -> np.ndarray:
+def _canonicalize_page(rendered: np.ndarray) -> _CanonicalizedPage:
     if rendered.ndim != 3 or rendered.shape[2] not in (3, 4):
         raise DemoIssuanceError("DEMO_PDF_RENDER_FAILED")
     if rendered.shape[2] == 4:
         rendered = rendered[:, :, :3]
     canvas_height, canvas_width = CANONICAL_CANVAS
     source_height, source_width = rendered.shape[:2]
-    scale = min(canvas_width / source_width, canvas_height / source_height)
-    target_width = max(1, min(canvas_width, round(source_width * scale)))
-    target_height = max(1, min(canvas_height, round(source_height * scale)))
-    interpolation = cv2.INTER_AREA if scale < 1.0 else cv2.INTER_CUBIC
-    fitted = cv2.resize(rendered, (target_width, target_height), interpolation=interpolation)
-    canvas = np.full((canvas_height, canvas_width, 3), 255, dtype=np.uint8)
-    left = (canvas_width - target_width) // 2
-    top = (canvas_height - target_height) // 2
-    canvas[top : top + target_height, left : left + target_width] = fitted
-    return canvas
-
-
-def _encode_jpeg_page(image: np.ndarray) -> tuple[bytes, int, int]:
-    height, width = image.shape[:2]
-    encoded_ok, encoded = cv2.imencode(
-        ".jpg",
-        image,
-        [cv2.IMWRITE_JPEG_QUALITY, 95, cv2.IMWRITE_JPEG_OPTIMIZE, 0],
+    interpolation = (
+        cv2.INTER_AREA
+        if canvas_width < source_width and canvas_height < source_height
+        else cv2.INTER_CUBIC
     )
-    if not encoded_ok:
+    canvas = cv2.resize(
+        rendered,
+        (canvas_width, canvas_height),
+        interpolation=interpolation,
+    )
+    return _CanonicalizedPage(canvas, 0, 0, canvas_width, canvas_height)
+
+
+def _encode_lossless_page(
+    image: np.ndarray, *, page_width_pt: float, page_height_pt: float
+) -> tuple[bytes, int, int, float, float]:
+    height, width = image.shape[:2]
+    if image.dtype != np.uint8 or image.ndim != 3 or image.shape[2] != 3:
         raise DemoIssuanceError("DEMO_PDF_OUTPUT_FAILED")
-    return encoded.tobytes(), width, height
+    rgb = cv2.cvtColor(np.ascontiguousarray(image), cv2.COLOR_BGR2RGB)
+    return zlib.compress(rgb.tobytes(), level=9), width, height, page_width_pt, page_height_pt
 
 
-def _serialize_image_only_pdf(encoded_pages: list[tuple[bytes, int, int]]) -> bytes:
+def _pdf_number(value: float) -> bytes:
+    if not math.isfinite(value) or value <= 0:
+        raise DemoIssuanceError("DEMO_PDF_OUTPUT_FAILED")
+    return format(value, ".6f").rstrip("0").rstrip(".").encode("ascii")
+
+
+def _serialize_image_only_pdf(
+    encoded_pages: list[tuple[bytes, int, int, float, float]]
+) -> bytes:
     page_refs = [3 + page_index * 3 for page_index in range(len(encoded_pages))]
     objects: list[bytes] = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
@@ -741,7 +824,9 @@ def _serialize_image_only_pdf(encoded_pages: list[tuple[bytes, int, int]]) -> by
             + b"] >>"
         ),
     ]
-    for page_index, (jpeg, width, height) in enumerate(encoded_pages):
+    for page_index, (compressed_rgb, width, height, page_width, page_height) in enumerate(
+        encoded_pages
+    ):
         page_ref = page_refs[page_index]
         image_ref = page_ref + 1
         content_ref = page_ref + 2
@@ -749,9 +834,9 @@ def _serialize_image_only_pdf(encoded_pages: list[tuple[bytes, int, int]]) -> by
             [
                 (
                     b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 "
-                    + str(width).encode("ascii")
+                    + _pdf_number(page_width)
                     + b" "
-                    + str(height).encode("ascii")
+                    + _pdf_number(page_height)
                     + b"] /Resources << /XObject << /Im0 "
                     + str(image_ref).encode("ascii")
                     + b" 0 R >> >> /Contents "
@@ -763,17 +848,17 @@ def _serialize_image_only_pdf(encoded_pages: list[tuple[bytes, int, int]]) -> by
                     + str(width).encode("ascii")
                     + b" /Height "
                     + str(height).encode("ascii")
-                    + b" /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length "
-                    + str(len(jpeg)).encode("ascii")
+                    + b" /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length "
+                    + str(len(compressed_rgb)).encode("ascii")
                     + b" >>\nstream\n"
-                    + jpeg
+                    + compressed_rgb
                     + b"\nendstream"
                 ),
                 _pdf_stream(
                     b"q\n"
-                    + str(width).encode("ascii")
+                    + _pdf_number(page_width)
                     + b" 0 0 "
-                    + str(height).encode("ascii")
+                    + _pdf_number(page_height)
                     + b" 0 0 cm\n/Im0 Do\nQ\n"
                 ),
             ]

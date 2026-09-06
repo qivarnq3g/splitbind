@@ -24,6 +24,8 @@ demo = [
     "numpy==2.4.6",
     "opencv-python-headless==4.13.0.92",
     "pypdfium2==5.13.0",
+    "pypdf==6.16.2",
+    "reedsolo==1.7.0",
 ]
 test = [
     "pytest==9.1.1",

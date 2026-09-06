@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from io import BytesIO
 import math
 import struct
 import tempfile
@@ -12,6 +13,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 import pypdfium2 as pdfium
+from pypdf import PdfReader
+from pypdf.errors import PyPdfError
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -19,7 +22,8 @@ from django.utils import timezone
 
 from splitbind.demo.capabilities import DEMO_ALGORITHM_LABEL
 from splitbind.demo.issuance import DemoIssuanceError as DemoIssuanceProcessingError
-from splitbind.demo.issuance import _load_fingerprint_key, _receipt_id as _issuance_receipt_id
+from splitbind.demo.issuance import _canonicalize_page, _load_fingerprint_key
+from splitbind.demo.issuance import _receipt_id as _issuance_receipt_id
 from splitbind.demo.issuance import _select_frozen_candidate
 from splitbind.access.models import SigningKey
 from splitbind.demo.models import (
@@ -48,7 +52,8 @@ from splitbind_ref.fingerprint_v2 import DecodeV2Decision, decode_fingerprint_v2
 DEMO_MAX_INPUT_BYTES = 10 * 1024 * 1024
 DEMO_MAX_PAGES = 5
 DEMO_MAX_RASTER_PIXELS = 40_000_000
-PDF_RENDER_SCALE = 1.0
+PDF_RENDER_SCALE = 2.0
+_LEGACY_CANONICAL_PAGE_CONTENT = b"q\n1152 0 0 2304 0 0 cm\n/Im0 Do\nQ\n"
 _BASE_LIMITATIONS = DEMO_VERIFICATION_LIMITATIONS
 
 
@@ -88,11 +93,16 @@ class _SourceResolution:
     limitations: tuple[str, ...]
 
 
-def process_verification_job(*, job_id, storage) -> VerificationProcessingResult:
+def process_verification_job(
+    *, job_id, storage, owner_token: uuid.UUID | None = None
+) -> VerificationProcessingResult:
     if not settings.SPLITBIND_DEMO_MODE:
         raise DemoVerificationError("DEMO_MODE_DISABLED")
     started = time.monotonic()
-    acquired = _acquire_processing_claim(job_id=job_id, owner_token=uuid.uuid4())
+    acquired = _acquire_processing_claim(
+        job_id=job_id,
+        owner_token=owner_token or uuid.uuid4(),
+    )
     if isinstance(acquired, VerificationProcessingResult):
         return acquired
     if acquired is None:
@@ -190,8 +200,28 @@ def _acquire_processing_claim(*, job_id, owner_token):
         return _load_replay_result(job, verification, upload)
     if job.status != JobStatus.PROCESSING:
         raise DemoVerificationError("DEMO_VERIFICATION_JOB_INVALID")
-    if DemoVerificationResult.objects.select_for_update().filter(job_id=job.id).exists():
-        raise DemoVerificationError("DEMO_JOB_RESULT_OWNED")
+    existing = (
+        DemoVerificationResult.objects.select_for_update().filter(job_id=job.id).first()
+    )
+    if existing is not None:
+        if (
+            existing.owner_token != owner_token
+            or existing.result_state != DemoVerificationState.RESERVED
+            or existing.organization_id != job.organization_id
+            or existing.verification_id != verification.id
+            or existing.attempt != job.attempt
+        ):
+            raise DemoVerificationError("DEMO_JOB_RESULT_OWNED")
+        return _ProcessingClaim(
+            job_id=job.id,
+            organization_id=job.organization_id,
+            verification_id=verification.id,
+            upload_id=upload.id,
+            attempt=job.attempt,
+            input_object_key=upload.promotion_target_key,
+            expected_input_sha256=upload.expected_sha256,
+            owner_token=owner_token,
+        )
 
     evidence = DemoVerificationResult(
         organization_id=job.organization_id,
@@ -250,13 +280,15 @@ def _decode_pdf(source: bytes, *, fingerprint_key: bytes, candidate) -> tuple[_D
         page_count = len(document)
         if not 1 <= page_count <= DEMO_MAX_PAGES:
             raise DemoVerificationError("DEMO_PDF_PAGE_LIMIT")
-        _validate_pdf_raster_budget(document)
+        _page_units, render_scales = _pdf_page_metadata(source, page_count)
+        _validate_pdf_raster_budget(document, render_scales)
+        document.init_forms()
         decisions: list[DecodeV2Decision] = []
         for page_index in range(page_count):
             page = document[page_index]
             try:
                 bitmap = page.render(
-                    scale=PDF_RENDER_SCALE,
+                    scale=render_scales[page_index],
                     fill_color=(255, 255, 255, 255),
                     draw_annots=True,
                 )
@@ -272,7 +304,7 @@ def _decode_pdf(source: bytes, *, fingerprint_key: bytes, candidate) -> tuple[_D
                 raster = raster[:, :, :3]
             decisions.append(
                 decode_fingerprint_v2(
-                    np.ascontiguousarray(raster),
+                    np.ascontiguousarray(_canonicalize_page(raster).canvas),
                     fingerprint_key,
                     page_index,
                     DEMO_CANONICAL_CANVAS,
@@ -330,14 +362,18 @@ def _decode_image(
         or raster.shape != (height, width, 3)
     ):
         raise DemoVerificationError("DEMO_IMAGE_INVALID")
-    decision = decode_fingerprint_v2(
-        np.ascontiguousarray(raster),
-        fingerprint_key,
-        0,
-        DEMO_CANONICAL_CANVAS,
-        (candidate,),
-    )
-    return _aggregate_decisions([decision]), 1
+    contiguous = np.ascontiguousarray(_canonicalize_page(raster).canvas)
+    decisions = [
+        decode_fingerprint_v2(
+            contiguous,
+            fingerprint_key,
+            page_index,
+            DEMO_CANONICAL_CANVAS,
+            (candidate,),
+        )
+        for page_index in range(DEMO_MAX_PAGES)
+    ]
+    return _aggregate_decisions(decisions), 1
 
 
 def _jpeg_dimensions(source: bytes) -> tuple[int, int]:
@@ -393,14 +429,72 @@ def _validate_image_dimensions(*, width: int, height: int) -> None:
         raise DemoVerificationError("DEMO_INPUT_RASTER_LIMIT")
 
 
-def _validate_pdf_raster_budget(document: pdfium.PdfDocument) -> None:
+def _pdf_page_metadata(
+    source: bytes, page_count: int
+) -> tuple[tuple[float, ...], tuple[float, ...]]:
+    try:
+        with BytesIO(source) as stream:
+            reader = PdfReader(stream, strict=True)
+            if reader.is_encrypted or len(reader.pages) != page_count:
+                raise DemoVerificationError("DEMO_PDF_INVALID")
+            units = tuple(float(page.user_unit) for page in reader.pages)
+            if any(not math.isfinite(unit) or not 0 < unit <= 75_000 for unit in units):
+                raise DemoVerificationError("DEMO_PDF_INVALID")
+            render_scales = tuple(
+                1.0 if _is_legacy_canonical_page(page, unit) else PDF_RENDER_SCALE * unit
+                for page, unit in zip(reader.pages, units)
+            )
+    except DemoVerificationError:
+        raise
+    except (PyPdfError, TypeError, ValueError, OverflowError, KeyError) as error:
+        raise DemoVerificationError("DEMO_PDF_INVALID") from error
+    return units, render_scales
+
+
+def _is_legacy_canonical_page(page, user_unit: float) -> bool:
+    if user_unit != 1.0 or page.rotation != 0:
+        return False
+    expected_box = (0.0, 0.0, 1152.0, 2304.0)
+    if tuple(float(value) for value in page.mediabox) != expected_box:
+        return False
+    if tuple(float(value) for value in page.cropbox) != expected_box:
+        return False
+    contents = page.get_contents()
+    if contents is None or contents.get_data() != _LEGACY_CANONICAL_PAGE_CONTENT:
+        return False
+    resources = page.get("/Resources")
+    if resources is None:
+        return False
+    resources = resources.get_object()
+    if set(resources) != {"/XObject"}:
+        return False
+    xobjects = resources.get("/XObject")
+    if xobjects is None:
+        return False
+    xobjects = xobjects.get_object()
+    if set(xobjects) != {"/Im0"}:
+        return False
+    image = xobjects["/Im0"].get_object()
+    return (
+        image.get("/Subtype") == "/Image"
+        and image.get("/Filter") == "/DCTDecode"
+        and int(image.get("/Width", 0)) == 1152
+        and int(image.get("/Height", 0)) == 2304
+        and image.get("/ColorSpace") == "/DeviceRGB"
+        and int(image.get("/BitsPerComponent", 0)) == 8
+    )
+
+
+def _validate_pdf_raster_budget(
+    document: pdfium.PdfDocument, render_scales: tuple[float, ...]
+) -> None:
     cumulative_pixels = 0
     for page_index in range(len(document)):
         width, height = document.get_page_size(page_index)
         if not all(math.isfinite(value) and value > 0 for value in (width, height)):
             raise DemoVerificationError("DEMO_PDF_INVALID")
-        render_width = math.ceil(width * PDF_RENDER_SCALE)
-        render_height = math.ceil(height * PDF_RENDER_SCALE)
+        render_width = math.ceil(width * render_scales[page_index])
+        render_height = math.ceil(height * render_scales[page_index])
         cumulative_pixels += render_width * render_height
         if cumulative_pixels > DEMO_MAX_RASTER_PIXELS:
             raise DemoVerificationError("DEMO_INPUT_RASTER_LIMIT")

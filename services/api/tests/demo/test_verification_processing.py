@@ -1,5 +1,6 @@
 import hashlib
 import importlib
+import io
 import struct
 import tempfile
 import uuid
@@ -7,15 +8,29 @@ from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
+import cv2
+import django
+import numpy as np
+import pypdfium2 as pdfium
 import pytest
-from django.core.exceptions import ValidationError
+from pypdf import PdfReader, PdfWriter
+from pypdf.generic import NameObject, NumberObject
 from django.apps import apps
+from django.core.exceptions import ValidationError
 from django.db import connection
+from django.test import Client
 from django.test import override_settings
 from django.utils import timezone
 
+django.setup()
+
 from splitbind.access.models import Organization, Recipient, Role, User
-from splitbind.demo.issuance import _build_issuance_pdf, _receipt_id
+from splitbind.demo.issuance import _build_issuance_pdf, _receipt_id, _select_frozen_candidate
+from splitbind.demo.verification import (
+    _decode_pdf,
+    _pdf_page_metadata,
+    _validate_pdf_raster_budget,
+)
 from splitbind.demo.models import (
     DEMO_CANONICAL_CANVAS,
     DEMO_FROZEN_CANDIDATE_IDENTIFIER,
@@ -75,6 +90,190 @@ def issued_pdf_bytes():
     return output
 
 
+@pytest.fixture(scope="module")
+def issued_five_page_pdf_bytes():
+    output, page_count, candidate_identifier = _build_issuance_pdf(
+        synthetic_pdf_bytes(page_count=5),
+        issuance_id=ISSUANCE_ID,
+        fingerprint_key=FINGERPRINT_KEY,
+    )
+    assert page_count == 5
+    assert candidate_identifier == DEMO_FROZEN_CANDIDATE_IDENTIFIER
+    return output
+
+
+def _issued_page_image(
+    output: bytes, *, page_index: int, extension: str, render_scale: float = 2
+) -> bytes:
+    document = pdfium.PdfDocument(output)
+    try:
+        page = document[page_index]
+        try:
+            bitmap = page.render(
+                scale=render_scale,
+                fill_color=(255, 255, 255, 255),
+                draw_annots=True,
+            )
+            try:
+                raster = np.asarray(bitmap.to_numpy(), dtype=np.uint8).copy()
+            finally:
+                bitmap.close()
+        finally:
+            page.close()
+    finally:
+        document.close()
+    if raster.shape[2] == 4:
+        raster = raster[:, :, :3]
+    options = [cv2.IMWRITE_JPEG_QUALITY, 100] if extension == ".jpg" else []
+    encoded_ok, encoded = cv2.imencode(extension, raster, options)
+    assert encoded_ok
+    return encoded.tobytes()
+
+
+def test_pdf_decode_honors_user_unit_for_equivalent_physical_page():
+    output, _page_count, _candidate_id = _build_issuance_pdf(
+        synthetic_pdf_bytes(), issuance_id=ISSUANCE_ID, fingerprint_key=FINGERPRINT_KEY
+    )
+    writer = PdfWriter(clone_from=io.BytesIO(output))
+    page = writer.pages[0]
+    page.scale_by(0.5)
+    page[NameObject("/UserUnit")] = NumberObject(2)
+    rewritten = io.BytesIO()
+    writer.write(rewritten)
+    candidate, _identifier = _select_frozen_candidate()
+
+    decision, page_count = _decode_pdf(
+        rewritten.getvalue(), fingerprint_key=FINGERPRINT_KEY, candidate=candidate
+    )
+
+    assert page_count == 1
+    assert decision.status == "decoded"
+    assert decision.issuance_id == ISSUANCE_ID
+
+
+def test_legacy_canonical_pages_use_72_dpi_compatibility_scale():
+    output, _page_count, _candidate_id = _build_issuance_pdf(
+        synthetic_pdf_bytes(page_count=4),
+        issuance_id=ISSUANCE_ID,
+        fingerprint_key=FINGERPRINT_KEY,
+    )
+    reader = PdfReader(io.BytesIO(output), strict=True)
+    jpeg_pages = []
+    for page in reader.pages:
+        image = page["/Resources"]["/XObject"]["/Im0"].get_object()
+        height, width = int(image["/Height"]), int(image["/Width"])
+        rgb = np.frombuffer(image.get_data(), dtype=np.uint8).reshape(height, width, 3)
+        canonical = cv2.resize(rgb, (1152, 2304), interpolation=cv2.INTER_CUBIC)
+        encoded_ok, encoded = cv2.imencode(
+            ".jpg",
+            cv2.cvtColor(canonical, cv2.COLOR_RGB2BGR),
+            [cv2.IMWRITE_JPEG_QUALITY, 95],
+        )
+        assert encoded_ok
+        jpeg_pages.append(encoded.tobytes())
+    legacy = _legacy_image_only_pdf(jpeg_pages)
+
+    units, render_scales = _pdf_page_metadata(legacy, 4)
+
+    assert units == (1.0, 1.0, 1.0, 1.0)
+    assert render_scales == (1.0, 1.0, 1.0, 1.0)
+    document = pdfium.PdfDocument(legacy)
+    try:
+        _validate_pdf_raster_budget(document, render_scales)
+    finally:
+        document.close()
+    candidate, _identifier = _select_frozen_candidate()
+    decision, page_count = _decode_pdf(
+        legacy, fingerprint_key=FINGERPRINT_KEY, candidate=candidate
+    )
+    assert page_count == 4
+    assert decision.status == "decoded"
+    assert decision.issuance_id == ISSUANCE_ID
+
+
+def test_noncanonical_legacy_page_content_uses_physical_144_dpi_scale():
+    output, _page_count, _candidate_id = _build_issuance_pdf(
+        synthetic_pdf_bytes(),
+        issuance_id=ISSUANCE_ID,
+        fingerprint_key=FINGERPRINT_KEY,
+    )
+    reader = PdfReader(io.BytesIO(output), strict=True)
+    image = reader.pages[0]["/Resources"]["/XObject"]["/Im0"].get_object()
+    height, width = int(image["/Height"]), int(image["/Width"])
+    rgb = np.frombuffer(image.get_data(), dtype=np.uint8).reshape(height, width, 3)
+    canonical = cv2.resize(rgb, (1152, 2304), interpolation=cv2.INTER_CUBIC)
+    encoded_ok, encoded = cv2.imencode(
+        ".jpg",
+        cv2.cvtColor(canonical, cv2.COLOR_RGB2BGR),
+        [cv2.IMWRITE_JPEG_QUALITY, 95],
+    )
+    assert encoded_ok
+    half_page_content = b"q\n576 0 0 1152 0 0 cm\n/Im0 Do\nQ\n"
+    noncanonical = _legacy_image_only_pdf(
+        [encoded.tobytes()],
+        page_content=half_page_content,
+    )
+
+    units, render_scales = _pdf_page_metadata(noncanonical, 1)
+
+    assert units == (1.0,)
+    assert render_scales == (2.0,)
+
+
+def _legacy_image_only_pdf(
+    jpeg_pages: list[bytes],
+    *,
+    page_content: bytes = b"q\n1152 0 0 2304 0 0 cm\n/Im0 Do\nQ\n",
+) -> bytes:
+    page_refs = [3 + index * 3 for index in range(len(jpeg_pages))]
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Count "
+        + str(len(page_refs)).encode()
+        + b" /Kids ["
+        + b" ".join(f"{ref} 0 R".encode() for ref in page_refs)
+        + b"] >>",
+    ]
+    for index, jpeg in enumerate(jpeg_pages):
+        page_ref = page_refs[index]
+        image_ref, content_ref = page_ref + 1, page_ref + 2
+        content = page_content
+        objects.extend(
+            [
+                b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 1152 2304] "
+                b"/Resources << /XObject << /Im0 "
+                + f"{image_ref} 0 R".encode()
+                + b" >> >> /Contents "
+                + f"{content_ref} 0 R >>".encode(),
+                b"<< /Type /XObject /Subtype /Image /Width 1152 /Height 2304 "
+                b"/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length "
+                + str(len(jpeg)).encode()
+                + b" >>\nstream\n"
+                + jpeg
+                + b"\nendstream",
+                b"<< /Length "
+                + str(len(content)).encode()
+                + b" >>\nstream\n"
+                + content
+                + b"endstream",
+            ]
+        )
+    result = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+    offsets = [0]
+    for number, body in enumerate(objects, 1):
+        offsets.append(len(result))
+        result.extend(f"{number} 0 obj\n".encode() + body + b"\nendobj\n")
+    start = len(result)
+    result.extend(f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode())
+    for offset in offsets[1:]:
+        result.extend(f"{offset:010d} 00000 n \n".encode())
+    result.extend(
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
+        f"startxref\n{start}\n%%EOF\n".encode()
+    )
+    return bytes(result)
+
+
 def _promoted_upload(*, organization, actor, purpose, data):
     upload_id = uuid.uuid4()
     kind = "issuance" if purpose == UploadPurpose.ISSUANCE else "verification"
@@ -98,8 +297,8 @@ def _promoted_upload(*, organization, actor, purpose, data):
     return upload, target, expected_sha256
 
 
-def _record_committed_issuance(*, organization, actor, output):
-    source = synthetic_pdf_bytes(width=144, height=192)
+def _record_committed_issuance(*, organization, actor, output, page_count=1):
+    source = synthetic_pdf_bytes(page_count=page_count, width=144, height=192)
     upload, source_key, source_sha256 = _promoted_upload(
         organization=organization,
         actor=actor,
@@ -112,7 +311,7 @@ def _record_committed_issuance(*, organization, actor, output):
         upload_request=upload,
         source_object_key=source_key,
         expected_source_sha256=source_sha256,
-        page_count=1,
+        page_count=page_count,
     )
     recipient = Recipient.objects.create(
         organization=organization,
@@ -152,7 +351,7 @@ def _record_committed_issuance(*, organization, actor, output):
         canvas_width=DEMO_CANONICAL_CANVAS[1],
         input_sha256=source_sha256,
         output_sha256=output_sha256,
-        page_count=1,
+        page_count=page_count,
         processing_ms=1,
         limitations=list(DEMO_LIMITATIONS),
     )
@@ -392,6 +591,33 @@ def test_unrelated_valid_png_uses_magic_not_metadata_and_never_attributes_source
 
 @pytest.mark.django_db
 @override_settings(SPLITBIND_DEMO_MODE=True)
+def test_verification_api_projects_constrained_fields_from_real_demo_evidence(
+    monkeypatch,
+):
+    from splitbind.demo.verification import process_verification_job
+
+    monkeypatch.setenv("SPLITBIND_DEMO_FINGERPRINT_KEY_HEX", FINGERPRINT_KEY.hex())
+    context = _new_verification_context(synthetic_image_bytes(extension=".png"))
+    result = process_verification_job(job_id=context[0].id, storage=context[2])
+    client = Client()
+    client.force_login(context[1].requested_by)
+
+    response = client.get(f"/api/v1/verifications/{context[1].id}")
+
+    assert response.status_code == 200
+    evidence = response.json()["evidence"]
+    assert evidence["algorithm_label"] == "experimental_unreleased_fingerprint_v2"
+    assert evidence["decode_status"] == result.decode_status
+    assert evidence["limitations"][:4] == [
+        "fingerprint.experimental_unreleased_v2",
+        "fingerprint.not_gate_g1_evidence",
+        "evidence.not_proof_of_leak_edit_or_distribution",
+        "integrity.not_evaluated",
+    ]
+
+
+@pytest.mark.django_db
+@override_settings(SPLITBIND_DEMO_MODE=True)
 def test_modified_issued_pdf_requires_real_decode_and_keeps_hash_fact_separate(
     issued_pdf_bytes,
     monkeypatch,
@@ -436,6 +662,98 @@ def test_modified_issued_pdf_requires_real_decode_and_keeps_hash_fact_separate(
     assert verification.recovered_issuance_id == issuance.id
     assert verification.evidence["exact_file_hash_match"] is False
     assert "manifest.signed_evidence_unavailable" in verification.evidence["limitations"]
+
+
+@pytest.mark.django_db
+@override_settings(SPLITBIND_DEMO_MODE=True)
+@pytest.mark.parametrize(
+    ("extension", "page_index"),
+    [(".png", 1), (".jpg", 4)],
+)
+def test_144_dpi_issued_page_image_decodes_across_bounded_page_indices(
+    issued_five_page_pdf_bytes,
+    monkeypatch,
+    extension,
+    page_index,
+):
+    from splitbind.demo.verification import process_verification_job
+
+    monkeypatch.setenv("SPLITBIND_DEMO_FINGERPRINT_KEY_HEX", FINGERPRINT_KEY.hex())
+    organization = Organization.objects.create(
+        name="Standalone issued page",
+        slug=f"standalone-{uuid.uuid4().hex[:8]}",
+    )
+    actor = User.objects.create_user(
+        username=f"standalone-{uuid.uuid4().hex[:8]}",
+        password="correct horse battery staple",
+        organization=organization,
+        role=Role.VERIFIER,
+    )
+    issuance = _record_committed_issuance(
+        organization=organization,
+        actor=actor,
+        output=issued_five_page_pdf_bytes,
+        page_count=5,
+    )
+    suspect = _issued_page_image(
+        issued_five_page_pdf_bytes,
+        page_index=page_index,
+        extension=extension,
+    )
+    storage = FakeObjectStorage()
+    job, verification = _processing_verification(
+        organization=organization,
+        actor=actor,
+        data=suspect,
+        storage=storage,
+    )
+
+    result = process_verification_job(job_id=job.id, storage=storage)
+
+    verification.refresh_from_db()
+    assert result.status == VerificationStatus.SOURCE_IDENTIFIED_MODIFIED
+    assert result.decode_status == "decoded"
+    assert result.recovered_issuance_id == issuance.id
+    assert result.pages_analyzed == 1
+    assert verification.recovered_issuance_id == issuance.id
+
+
+@pytest.mark.django_db
+@override_settings(SPLITBIND_DEMO_MODE=True)
+def test_standalone_image_rejects_conflicting_page_index_decodes(monkeypatch):
+    from splitbind.demo import verification as verification_module
+    from splitbind.demo.verification import process_verification_job
+    from splitbind_ref.fingerprint_v2 import DecodeV2Decision
+
+    monkeypatch.setenv("SPLITBIND_DEMO_FINGERPRINT_KEY_HEX", FINGERPRINT_KEY.hex())
+    context = _new_verification_context(synthetic_image_bytes(extension=".png"))
+    page_indices = []
+    decisions = iter(
+        (
+            DecodeV2Decision(uuid.uuid4(), 0.9, 3, 0.0, "decoded"),
+            DecodeV2Decision(uuid.uuid4(), 0.8, 3, 0.0, "decoded"),
+            DecodeV2Decision(None, 0.0, 0, None, "insufficient_sync_evidence"),
+            DecodeV2Decision(None, 0.0, 0, None, "insufficient_sync_evidence"),
+            DecodeV2Decision(None, 0.0, 0, None, "insufficient_sync_evidence"),
+        )
+    )
+
+    def conflicting_decode(_raster, _key, page_index, _canvas, _candidates):
+        page_indices.append(page_index)
+        return next(decisions)
+
+    monkeypatch.setattr(
+        verification_module,
+        "decode_fingerprint_v2",
+        conflicting_decode,
+    )
+
+    result = process_verification_job(job_id=context[0].id, storage=context[2])
+
+    assert page_indices == [0, 1, 2, 3, 4]
+    assert result.status == VerificationStatus.PARTIAL_EVIDENCE
+    assert result.decode_status == "partial_payload_evidence"
+    assert result.recovered_issuance_id is None
 
 
 @pytest.mark.django_db

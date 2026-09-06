@@ -26,7 +26,9 @@ PyYAML==6.0.3
 pytest==9.1.1
 pytest-django==4.14.0
 pypdfium2==5.13.0
+pypdf==6.16.2
 python-dateutil==2.9.0.post0
+reedsolo==1.7.0
 referencing==0.37.0
 rfc3339-validator==0.1.4
 rfc8785==0.1.4
