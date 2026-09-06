@@ -37,6 +37,7 @@ from splitbind_attack.ground_truth import (
     merge_regions,
     transform_regions,
 )
+
 from splitbind_bench.metrics import Result, compute_detection_metrics, compute_quality_metrics
 from splitbind_ref.contracts import (
     fingerprint_candidates,
@@ -80,6 +81,7 @@ from splitbind_ref.tile_layout_v3 import derive_tiles_v3
 
 
 NONDETERMINISTIC_ROW_FIELDS = frozenset({"elapsed_ms", "peak_rss_bytes"})
+MAX_V3_SOURCE_PIXELS = 40_000_000
 _SEED_DOMAIN = b"splitbind-benchmark-case-v1\x00"
 _IDENTITY_DOMAIN = b"splitbind-benchmark-identity-v1\x00"
 _KEY_DOMAIN = b"splitbind-benchmark-key-v1\x00"
@@ -321,7 +323,12 @@ def _run_execution_plan(
         new_rows = 0
         global_ordinal = 0
         stop = False
-        for raw_page in _iter_sources(plan.sources):
+        for raw_page in _iter_sources(
+            plan.sources,
+            max_source_pixels=(
+                MAX_V3_SOURCE_PIXELS if plan.algorithm_version == 3 else None
+            ),
+        ):
             fitted = _fit_canvas(raw_page.image, target_width, target_height)
             page = fitted.image
             for candidate in plan.candidates:
@@ -904,7 +911,9 @@ def _corpus_sources(
     return tuple(sources)
 
 
-def _iter_sources(sources: Sequence[CorpusSource]) -> Iterator[CorpusPage]:
+def _iter_sources(
+    sources: Sequence[CorpusSource], *, max_source_pixels: int | None = None
+) -> Iterator[CorpusPage]:
     for source in sources:
         if not source.resolved_path.is_file():
             raise FileNotFoundError(f"corpus source is missing: {source.resolved_path}")
@@ -917,6 +926,14 @@ def _iter_sources(sources: Sequence[CorpusSource]) -> Iterator[CorpusPage]:
                 if len(document) != source.pages:
                     raise ValueError(f"corpus page count mismatch for {source.fixture_id}")
                 for page_index in range(len(document)):
+                    if max_source_pixels is not None:
+                        page_width, page_height = document.get_page_size(page_index)
+                        _enforce_pixel_limit(
+                            math.ceil(page_width * 2.0),
+                            math.ceil(page_height * 2.0),
+                            max_source_pixels,
+                            source.fixture_id,
+                        )
                     page = document[page_index]
                     bitmap = page.render(scale=2.0)
                     try:
@@ -929,12 +946,85 @@ def _iter_sources(sources: Sequence[CorpusSource]) -> Iterator[CorpusPage]:
             finally:
                 document.close()
         else:
+            if max_source_pixels is not None:
+                image_width, image_height = _image_dimensions(source.resolved_path)
+                _enforce_pixel_limit(
+                    image_width, image_height, max_source_pixels, source.fixture_id
+                )
             image = cv2.imread(str(source.resolved_path), cv2.IMREAD_COLOR)
             if image is None:
                 raise ValueError(f"unable to decode corpus image {source.fixture_id}")
             if source.pages != 1:
                 raise ValueError(f"image corpus entry {source.fixture_id} must declare one page")
             yield CorpusPage(source, 0, np.ascontiguousarray(image))
+
+
+def _enforce_pixel_limit(
+    width: int | float,
+    height: int | float,
+    max_source_pixels: int | None,
+    fixture_id: str,
+) -> None:
+    if max_source_pixels is None:
+        return
+    if (
+        isinstance(width, bool)
+        or isinstance(height, bool)
+        or not isinstance(width, (int, float))
+        or not isinstance(height, (int, float))
+        or not math.isfinite(width)
+        or not math.isfinite(height)
+        or width <= 0
+        or height <= 0
+    ):
+        raise ValueError(f"corpus source {fixture_id} has invalid pixel metadata")
+    if math.ceil(width) * math.ceil(height) > max_source_pixels:
+        raise ValueError(
+            f"corpus source {fixture_id} exceeds the V3 pixel limit of {max_source_pixels}"
+        )
+
+
+def _image_dimensions(path: Path) -> tuple[int, int]:
+    """Read PNG/JPEG dimensions without allocating a decoded image buffer."""
+
+    with path.open("rb") as stream:
+        header = stream.read(24)
+        if header.startswith(b"\x89PNG\r\n\x1a\n") and len(header) >= 24:
+            return (
+                int.from_bytes(header[16:20], "big"),
+                int.from_bytes(header[20:24], "big"),
+            )
+        if header[:2] != b"\xff\xd8":
+            raise ValueError(f"unsupported corpus image format for metadata preflight: {path}")
+        stream.seek(2)
+        while True:
+            marker_prefix = stream.read(1)
+            while marker_prefix == b"\xff":
+                marker_prefix = stream.read(1)
+            if not marker_prefix:
+                break
+            marker = marker_prefix[0]
+            if marker in {0xD8, 0xD9}:
+                continue
+            length_bytes = stream.read(2)
+            if len(length_bytes) != 2:
+                break
+            segment_length = int.from_bytes(length_bytes, "big")
+            if segment_length < 2:
+                break
+            if marker in {
+                0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7,
+                0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF,
+            }:
+                geometry = stream.read(5)
+                if len(geometry) != 5:
+                    break
+                return (
+                    int.from_bytes(geometry[3:5], "big"),
+                    int.from_bytes(geometry[1:3], "big"),
+                )
+            stream.seek(segment_length - 2, os.SEEK_CUR)
+    raise ValueError(f"unable to read corpus image dimensions: {path}")
 
 
 def _remaining_embedded_tiles(

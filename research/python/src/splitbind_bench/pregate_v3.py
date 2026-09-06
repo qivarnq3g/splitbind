@@ -96,6 +96,7 @@ class PreGateSummaryV3:
     contract_hashes: Mapping[str, str]
     plan_sha256: str
     results_sha256: str
+    results_csv_sha256: str
     qualified_candidate_ids: tuple[str, ...]
     candidates: tuple[PreGateCandidateScoreV3, ...]
     limitations: tuple[str, ...]
@@ -169,10 +170,14 @@ def run_v3_pregate(
     destination = Path(output_dir).resolve()
     destination.mkdir(parents=True, exist_ok=True)
     selection_path = destination / "qualified-candidate-ids.json"
-    _atomic_write_text(selection_path, _selection_text(plan, "0" * 64, "0" * 64, ()))
+    _atomic_write_text(
+        selection_path,
+        _selection_text(plan, "0" * 64, "0" * 64, "0" * 64, ()),
+    )
     _run_execution_plan(plan, destination, max_rows=max_rows)
     results_path = destination / "results.jsonl"
     results_bytes = results_path.read_bytes()
+    results_csv_bytes = (destination / "results.csv").read_bytes()
     rows = _decode_json_lines(results_bytes)
     _validate_rows(rows, plan, require_complete=False)
     scores = _aggregate_scores(rows, plan)
@@ -186,6 +191,7 @@ def run_v3_pregate(
         contract_hashes=_contract_hashes(plan),
         plan_sha256=plan.plan_sha256,
         results_sha256=hashlib.sha256(results_bytes).hexdigest(),
+        results_csv_sha256=hashlib.sha256(results_csv_bytes).hexdigest(),
         qualified_candidate_ids=(),
         candidates=scores,
         limitations=(
@@ -203,6 +209,7 @@ def run_v3_pregate(
         _selection_text(
             plan,
             summary.results_sha256,
+            summary.results_csv_sha256,
             hashlib.sha256(summary_text.encode("utf-8")).hexdigest(),
             qualified,
         ),
@@ -271,6 +278,7 @@ def load_v3_pregate_summary(
         contract_hashes=_required_contract_hashes(document),
         plan_sha256=_required_sha256(document, "plan_sha256"),
         results_sha256=_required_sha256(document, "results_sha256"),
+        results_csv_sha256=_required_sha256(document, "results_csv_sha256"),
         qualified_candidate_ids=_required_string_tuple(document, "qualified_candidate_ids"),
         candidates=scores,
         limitations=_required_string_tuple(document, "limitations"),
@@ -283,6 +291,9 @@ def load_v3_pregate_summary(
         raise ValueError("pre-gate summary plan hash mismatch")
     if evidence.results_sha256 != hashlib.sha256(results_bytes).hexdigest():
         raise ValueError("pre-gate results hash mismatch")
+    results_csv_bytes = summary_path.with_name("results.csv").read_bytes()
+    if evidence.results_csv_sha256 != hashlib.sha256(results_csv_bytes).hexdigest():
+        raise ValueError("pre-gate CSV hash mismatch")
     select_qualified_candidates_v3(evidence, fingerprint_candidates_v3())
     return evidence
 
@@ -296,7 +307,8 @@ def load_qualified_candidate_selection_v3(
     document = _decode_json_object(selection_path.read_bytes(), "candidate selection")
     expected_fields = {
         "schema_version", "source_contract_sha256", "pregate_plan_sha256",
-        "pregate_results_sha256", "pregate_summary_sha256", "qualified_candidate_ids",
+        "pregate_results_sha256", "pregate_results_csv_sha256",
+        "pregate_summary_sha256", "qualified_candidate_ids",
     }
     if set(document) != expected_fields or document.get("schema_version") != 3:
         raise ValueError("candidate selection must contain the exact V3 evidence fields")
@@ -308,10 +320,13 @@ def load_qualified_candidate_selection_v3(
         raise ValueError("qualified candidate identifiers must be sorted and unique")
     summary_bytes = selection_path.with_name("summary.json").read_bytes()
     results_bytes = selection_path.with_name("results.jsonl").read_bytes()
+    results_csv_bytes = selection_path.with_name("results.csv").read_bytes()
     if document.get("pregate_summary_sha256") != hashlib.sha256(summary_bytes).hexdigest():
         raise ValueError("candidate selection summary hash mismatch")
     if document.get("pregate_results_sha256") != hashlib.sha256(results_bytes).hexdigest():
         raise ValueError("candidate selection results hash mismatch")
+    if document.get("pregate_results_csv_sha256") != hashlib.sha256(results_csv_bytes).hexdigest():
+        raise ValueError("candidate selection CSV hash mismatch")
     evidence = load_v3_pregate_summary(selection_path.with_name("summary.json"), profile_path)
     if document.get("pregate_plan_sha256") != evidence.plan_sha256:
         raise ValueError("candidate selection plan hash mismatch")
@@ -681,6 +696,7 @@ def _summary_document(summary: PreGateSummaryV3) -> dict[str, object]:
         "contract_hashes": dict(summary.contract_hashes),
         "plan_sha256": summary.plan_sha256,
         "results_sha256": summary.results_sha256,
+        "results_csv_sha256": summary.results_csv_sha256,
         "qualified_candidate_ids": list(summary.qualified_candidate_ids),
         "candidates": [json.loads(_canonical_json(asdict(score))) for score in summary.candidates],
         "limitations": list(summary.limitations),
@@ -688,7 +704,7 @@ def _summary_document(summary: PreGateSummaryV3) -> dict[str, object]:
 
 
 def _selection_text(
-    plan: ExecutionPlan, results_sha256: str, summary_sha256: str,
+    plan: ExecutionPlan, results_sha256: str, results_csv_sha256: str, summary_sha256: str,
     qualified: Sequence[str],
 ) -> str:
     return json.dumps(
@@ -697,6 +713,7 @@ def _selection_text(
             "source_contract_sha256": plan.profile_contract_sha256,
             "pregate_plan_sha256": plan.plan_sha256,
             "pregate_results_sha256": results_sha256,
+            "pregate_results_csv_sha256": results_csv_sha256,
             "pregate_summary_sha256": summary_sha256,
             "qualified_candidate_ids": list(qualified),
         },

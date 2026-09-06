@@ -1,21 +1,23 @@
 import hashlib
 import json
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from splitbind_bench import runner
+from splitbind_bench import pregate_v3, runner
 from splitbind_bench.pregate_v3 import (
     PreGateCandidateScoreV3,
     PreGateSummaryV3,
     _decode_json_object,
     _validate_rows,
     build_v3_pregate_plan,
+    load_qualified_candidate_selection_v3,
+    load_v3_pregate_summary,
     select_qualified_candidates_v3,
 )
-from splitbind_bench.runner import _case_context, _case_seed, _row_identifier
+from splitbind_bench.runner import CorpusSource, _case_context, _case_seed, _row_identifier
 from splitbind_ref.contracts import fingerprint_candidates_v3
 from splitbind_ref.fingerprint_v3 import DecodeV3Decision
 from splitbind_ref.fingerprint_v3_profile import candidate_identifier_v3, load_v3_profiles
@@ -76,6 +78,7 @@ def _summary(
         },
         "plan_sha256": "1" * 64,
         "results_sha256": "2" * 64,
+        "results_csv_sha256": "3" * 64,
         "qualified_candidate_ids": tuple(
             sorted(score.candidate_id for score in candidate_scores if not score.failed_gates)
         ),
@@ -165,6 +168,148 @@ def test_json_decoder_rejects_duplicate_schema_and_nan():
         _decode_json_object(b'{"schema_version":3,"schema_version":3}', "summary")
     with pytest.raises(ValueError, match="finite"):
         _decode_json_object(b'{"minimum_ssim":NaN}', "summary")
+
+
+def test_v3_summary_schema_binds_final_csv_hash():
+    document = pregate_v3._summary_document(_summary())
+
+    assert "results_csv_sha256" in document
+
+
+def test_v3_summary_loader_fails_closed_when_csv_bytes_are_tampered(tmp_path, monkeypatch):
+    plan = build_v3_pregate_plan(CORPUS, PROFILES, MATRIX, seed=20260905)
+    results = b"{}\n"
+    clean_csv = b"row_id\nclean\n"
+    tampered_csv = b"row_id\ntampered\n"
+    document = {
+        "schema_version": 3,
+        "status": "incomplete",
+        "evidence_scope": "research_measurement_only",
+        "profile_promoted": False,
+        "planned_rows": 352,
+        "completed_rows": 1,
+        "execution_errors": 0,
+        "false_attributions": 0,
+        "contract_hashes": _summary().contract_hashes,
+        "plan_sha256": plan.plan_sha256,
+        "results_sha256": hashlib.sha256(results).hexdigest(),
+        "results_csv_sha256": hashlib.sha256(clean_csv).hexdigest(),
+        "qualified_candidate_ids": [],
+        "candidates": [asdict(score) for score in _canonical_scores()],
+        "limitations": [],
+    }
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text(json.dumps(document, sort_keys=True), encoding="utf-8")
+    (tmp_path / "results.jsonl").write_bytes(results)
+    (tmp_path / "results.csv").write_bytes(tampered_csv)
+    monkeypatch.setattr(pregate_v3, "_validate_rows", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        pregate_v3, "_aggregate_scores", lambda *args, **kwargs: _canonical_scores()
+    )
+
+    with pytest.raises(ValueError, match="CSV hash"):
+        load_v3_pregate_summary(summary_path, PROFILES)
+
+
+def test_v3_selection_loader_fails_closed_when_csv_hash_is_tampered(tmp_path):
+    summary = b"{}"
+    results = b"{}\n"
+    csv_bytes = b"row_id\n"
+    selection_path = tmp_path / "qualified-candidate-ids.json"
+    selection_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 3,
+                "source_contract_sha256": hashlib.sha256(PROFILES.read_bytes()).hexdigest(),
+                "pregate_plan_sha256": "1" * 64,
+                "pregate_results_sha256": hashlib.sha256(results).hexdigest(),
+                "pregate_results_csv_sha256": "0" * 64,
+                "pregate_summary_sha256": hashlib.sha256(summary).hexdigest(),
+                "qualified_candidate_ids": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "summary.json").write_bytes(summary)
+    (tmp_path / "results.jsonl").write_bytes(results)
+    (tmp_path / "results.csv").write_bytes(csv_bytes)
+
+    with pytest.raises(ValueError, match="CSV hash"):
+        load_qualified_candidate_selection_v3(selection_path, PROFILES)
+
+
+@pytest.mark.parametrize("suffix", [".png", ".pdf"])
+def test_v3_source_preflight_rejects_oversized_metadata_before_rasterization(
+    tmp_path, monkeypatch, suffix
+):
+    source_path = tmp_path / f"oversized{suffix}"
+    source_path.write_bytes(b"fixture")
+    source = CorpusSource(
+        "oversized",
+        "clean_image",
+        source_path,
+        hashlib.sha256(source_path.read_bytes()).hexdigest(),
+        1,
+        (),
+    )
+    decoded = False
+
+    if suffix == ".png":
+        monkeypatch.setattr(runner, "_image_dimensions", lambda path: (10_000, 4_001))
+
+        def decode(*args, **kwargs):
+            nonlocal decoded
+            decoded = True
+            raise AssertionError("image decode must not run")
+
+        monkeypatch.setattr(runner.cv2, "imread", decode)
+    else:
+        class Document:
+            def __len__(self):
+                return 1
+
+            def get_page_size(self, page_index):
+                return (5_000, 4_001)
+
+            def __getitem__(self, page_index):
+                nonlocal decoded
+                decoded = True
+                raise AssertionError("PDF render page must not be opened")
+
+            def close(self):
+                return None
+
+        monkeypatch.setattr(runner.pdfium, "PdfDocument", lambda path: Document())
+
+    with pytest.raises(ValueError, match="pixel limit"):
+        list(runner._iter_sources((source,), max_source_pixels=40_000_000))
+
+    assert decoded is False
+
+
+def test_legacy_source_iteration_does_not_enable_v3_metadata_preflight(tmp_path, monkeypatch):
+    source_path = tmp_path / "legacy.png"
+    source_path.write_bytes(b"fixture")
+    source = CorpusSource(
+        "legacy",
+        "clean_image",
+        source_path,
+        hashlib.sha256(source_path.read_bytes()).hexdigest(),
+        1,
+        (),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_image_dimensions",
+        lambda path: (_ for _ in ()).throw(AssertionError("legacy preflight invoked")),
+    )
+    monkeypatch.setattr(
+        runner.cv2,
+        "imread",
+        lambda *args, **kwargs: runner.np.zeros((1, 1, 3), dtype="uint8"),
+    )
+
+    assert len(list(runner._iter_sources((source,)))) == 1
 
 
 def _minimal_valid_row(plan, *, attack_id="identity"):
