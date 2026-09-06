@@ -21,6 +21,7 @@ from splitbind_bench.runner import (
 ROOT = Path(__file__).resolve().parents[4]
 PROFILES = ROOT / "contracts" / "algorithm" / "fingerprint-candidates.v1.json"
 PROFILES_V2 = ROOT / "contracts" / "algorithm" / "fingerprint-candidates.v2.json"
+PROFILES_V3 = ROOT / "contracts" / "algorithm" / "fingerprint-candidates.v3.json"
 CORPUS = ROOT / "fixtures" / "corpus" / "corpus-manifest.v1.json"
 MATRIX = ROOT / "contracts" / "algorithm" / "attack-matrix.v1.json"
 SCRIPT = ROOT / "research" / "python" / "scripts" / "run_benchmark.py"
@@ -144,6 +145,16 @@ def test_v2_full_plan_uses_explicit_version_dispatch_without_changing_v1_populat
     assert plan.planned_rows == 22 * 16 * 31
 
 
+def test_v3_full_plan_uses_explicit_version_dispatch_without_changing_v1_or_v2():
+    v1 = build_execution_plan(CORPUS, PROFILES, MATRIX, seed=20260827)
+    v2 = build_execution_plan(CORPUS, PROFILES_V2, MATRIX, seed=20260827)
+    v3 = build_execution_plan(CORPUS, PROFILES_V3, MATRIX, seed=20260905)
+
+    assert (v1.algorithm_version, v1.candidate_count, v1.planned_rows) == (1, 48, 32736)
+    assert (v2.algorithm_version, v2.candidate_count, v2.planned_rows) == (2, 16, 10912)
+    assert (v3.algorithm_version, v3.candidate_count, v3.planned_rows) == (3, 4, 2728)
+
+
 def test_v2_public_matrix_rejects_an_unselected_full_grid_before_output(tmp_path, monkeypatch):
     output = tmp_path / "unselected-v2"
 
@@ -154,6 +165,20 @@ def test_v2_public_matrix_rejects_an_unselected_full_grid_before_output(tmp_path
 
     with pytest.raises(ValueError, match="qualified candidate selection"):
         run_matrix(CORPUS, PROFILES_V2, MATRIX, 20260827, output)
+
+    assert not output.exists()
+
+
+def test_v3_public_matrix_rejects_an_unselected_full_grid_before_output(tmp_path, monkeypatch):
+    output = tmp_path / "unselected-v3"
+
+    def unexpected_execution(*args, **kwargs):
+        raise AssertionError("V3 image work must not start without a selection")
+
+    monkeypatch.setattr(runner, "_run_execution_plan", unexpected_execution)
+
+    with pytest.raises(ValueError, match="qualified candidate selection"):
+        run_matrix(CORPUS, PROFILES_V3, MATRIX, 20260905, output)
 
     assert not output.exists()
 

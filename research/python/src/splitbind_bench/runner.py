@@ -42,6 +42,8 @@ from splitbind_ref.contracts import (
     fingerprint_candidates,
     fingerprint_candidates_v2,
     fingerprint_candidates_v2_bytes,
+    fingerprint_candidates_v3,
+    fingerprint_candidates_v3_bytes,
 )
 from splitbind_ref.fingerprint import (
     DecodeDecision,
@@ -63,6 +65,18 @@ from splitbind_ref.fingerprint_v2_profile import (
     load_v2_profiles,
 )
 from splitbind_ref.tile_layout_v2 import derive_tiles_v2
+from splitbind_ref.fingerprint_v3 import (
+    DecodeV3Decision,
+    FingerprintV3Context,
+    decode_fingerprint_v3,
+    embed_fingerprint_v3,
+)
+from splitbind_ref.fingerprint_v3_profile import (
+    FingerprintV3Profile,
+    candidate_identifier_v3,
+    load_v3_profiles,
+)
+from splitbind_ref.tile_layout_v3 import derive_tiles_v3
 
 
 NONDETERMINISTIC_ROW_FIELDS = frozenset({"elapsed_ms", "peak_rss_bytes"})
@@ -171,20 +185,29 @@ def build_execution_plan(
     attacks = _attack_cases(matrix_document)
     selection_sha256: str | None = None
     if candidate_selection is not None:
-        if algorithm_version != 2:
-            raise ValueError("candidate selection is supported only for fingerprint V2")
+        if algorithm_version not in {2, 3}:
+            raise ValueError("candidate selection is supported only for fingerprint V2 or V3")
         selection_path = Path(candidate_selection).resolve()
-        from splitbind_bench.pregate_v2 import load_qualified_candidate_selection
+        if algorithm_version == 2:
+            from splitbind_bench.pregate_v2 import load_qualified_candidate_selection
 
-        selected_ids = load_qualified_candidate_selection(selection_path, profile_path)
+            selected_ids = load_qualified_candidate_selection(selection_path, profile_path)
+        else:
+            from splitbind_bench.pregate_v3 import load_qualified_candidate_selection_v3
+
+            selected_ids = load_qualified_candidate_selection_v3(selection_path, profile_path)
         if not selected_ids:
-            raise ValueError("candidate selection is empty; the full V2 matrix must be skipped")
+            raise ValueError(
+                f"candidate selection is empty; the full V{algorithm_version} matrix must be skipped"
+            )
         selected_hex = {value.hex() for value in selected_ids}
         candidates = tuple(
             candidate for candidate in candidates if candidate.candidate_id in selected_hex
         )
         if len(candidates) != len(selected_ids):
-            raise ValueError("candidate selection contains an unknown V2 candidate")
+            raise ValueError(
+                f"candidate selection contains an unknown V{algorithm_version} candidate"
+            )
         selection_sha256 = _sha256_file(selection_path)
     if smoke:
         sources = _smoke_sources(sources)
@@ -257,9 +280,9 @@ def run_matrix(
         smoke=smoke,
         candidate_selection=candidate_selection,
     )
-    if plan.algorithm_version == 2 and plan.candidate_selection_sha256 is None:
+    if plan.algorithm_version in {2, 3} and plan.candidate_selection_sha256 is None:
         raise ValueError(
-            "fingerprint V2 execution requires a nonempty qualified candidate selection"
+            f"fingerprint V{plan.algorithm_version} execution requires a nonempty qualified candidate selection"
         )
     return _run_execution_plan(
         plan,
@@ -325,8 +348,9 @@ def _run_execution_plan(
                 expected_id: UUID | None = None
                 embedding_error: Exception | None = None
                 watermarked = page
-                runtime_profile: Mapping[str, object] | FingerprintV2Profile
-                decode_profile: Mapping[str, object] | FingerprintV2Profile
+                runtime_profile: Mapping[str, object] | FingerprintV2Profile | FingerprintV3Profile
+                decode_profile: Mapping[str, object] | FingerprintV2Profile | FingerprintV3Profile
+                orb_template = None
                 if plan.algorithm_version == 1:
                     runtime_profile = {
                         "schema_version": 1,
@@ -373,6 +397,25 @@ def _run_execution_plan(
                             watermarked = embedded_v2.image
                         except Exception as error:  # Every planned case remains represented.
                             embedding_error = error
+                elif plan.algorithm_version == 3:
+                    runtime_profile = _runtime_v3_profile(candidate)
+                    decode_profile = runtime_profile
+                    if raw_page.source.kind != "negative_external":
+                        expected_id = context_values[0]
+                        try:
+                            embedded_v3 = embed_fingerprint_v3(
+                                page,
+                                FingerprintV3Context(
+                                    issuance_id=expected_id,
+                                    fingerprint_key=context_values[1],
+                                    page_index=raw_page.page_index,
+                                ),
+                                runtime_profile,
+                            )
+                            watermarked = embedded_v3.image
+                            orb_template = embedded_v3.sync_template
+                        except Exception as error:  # Every planned case remains represented.
+                            embedding_error = error
                 else:  # Defensive: plan construction admits only explicit versions.
                     raise ValueError("unsupported fingerprint algorithm version")
                 quality = compute_quality_metrics(page, watermarked)
@@ -397,6 +440,7 @@ def _run_execution_plan(
                         quality=quality,
                         embedding_error=embedding_error,
                         canonical_shape=page.shape[:2],
+                        orb_template=orb_template,
                     )
                     connection.execute(
                         "INSERT INTO result_rows(row_id, payload) VALUES (?, ?)",
@@ -433,13 +477,14 @@ def _execute_row(
     original: NDArray[np.uint8],
     watermarked: NDArray[np.uint8],
     source_to_canvas: Transform,
-    runtime_profile: Mapping[str, object] | FingerprintV2Profile,
-    decode_profile: Mapping[str, object] | FingerprintV2Profile,
+    runtime_profile: Mapping[str, object] | FingerprintV2Profile | FingerprintV3Profile,
+    decode_profile: Mapping[str, object] | FingerprintV2Profile | FingerprintV3Profile,
     expected_id: UUID | None,
     key: bytes,
     quality,
     embedding_error: Exception | None,
     canonical_shape: tuple[int, int],
+    orb_template=None,
 ) -> dict[str, object]:
     case_seed = _case_seed(
         plan.seed, source.fixture_id, page_index, candidate.profile_sha256, attack.case_id
@@ -449,18 +494,22 @@ def _execute_row(
         "peak RSS is the process-lifetime OS high-water mark observed after attack and decode",
         "temporary disk peak is 0 because A4 attacks and decode run in memory; output/checkpoint storage is excluded",
     ]
-    decision: DecodeDecision | DecodeV2Decision
+    decision: DecodeDecision | DecodeV2Decision | DecodeV3Decision
     if plan.algorithm_version == 1:
         decision = DecodeDecision(None, 0.0, 0, None, "not_detected")
-    else:
+    elif plan.algorithm_version == 2:
         decision = DecodeV2Decision(
+            None, 0.0, 0, None, "insufficient_sync_evidence"
+        )
+    else:
+        decision = DecodeV3Decision(
             None, 0.0, 0, None, "insufficient_sync_evidence"
         )
     planned_crop = (
         planned_crop_geometry(attack, canonical_shape)
         if (
-            plan.algorithm_version == 2
-            and plan.run_kind == "v2_pregate"
+            plan.algorithm_version in {2, 3}
+            and plan.run_kind in {"v2_pregate", "v3_pregate"}
             and expected_id is not None
         )
         else None
@@ -477,7 +526,7 @@ def _execute_row(
             )
             if plan.algorithm_version == 1:
                 decision = decode_fingerprint(artifact.image, key, (decode_profile,))
-            else:
+            elif plan.algorithm_version == 2:
                 if not isinstance(decode_profile, FingerprintV2Profile):
                     raise TypeError("V2 runner requires a FingerprintV2Profile")
                 decision = decode_fingerprint_v2(
@@ -486,6 +535,17 @@ def _execute_row(
                     page_index,
                     canonical_shape,
                     (decode_profile,),
+                )
+            else:
+                if not isinstance(decode_profile, FingerprintV3Profile):
+                    raise TypeError("V3 runner requires a FingerprintV3Profile")
+                decision = decode_fingerprint_v3(
+                    artifact.image,
+                    key,
+                    page_index,
+                    canonical_shape,
+                    (decode_profile,),
+                    orb_template=orb_template,
                 )
         except Exception as error:  # Preserve failures as data instead of omission.
             error_text = f"{type(error).__name__}: {error}"
@@ -511,10 +571,20 @@ def _execute_row(
             remaining_tiles = _remaining_embedded_tiles(
                 original.shape[:2], key, runtime_profile, artifact.retained_region
             )
-        else:
+        elif plan.algorithm_version == 2:
             if not isinstance(runtime_profile, FingerprintV2Profile):
                 raise TypeError("V2 runner requires a FingerprintV2Profile")
             remaining_tiles = _remaining_embedded_tiles_v2(
+                canonical_shape,
+                key,
+                page_index,
+                runtime_profile,
+                retained_region,
+            )
+        else:
+            if not isinstance(runtime_profile, FingerprintV3Profile):
+                raise TypeError("V3 runner requires a FingerprintV3Profile")
+            remaining_tiles = _remaining_embedded_tiles_v3(
                 canonical_shape,
                 key,
                 page_index,
@@ -548,7 +618,7 @@ def _execute_row(
     row_reason = (
         decision.reason
         if isinstance(decision, DecodeDecision)
-        else _v2_metric_reason(decision.status)
+        else _versioned_metric_reason(decision.status)
     )
     outcome = _outcome(expected_text, decoded_id, row_reason, error_text)
     if plan.algorithm_version == 1:
@@ -558,7 +628,7 @@ def _execute_row(
     else:
         candidate_id = candidate.candidate_id
         if candidate_id is None:
-            raise ValueError("V2 candidate identity is missing")
+            raise ValueError("versioned candidate identity is missing")
     row = {
         "schema_version": 1,
         "row_id": row_id,
@@ -616,8 +686,8 @@ def _execute_row(
         ),
         "limitations": limitations,
     }
-    if plan.algorithm_version == 2:
-        row["algorithm_version"] = 2
+    if plan.algorithm_version in {2, 3}:
+        row["algorithm_version"] = plan.algorithm_version
         row["algorithm_status"] = (
             decision_status if error_text is None else "execution_error"
         )
@@ -676,10 +746,12 @@ def _candidate_grid(
     document: Mapping[str, object], profile_path: Path
 ) -> tuple[int, tuple[Candidate, ...]]:
     schema_version = document.get("schema_version")
-    if type(schema_version) is not int or schema_version not in {1, 2}:
-        raise ValueError("candidate schema_version must be explicit integer 1 or 2")
+    if type(schema_version) is not int or schema_version not in {1, 2, 3}:
+        raise ValueError("candidate schema_version must be explicit integer 1, 2, or 3")
     if schema_version == 2:
         return 2, _candidate_grid_v2(document, profile_path)
+    if schema_version == 3:
+        return 3, _candidate_grid_v3(document, profile_path)
     fixed = document.get("fixed")
     canonical_fixed = fingerprint_candidates().get("fixed")
     if not isinstance(fixed, Mapping) or fixed != canonical_fixed:
@@ -731,6 +803,46 @@ def _candidate_grid_v2(
                 candidate_id=identifier.hex(),
             )
         )
+    return tuple(candidates)
+
+
+def _candidate_grid_v3(
+    document: Mapping[str, object], profile_path: Path
+) -> tuple[Candidate, ...]:
+    canonical = fingerprint_candidates_v3()
+    canonical_sha256 = hashlib.sha256(fingerprint_candidates_v3_bytes()).hexdigest()
+    if document != canonical or _sha256_file(profile_path) != canonical_sha256:
+        raise ValueError("selected V3 candidate contract must match the frozen contract bytes")
+    candidates: list[Candidate] = []
+    for profile in load_v3_profiles():
+        identifier = candidate_identifier_v3(profile)
+        values: dict[str, int | float] = {
+            "qim_delta": profile.qim_delta,
+            "pilot_strength_rms": profile.pilot_strength_rms,
+            "spread_delta": profile.spread_delta,
+            "spread_chips_per_bit": profile.spread_chips_per_bit,
+            "saturated_fraction_min": profile.saturated_fraction_min,
+            "saturation_low": profile.saturation_low,
+            "saturation_high": profile.saturation_high,
+            "tile_size_px": profile.tile_size_px,
+            "tiles_per_page": profile.tiles_per_page,
+            "payload_repetitions": profile.payload_repetitions,
+            "bit_replication": profile.bit_replication,
+            "bit_confidence_min": profile.bit_confidence_min,
+            "pilot_score_min": profile.pilot_score_min,
+            "max_geometry_hypotheses": profile.max_geometry_hypotheses,
+            "geometry_ratio_tolerance": profile.geometry_ratio_tolerance,
+        }
+        candidates.append(
+            Candidate(
+                values=values,
+                profile_sha256=hashlib.sha256(identifier).hexdigest(),
+                algorithm_version=3,
+                candidate_id=identifier.hex(),
+            )
+        )
+    if len(candidates) > 16:
+        raise ValueError("V3 candidate grid exceeds the 16-candidate ceiling")
     return tuple(candidates)
 
 
@@ -881,6 +993,30 @@ def _remaining_embedded_tiles_v2(
     )
 
 
+def _remaining_embedded_tiles_v3(
+    page_shape: tuple[int, int],
+    key: bytes,
+    page_index: int,
+    profile: FingerprintV3Profile,
+    retained: NormalizedRect,
+) -> int:
+    tiles = derive_tiles_v3(page_shape, key, page_index, profile)[
+        : profile.payload_repetitions
+    ]
+    height, width = page_shape
+    left = retained.x * width
+    top = retained.y * height
+    right = retained.right * width
+    bottom = retained.bottom * height
+    return sum(
+        tile.x >= left
+        and tile.y >= top
+        and tile.x + tile.width <= right
+        and tile.y + tile.height <= bottom
+        for tile in tiles
+    )
+
+
 def _runtime_v2_profile(candidate: Candidate) -> FingerprintV2Profile:
     if candidate.algorithm_version != 2 or candidate.candidate_id is None:
         raise ValueError("candidate is not a V2 candidate")
@@ -894,6 +1030,22 @@ def _runtime_v2_profile(candidate: Candidate) -> FingerprintV2Profile:
     profile = matches[0]
     if hashlib.sha256(candidate_identifier_v2(profile)).hexdigest() != candidate.profile_sha256:
         raise ValueError("V2 candidate profile hash mismatch")
+    return profile
+
+
+def _runtime_v3_profile(candidate: Candidate) -> FingerprintV3Profile:
+    if candidate.algorithm_version != 3 or candidate.candidate_id is None:
+        raise ValueError("candidate is not a V3 candidate")
+    matches = tuple(
+        profile
+        for profile in load_v3_profiles()
+        if candidate_identifier_v3(profile).hex() == candidate.candidate_id
+    )
+    if len(matches) != 1:
+        raise ValueError("V3 candidate does not resolve to exactly one frozen profile")
+    profile = matches[0]
+    if hashlib.sha256(candidate_identifier_v3(profile)).hexdigest() != candidate.profile_sha256:
+        raise ValueError("V3 candidate profile hash mismatch")
     return profile
 
 
@@ -1014,10 +1166,10 @@ def _run_identity(plan: ExecutionPlan, shard_index: int, shard_count: int) -> st
         "shard_index": shard_index,
         "shard_count": shard_count,
     }
-    if plan.algorithm_version == 2:
+    if plan.algorithm_version in {2, 3}:
         identity.update(
             {
-                "algorithm_version": 2,
+                "algorithm_version": plan.algorithm_version,
                 "run_kind": plan.run_kind,
                 "candidate_selection_sha256": plan.candidate_selection_sha256,
             }
@@ -1109,8 +1261,8 @@ def _export_artifacts(
             "temporary disk excludes checkpoint and report outputs because attack/decode uses no temporary files",
         ],
     }
-    if plan.algorithm_version == 2:
-        summary_document["algorithm_version"] = 2
+    if plan.algorithm_version in {2, 3}:
+        summary_document["algorithm_version"] = plan.algorithm_version
         summary_document["run_kind"] = plan.run_kind
         summary_document["contracts"][
             "candidate_selection_sha256"
@@ -1291,7 +1443,7 @@ def _outcome(expected: str | None, decoded: str | None, reason: str, error: str 
     return reason
 
 
-def _v2_metric_reason(status: str) -> str:
+def _versioned_metric_reason(status: str) -> str:
     if status == "decoded":
         return "decoded"
     if status == "partial_payload_evidence":
@@ -1300,9 +1452,10 @@ def _v2_metric_reason(status: str) -> str:
         "payload_not_detected",
         "insufficient_sync_evidence",
         "geometry_rejected",
+        "conflicting_payload_evidence",
     }:
         return "not_detected"
-    raise ValueError(f"unsupported V2 decode status: {status}")
+    raise ValueError(f"unsupported versioned decode status: {status}")
 
 
 def _row_identifier(fixture_id: str, page_index: int, profile_hash: str, attack_id: str) -> str:
