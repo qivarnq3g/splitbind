@@ -5,6 +5,17 @@ import django.db.models.deletion
 from django.db import migrations, models
 
 
+def refuse_issuance_evidence_rollback(apps, schema_editor):
+    DemoIssuanceResult = apps.get_model("demo", "DemoIssuanceResult")
+    if DemoIssuanceResult.objects.using(
+        schema_editor.connection.alias
+    ).exists():
+        raise RuntimeError(
+            "Cannot reverse demo.0001 while issuance result evidence exists; "
+            "preserve or export issuance result evidence before retrying rollback."
+        )
+
+
 class Migration(migrations.Migration):
 
     initial = True
@@ -46,5 +57,9 @@ class Migration(migrations.Migration):
                 'indexes': [models.Index(fields=['output_state', 'updated_at'], name='demo_result_cleanup_idx')],
                 'constraints': [models.CheckConstraint(condition=models.Q(('output_state__in', ['reserved', 'uploading', 'committed', 'cleanup_required', 'cleaned'])), name='demo_result_state_stable'), models.CheckConstraint(condition=models.Q(('attempt__gte', 0), ('attempt__lte', 2)), name='demo_result_attempt_0_2'), models.CheckConstraint(condition=models.Q(('input_sha256__isnull', True), ('input_sha256__regex', '^[0-9a-f]{64}$'), _connector='OR'), name='demo_result_input_sha256'), models.CheckConstraint(condition=models.Q(('output_sha256__isnull', True), ('output_sha256__regex', '^[0-9a-f]{64}$'), _connector='OR'), name='demo_result_output_sha256'), models.CheckConstraint(condition=models.Q(models.Q(('output_state', 'committed'), _negated=True), models.Q(('algorithm_label', 'experimental_unreleased_fingerprint_v2'), ('candidate_identifier', '5342463201e7490f80b69ef1a3289afce40ef02989c9a4d89f00b916055cbf1c4c83a97b880000000240380000000000003ff800000000000000000180000000120000000300000003'), ('canvas_height', 2304), ('canvas_width', 1152), ('input_sha256__isnull', False), ('output_sha256__isnull', False), ('page_count__gte', 1), ('page_count__lte', 5), ('processing_ms__isnull', False), ('limitations', ['fingerprint.experimental_unreleased_v2', 'fingerprint.not_gate_g1_evidence', 'evidence.not_proof_of_leak_edit_or_distribution']), ('cleanup_failures', 0), ('safe_error_code__isnull', True)), _connector='OR'), name='demo_result_committed_complete')],
             },
+        ),
+        migrations.RunPython(
+            migrations.RunPython.noop,
+            reverse_code=refuse_issuance_evidence_rollback,
         ),
     ]

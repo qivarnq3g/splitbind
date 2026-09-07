@@ -1,3 +1,4 @@
+import inspect
 import json
 import time
 from dataclasses import dataclass
@@ -18,6 +19,7 @@ from splitbind.demo.models import (
     DemoOutputState,
     DemoVerificationResult,
     DemoVerificationState,
+    _allow_demo_result_write,
 )
 from splitbind.documents.models import Document, Issuance, Verification
 from splitbind.jobs.models import Job, JobKind, JobStatus
@@ -65,8 +67,18 @@ def _lock_job_rows(queryset):
     return queryset.select_for_update(**options)
 
 
-def claim_next_job():
-    if not settings.SPLITBIND_DEMO_MODE:
+def claim_next_job(
+    *,
+    owner_token=None,
+    now=None,
+    enabled=None,
+    deadline_error_code=DEADLINE_ERROR_CODE,
+    timeout_seconds=None,
+    timeout_error_code=None,
+):
+    if enabled is None:
+        enabled = settings.SPLITBIND_DEMO_MODE
+    if not enabled:
         return None
 
     with transaction.atomic():
@@ -79,13 +91,47 @@ def claim_next_job():
             transition_job(job, JobStatus.CANCELLED)
             job.save(update_fields=["status", "updated_at"])
             return None
-        if timezone.now() >= job.deadline_at:
+        observed_now = now or timezone.now()
+        if observed_now >= job.deadline_at:
             transition_job(job, JobStatus.FAILED)
-            job.safe_error_code = DEADLINE_ERROR_CODE
+            job.safe_error_code = deadline_error_code
+            job.save(update_fields=["status", "safe_error_code", "updated_at"])
+            return None
+        if (
+            timeout_seconds is not None
+            and observed_now >= job.created_at + timedelta(seconds=timeout_seconds)
+        ):
+            transition_job(job, JobStatus.FAILED)
+            job.safe_error_code = timeout_error_code
             job.save(update_fields=["status", "safe_error_code", "updated_at"])
             return None
         transition_job(job, JobStatus.PROCESSING)
         job.save(update_fields=["status", "updated_at"])
+        owner_token = owner_token or uuid4()
+        if job.kind == JobKind.ISSUANCE:
+            evidence = DemoIssuanceResult(
+                organization_id=job.organization_id,
+                job=job,
+                issuance_id=job.issuance_id,
+                attempt=job.attempt,
+                owner_token=owner_token,
+                output_object_key=(
+                    f"outputs/issuance/{job.organization_id}/{job.issuance_id}.pdf"
+                ),
+            )
+        elif job.kind == JobKind.VERIFICATION:
+            evidence = DemoVerificationResult(
+                organization_id=job.organization_id,
+                job=job,
+                verification_id=job.verification_id,
+                attempt=job.attempt,
+                owner_token=owner_token,
+            )
+        else:
+            raise ValidationError("demo job kind is invalid")
+        with _allow_demo_result_write():
+            evidence.save()
+        job._demo_owner_token = owner_token
         return job
 
 
@@ -157,8 +203,10 @@ def _outbox_matches_job(event: OutboxEvent, job: Job, input_binding) -> bool:
     )
 
 
-def stage_next_created_job():
-    if not settings.SPLITBIND_DEMO_MODE:
+def stage_next_created_job(*, enabled=None):
+    if enabled is None:
+        enabled = settings.SPLITBIND_DEMO_MODE
+    if not enabled:
         return None
 
     with transaction.atomic():
@@ -256,6 +304,20 @@ def _terminalize_locked_job(job: Job, status: str, safe_code: str | None) -> Non
 @transaction.atomic
 def _prepare_stale_recovery(job_id: UUID, stale_before):
     job = Job.objects.select_for_update().filter(pk=job_id).first()
+    if job is not None and job.kind == JobKind.ISSUANCE and job.status == JobStatus.FAILED:
+        evidence = (
+            DemoIssuanceResult.objects.select_for_update().filter(job_id=job.id).first()
+        )
+        if (
+            evidence is not None
+            and evidence.output_state == DemoOutputState.CLEANUP_REQUIRED
+            and evidence.safe_error_code
+            == demo_issuance.DEMO_STALE_RECOVERY_FENCE_CODE
+        ):
+            prepared = _issuance_claim_for_recovery(job, evidence)
+            if prepared is not None:
+                claim, _issuance, _document = prepared
+                return "tombstone", claim, evidence.cleanup_failures
     if (
         job is None
         or job.status != JobStatus.PROCESSING
@@ -346,6 +408,20 @@ def _recover_stale_job(*, job_id: UUID, stale_before, storage):
     if not isinstance(prepared, tuple):
         return prepared
     action, claim, prior_cleanup_failures = prepared
+    if action == "tombstone":
+        try:
+            storage.delete(key=claim.output_object_key)
+        except Exception:
+            return StaleRecoveryResult(
+                claim.job_id,
+                JobKind.ISSUANCE,
+                STALE_CLEANUP_ERROR_CODE,
+            )
+        return StaleRecoveryResult(
+            claim.job_id,
+            JobKind.ISSUANCE,
+            STALE_JOB_ERROR_CODE,
+        )
     if action != "cleanup":
         return None
     demo_issuance._authorize_stale_output_delete(
@@ -382,8 +458,12 @@ def reconcile_stale_jobs(
     storage,
     limit: int = STALE_RECONCILIATION_LIMIT,
     now=None,
+    enabled=None,
+    stale_age=STALE_PROCESSING_AGE,
 ) -> tuple[StaleRecoveryResult, ...]:
-    if not settings.SPLITBIND_DEMO_MODE:
+    if enabled is None:
+        enabled = settings.SPLITBIND_DEMO_MODE
+    if not enabled:
         return ()
     if (
         not isinstance(limit, int)
@@ -392,21 +472,33 @@ def reconcile_stale_jobs(
     ):
         raise ValueError("stale reconciliation limit is out of bounds")
     observed_now = now or timezone.now()
-    stale_before = observed_now - STALE_PROCESSING_AGE
+    stale_before = observed_now - stale_age
     issuance_owner = DemoIssuanceResult.objects.filter(job_id=OuterRef("pk"))
     verification_owner = DemoVerificationResult.objects.filter(job_id=OuterRef("pk"))
+    issuance_tombstone = DemoIssuanceResult.objects.filter(
+        job_id=OuterRef("pk"),
+        output_state=DemoOutputState.CLEANUP_REQUIRED,
+        safe_error_code=demo_issuance.DEMO_STALE_RECOVERY_FENCE_CODE,
+    )
     with transaction.atomic():
         candidate_ids = list(
             _lock_job_rows(
                 Job.objects.annotate(
                     has_demo_issuance_owner=Exists(issuance_owner),
                     has_demo_verification_owner=Exists(verification_owner),
+                    has_demo_issuance_tombstone=Exists(issuance_tombstone),
                 )
                 .filter(
-                    Q(has_demo_issuance_owner=True)
-                    | Q(has_demo_verification_owner=True),
-                    status=JobStatus.PROCESSING,
-                    updated_at__lt=stale_before,
+                    Q(
+                        Q(has_demo_issuance_owner=True)
+                        | Q(has_demo_verification_owner=True),
+                        status=JobStatus.PROCESSING,
+                        updated_at__lt=stale_before,
+                    )
+                    | Q(
+                        has_demo_issuance_tombstone=True,
+                        status=JobStatus.FAILED,
+                    )
                 )
                 .order_by("updated_at", "id")
             ).values_list("id", flat=True)[:limit]
@@ -430,9 +522,17 @@ def run_worker_cycle(*, storage) -> WorkerCycleResult | None:
         return None
     try:
         if job.kind == JobKind.ISSUANCE:
-            demo_issuance.process_issuance_job(job_id=job.id, storage=storage)
+            processor = demo_issuance.process_issuance_job
+            kwargs = {"job_id": job.id, "storage": storage}
+            if "owner_token" in inspect.signature(processor).parameters:
+                kwargs["owner_token"] = job._demo_owner_token
+            processor(**kwargs)
         elif job.kind == JobKind.VERIFICATION:
-            demo_verification.process_verification_job(job_id=job.id, storage=storage)
+            processor = demo_verification.process_verification_job
+            kwargs = {"job_id": job.id, "storage": storage}
+            if "owner_token" in inspect.signature(processor).parameters:
+                kwargs["owner_token"] = job._demo_owner_token
+            processor(**kwargs)
         else:
             return WorkerCycleResult(
                 job_id=job.id,

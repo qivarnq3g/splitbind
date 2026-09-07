@@ -8,6 +8,7 @@ from django.utils import timezone
 
 import splitbind.demo.worker as demo_worker
 from splitbind.access.models import Organization, Role, User
+from splitbind.demo.models import DemoVerificationResult, DemoVerificationState
 from splitbind.demo.worker import claim_next_job
 from splitbind.documents.models import Verification
 from splitbind.jobs.models import Job, JobKind, JobStatus
@@ -71,6 +72,34 @@ def test_claim_moves_only_oldest_queued_job_to_processing(claim_context):
     assert claimed is not None and claimed.pk == older.pk
     assert older.status == JobStatus.PROCESSING
     assert newer.status == JobStatus.QUEUED
+    ownership = DemoVerificationResult.objects.get(job=older)
+    assert ownership.verification_id == verification.id
+    assert ownership.organization_id == organization.id
+    assert ownership.attempt == older.attempt
+    assert ownership.result_state == DemoVerificationState.RESERVED
+    assert ownership.owner_token == claimed._demo_owner_token
+
+
+@pytest.mark.django_db
+@override_settings(SPLITBIND_DEMO_MODE=True)
+def test_claim_rolls_back_processing_transition_when_owner_marker_cannot_persist(
+    claim_context,
+    monkeypatch,
+):
+    organization, verification = claim_context
+    job = make_job(organization, verification)
+
+    def fail_owner_marker_save(self, *args, **kwargs):
+        raise RuntimeError("synthetic owner marker failure")
+
+    monkeypatch.setattr(DemoVerificationResult, "save", fail_owner_marker_save)
+
+    with pytest.raises(RuntimeError, match="owner marker failure"):
+        claim_next_job()
+
+    job.refresh_from_db()
+    assert job.status == JobStatus.QUEUED
+    assert not DemoVerificationResult.objects.filter(job=job).exists()
 
 
 @pytest.mark.django_db

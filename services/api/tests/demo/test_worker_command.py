@@ -18,6 +18,7 @@ from splitbind.demo.models import (
     DEMO_CANONICAL_CANVAS,
     DEMO_FROZEN_CANDIDATE_IDENTIFIER,
     DEMO_LIMITATIONS,
+    DEMO_STALE_RECOVERY_FENCE_CODE,
     DEMO_VERIFICATION_LIMITATIONS,
     DemoIssuanceResult,
     DemoOutputState,
@@ -616,7 +617,8 @@ def test_stale_uploading_issuance_deletes_only_exact_owned_key_then_fails_safely
     evidence.refresh_from_db()
     assert job.status == JobStatus.FAILED
     assert job.safe_error_code == "DEMO_STALE_JOB_FAILED"
-    assert evidence.output_state == DemoOutputState.CLEANED
+    assert evidence.output_state == DemoOutputState.CLEANUP_REQUIRED
+    assert evidence.safe_error_code == DEMO_STALE_RECOVERY_FENCE_CODE
     assert evidence.output_object_key not in worker_storage.objects
     assert foreign_output in worker_storage.objects
 
@@ -653,14 +655,15 @@ def test_stale_output_cleanup_failure_stays_durable_and_retries_exact_key(
     job.refresh_from_db()
     evidence.refresh_from_db()
     assert job.status == JobStatus.FAILED
-    assert evidence.output_state == DemoOutputState.CLEANED
+    assert evidence.output_state == DemoOutputState.CLEANUP_REQUIRED
+    assert evidence.safe_error_code == DEMO_STALE_RECOVERY_FENCE_CODE
     assert evidence.cleanup_failures == 1
     assert evidence.output_object_key not in worker_storage.objects
 
 
 @pytest.mark.django_db
 @override_settings(SPLITBIND_DEMO_MODE=True)
-def test_stale_recovery_does_not_rewrite_fresh_unowned_or_mismatched_attempt_jobs():
+def test_stale_recovery_does_not_rewrite_fresh_manually_unowned_or_mismatched_attempt_jobs():
     fresh, _fresh_event = _created_issuance_job()
     fresh.status = JobStatus.PROCESSING
     fresh.save(update_fields=["status", "updated_at"])
@@ -682,6 +685,55 @@ def test_stale_recovery_does_not_rewrite_fresh_unowned_or_mismatched_attempt_job
     assert fresh.status == JobStatus.PROCESSING
     assert unowned.status == JobStatus.PROCESSING
     assert mismatched.status == JobStatus.PROCESSING
+
+
+@pytest.mark.django_db
+@override_settings(SPLITBIND_DEMO_MODE=True)
+@pytest.mark.parametrize(
+    ("factory", "result_relation", "terminal_state"),
+    [
+        (_created_issuance_job, "demo_issuance_result", DemoOutputState.CLEANED),
+        (_created_verification_job, "demo_verification_result", DemoVerificationState.FAILED),
+    ],
+)
+def test_crash_immediately_after_claim_has_durable_bounded_recovery(
+    worker_storage,
+    factory,
+    result_relation,
+    terminal_state,
+):
+    from splitbind.demo.worker import (
+        claim_next_job,
+        reconcile_stale_jobs,
+        stage_next_created_job,
+    )
+
+    job, _event = factory()
+    staged = stage_next_created_job()
+    claimed = claim_next_job()
+
+    assert staged is not None and staged.id == job.id
+    assert claimed is not None and claimed.id == job.id
+    owner = getattr(claimed, result_relation)
+    assert owner.owner_token == claimed._demo_owner_token
+
+    Job.objects.filter(pk=job.pk).update(
+        updated_at=timezone.now() - timedelta(minutes=16),
+    )
+    outcomes = reconcile_stale_jobs(storage=worker_storage, limit=1)
+
+    job.refresh_from_db()
+    owner.refresh_from_db()
+    assert len(outcomes) == 1
+    assert outcomes[0].job_id == job.id
+    assert job.status == JobStatus.FAILED
+    assert job.safe_error_code == "DEMO_STALE_JOB_FAILED"
+    state = (
+        owner.output_state
+        if isinstance(owner, DemoIssuanceResult)
+        else owner.result_state
+    )
+    assert state == terminal_state
 
 
 @pytest.mark.django_db
@@ -804,7 +856,63 @@ def test_stale_recovery_fences_original_commit_before_exact_output_delete(
     assert job.status == JobStatus.FAILED
     assert issuance.output_object_key is None
     assert issuance.output_sha256 is None
-    assert evidence.output_state == DemoOutputState.CLEANED
+    assert evidence.output_state == DemoOutputState.CLEANUP_REQUIRED
+    assert evidence.safe_error_code == DEMO_STALE_RECOVERY_FENCE_CODE
+    assert evidence.output_object_key not in worker_storage.objects
+
+
+@pytest.mark.django_db
+@override_settings(SPLITBIND_DEMO_MODE=True)
+def test_stale_output_tombstone_redeletes_object_recreated_by_late_inflight_put(
+    worker_storage,
+    monkeypatch,
+):
+    job, _event = _created_issuance_job()
+    job = _make_stale(job)
+    evidence = _own_issuance(job, output_state=DemoOutputState.UPLOADING)
+    worker_storage.inject_object_bytes(
+        key=evidence.output_object_key,
+        content_type="application/pdf",
+        data=b"partial output before recovery",
+        client_sha256_metadata="a" * 64,
+    )
+    original_delete = worker_storage.delete
+    delete_count = 0
+
+    def delete_then_finish_old_put(*, key):
+        nonlocal delete_count
+        delete_count += 1
+        original_delete(key=key)
+        if delete_count == 1:
+            worker_storage.inject_object_bytes(
+                key=key,
+                content_type="application/pdf",
+                data=b"late output from fenced owner",
+                client_sha256_metadata="b" * 64,
+            )
+
+    monkeypatch.setattr(worker_storage, "delete", delete_then_finish_old_put)
+
+    from splitbind.demo.worker import reconcile_stale_jobs
+
+    first = reconcile_stale_jobs(storage=worker_storage, limit=1)
+
+    job.refresh_from_db()
+    evidence.refresh_from_db()
+    assert len(first) == 1
+    assert job.status == JobStatus.FAILED
+    assert evidence.output_state == DemoOutputState.CLEANUP_REQUIRED
+    assert evidence.safe_error_code == DEMO_STALE_RECOVERY_FENCE_CODE
+    assert evidence.output_object_key in worker_storage.objects
+
+    second = reconcile_stale_jobs(storage=worker_storage, limit=1)
+
+    evidence.refresh_from_db()
+    assert len(second) == 1
+    assert second[0].job_id == job.id
+    assert delete_count == 2
+    assert evidence.output_state == DemoOutputState.CLEANUP_REQUIRED
+    assert evidence.safe_error_code == DEMO_STALE_RECOVERY_FENCE_CODE
     assert evidence.output_object_key not in worker_storage.objects
 
 
