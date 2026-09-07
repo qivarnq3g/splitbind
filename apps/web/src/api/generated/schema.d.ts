@@ -261,9 +261,10 @@ export interface components {
     schemas: {
         /**
          * @description * `experimental_unreleased_fingerprint_v2` - experimental_unreleased_fingerprint_v2
+         *     * `integrity_release_v1` - integrity_release_v1
          * @enum {string}
          */
-        AlgorithmLabelEnum: "experimental_unreleased_fingerprint_v2";
+        AlgorithmLabelEnum: "experimental_unreleased_fingerprint_v2" | "integrity_release_v1";
         AuditEvent: {
             /** Format: uuid */
             id: string;
@@ -289,10 +290,23 @@ export interface components {
         CodeError: {
             code: string;
         };
+        /**
+         * @description * `decoded` - decoded
+         *     * `partial_payload_evidence` - partial_payload_evidence
+         *     * `payload_not_detected` - payload_not_detected
+         *     * `insufficient_sync_evidence` - insufficient_sync_evidence
+         *     * `geometry_rejected` - geometry_rejected
+         *     * `execution_error` - execution_error
+         *     * `cancelled` - cancelled
+         * @enum {string}
+         */
+        DecodeStatusEnum: "decoded" | "partial_payload_evidence" | "payload_not_detected" | "insufficient_sync_evidence" | "geometry_rejected" | "execution_error" | "cancelled";
         DemoCapability: {
             enabled: boolean;
             processing_limits: components["schemas"]["DemoProcessingLimits"];
             algorithm_label: components["schemas"]["AlgorithmLabelEnum"];
+            hidden_fingerprint_enabled?: boolean;
+            transformed_attribution_available?: boolean;
         };
         DemoProcessingLimits: {
             max_pdf_pages: number;
@@ -312,11 +326,11 @@ export interface components {
             id: string;
             /** Format: uuid */
             job_id: string | null;
-            status: components["schemas"]["JobStatusEnum"] | null;
+            status: (components["schemas"]["JobStatusEnum"] | components["schemas"]["NullEnum"]) | null;
             /** Format: date-time */
             issued_at: string;
             result_available: boolean;
-            algorithm_label: components["schemas"]["AlgorithmLabelEnum"] | null;
+            algorithm_label: (components["schemas"]["AlgorithmLabelEnum"] | components["schemas"]["NullEnum"]) | null;
         };
         IssuanceCreateRequest: {
             /** Format: uuid */
@@ -377,6 +391,8 @@ export interface components {
             username: string;
             password: string;
         };
+        /** @enum {unknown} */
+        NullEnum: null;
         Readiness: {
             status: components["schemas"]["ReadinessStatusEnum"];
             components: {
@@ -470,8 +486,8 @@ export interface components {
             id: string;
             /** Format: uuid */
             job_id: string | null;
-            job_status: components["schemas"]["JobStatusEnum"] | null;
-            status: components["schemas"]["VerificationStatusEnum"] | null;
+            job_status: (components["schemas"]["JobStatusEnum"] | components["schemas"]["NullEnum"]) | null;
+            status: (components["schemas"]["VerificationStatusEnum"] | components["schemas"]["NullEnum"]) | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -486,6 +502,8 @@ export interface components {
             correlation_id: string;
         };
         VerificationEvidence: {
+            algorithm_label?: (components["schemas"]["AlgorithmLabelEnum"] | components["schemas"]["NullEnum"]) | null;
+            decode_status?: (components["schemas"]["DecodeStatusEnum"] | components["schemas"]["NullEnum"]) | null;
             /** Format: double */
             fingerprint_confidence?: number;
             /** Format: double */
