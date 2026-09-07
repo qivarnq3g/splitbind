@@ -12,6 +12,7 @@ class Command(BaseCommand):
         parser.add_argument("--organization-id", required=True)
         parser.add_argument("--key-id", required=True)
         parser.add_argument("--private-key-file", required=True)
+        parser.add_argument("--passphrase-file", required=True)
         parser.add_argument("--valid-from", required=True)
 
     def handle(self, *args, **options):
@@ -23,7 +24,10 @@ class Command(BaseCommand):
         if valid_from is None or valid_from.tzinfo is None:
             raise CommandError("valid-from must be an RFC 3339 timezone-aware timestamp")
         try:
-            private_key = load_manifest_signing_key(options["private_key_file"])
+            private_key = load_manifest_signing_key(
+                options["private_key_file"],
+                options["passphrase_file"],
+            )
         except ValueError as error:
             raise CommandError(str(error)) from error
         public_pem = public_key_pem(private_key)

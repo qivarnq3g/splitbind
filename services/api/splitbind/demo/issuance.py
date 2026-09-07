@@ -198,10 +198,18 @@ def _process_issuance_job(
     signing_private_key = None
     if integrity_mode:
         signing_key_file = getattr(settings, "SPLITBIND_MANIFEST_SIGNING_KEY_FILE", None)
-        if not signing_key_file:
+        signing_key_passphrase_file = getattr(
+            settings,
+            "SPLITBIND_MANIFEST_SIGNING_KEY_PASSPHRASE_FILE",
+            None,
+        )
+        if not signing_key_file or not signing_key_passphrase_file:
             raise DemoIssuanceError("MANIFEST_SIGNING_KEY_UNAVAILABLE")
         try:
-            signing_private_key = load_manifest_signing_key(signing_key_file)
+            signing_private_key = load_manifest_signing_key(
+                signing_key_file,
+                signing_key_passphrase_file,
+            )
         except ValueError as error:
             raise DemoIssuanceError("MANIFEST_SIGNING_KEY_INVALID") from error
     workspace = tempfile.TemporaryDirectory(prefix=f"splitbind-demo-{claim.job_id}-")

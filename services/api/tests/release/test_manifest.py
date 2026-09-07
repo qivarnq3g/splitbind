@@ -12,7 +12,10 @@ from django.core.management.base import CommandError
 
 from splitbind.access.models import Organization, SigningKey
 from splitbind.documents.manifests import verify_stored_manifest
-from splitbind.release.manifest import build_signed_issuance_manifest
+from splitbind.release.manifest import (
+    build_signed_issuance_manifest,
+    load_manifest_signing_key,
+)
 
 
 ISSUED_AT = datetime(2026, 9, 7, 4, 5, 6, tzinfo=timezone.utc)
@@ -21,14 +24,50 @@ DOCUMENT_ID = UUID("11112233-4455-4677-8899-aabbccddeeff")
 RECIPIENT_ID = UUID("22222233-4455-4677-8899-aabbccddeeff")
 SOURCE_SHA256 = "11" * 32
 OUTPUT_SHA256 = "22" * 32
+PASSPHRASE = b"test-only-integrity-passphrase"
 
 
 def _private_pem(private_key):
     return private_key.private_bytes(
         serialization.Encoding.PEM,
         serialization.PrivateFormat.PKCS8,
-        serialization.NoEncryption(),
+        serialization.BestAvailableEncryption(PASSPHRASE),
     )
+
+
+def test_signing_key_loader_requires_separate_correct_passphrase_file(tmp_path):
+    key_file = tmp_path / "manifest-signing-key.pem"
+    passphrase_file = tmp_path / "manifest-signing-key.passphrase"
+    key_file.write_bytes(_private_pem(Ed25519PrivateKey.generate()))
+    passphrase_file.write_bytes(PASSPHRASE + b"\n")
+
+    assert isinstance(
+        load_manifest_signing_key(key_file, passphrase_file),
+        Ed25519PrivateKey,
+    )
+
+    passphrase_file.write_bytes(b"wrong-passphrase\n")
+    with pytest.raises(ValueError, match="manifest signing key file is invalid"):
+        load_manifest_signing_key(key_file, passphrase_file)
+
+    with pytest.raises(ValueError, match="manifest signing key passphrase file is invalid"):
+        load_manifest_signing_key(key_file, tmp_path / "missing-passphrase")
+
+
+def test_signing_key_loader_rejects_unencrypted_pkcs8(tmp_path):
+    key_file = tmp_path / "manifest-signing-key.pem"
+    passphrase_file = tmp_path / "manifest-signing-key.passphrase"
+    key_file.write_bytes(
+        Ed25519PrivateKey.generate().private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    passphrase_file.write_bytes(PASSPHRASE)
+
+    with pytest.raises(ValueError, match="manifest signing key file is invalid"):
+        load_manifest_signing_key(key_file, passphrase_file)
 
 
 @pytest.mark.django_db
@@ -120,12 +159,15 @@ def test_modified_output_hash_signature_or_key_id_fails_closed():
 def test_registration_command_is_idempotent_but_rejects_changed_key_bytes(tmp_path):
     organization = Organization.objects.create(name="Registry", slug="registry")
     key_file = tmp_path / "manifest-signing-key.pem"
+    passphrase_file = tmp_path / "manifest-signing-key.passphrase"
     key_file.write_bytes(_private_pem(Ed25519PrivateKey.generate()))
+    passphrase_file.write_bytes(PASSPHRASE)
 
     arguments = {
         "organization_id": str(organization.id),
         "key_id": "integrity-key-1",
         "private_key_file": str(key_file),
+        "passphrase_file": str(passphrase_file),
         "valid_from": "2026-09-07T04:05:06Z",
         "stdout": StringIO(),
     }

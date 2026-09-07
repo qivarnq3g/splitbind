@@ -146,13 +146,16 @@ def test_integrity_release_issuance_never_loads_or_embeds_hidden_fingerprint(
 ):
     private_key = Ed25519PrivateKey.generate()
     key_path = tmp_path / "manifest-signing-key.pem"
+    passphrase_path = tmp_path / "manifest-signing-key.passphrase"
+    passphrase = b"test-only-integrity-passphrase"
     key_path.write_bytes(
         private_key.private_bytes(
             serialization.Encoding.PEM,
             serialization.PrivateFormat.PKCS8,
-            serialization.NoEncryption(),
+            serialization.BestAvailableEncryption(passphrase),
         )
     )
+    passphrase_path.write_bytes(passphrase)
     job, issuance, _document, storage = processing_issuance
     SigningKey.objects.create(
         organization=issuance.organization,
@@ -175,6 +178,7 @@ def test_integrity_release_issuance_never_loads_or_embeds_hidden_fingerprint(
         SPLITBIND_DEMO_MODE=False,
         SPLITBIND_RELEASE_MODE=ReleaseMode.INTEGRITY_V1,
         SPLITBIND_MANIFEST_SIGNING_KEY_FILE=str(key_path),
+        SPLITBIND_MANIFEST_SIGNING_KEY_PASSPHRASE_FILE=str(passphrase_path),
     ):
         result = process_issuance_job(job_id=job.id, storage=storage)
 

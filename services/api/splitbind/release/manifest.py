@@ -19,12 +19,27 @@ class SignedIssuanceManifest:
     public_signature_envelope: dict[str, str]
 
 
-def load_manifest_signing_key(path: str | Path) -> Ed25519PrivateKey:
+def load_manifest_signing_key(
+    path: str | Path,
+    passphrase_path: str | Path,
+) -> Ed25519PrivateKey:
     key_path = Path(path)
     try:
         encoded = key_path.read_bytes()
-        private_key = serialization.load_pem_private_key(encoded, password=None)
-    except (OSError, TypeError, ValueError) as error:
+    except OSError as error:
+        raise ValueError("manifest signing key file is invalid") from error
+    try:
+        passphrase = Path(passphrase_path).read_bytes().rstrip(b"\r\n")
+    except OSError as error:
+        raise ValueError("manifest signing key passphrase file is invalid") from error
+    if not passphrase or len(passphrase) > 4096:
+        raise ValueError("manifest signing key passphrase file is invalid")
+    try:
+        private_key = serialization.load_pem_private_key(
+            encoded,
+            password=passphrase,
+        )
+    except (TypeError, ValueError) as error:
         raise ValueError("manifest signing key file is invalid") from error
     if not isinstance(private_key, Ed25519PrivateKey):
         raise ValueError("manifest signing key must be Ed25519")

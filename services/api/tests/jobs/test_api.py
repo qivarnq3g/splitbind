@@ -206,3 +206,35 @@ def test_verification_detail_projects_integrity_release_limits_without_hidden_cl
         "evidence.not_proof_of_leak_edit_or_distribution",
         "fingerprint.transformed_attribution_unavailable",
     ]
+
+
+@pytest.mark.django_db
+@override_settings(SPLITBIND_RELEASE_MODE=ReleaseMode.INTEGRITY_V1)
+def test_integrity_release_malformed_legacy_limitations_fail_closed():
+    org = Organization.objects.create(
+        name="Integrity legacy",
+        slug=f"integrity-legacy-{uuid.uuid4().hex[:8]}",
+    )
+    verifier = make_user(org, Role.VERIFIER, "integrity-legacy-verifier")
+    storage = FakeObjectStorage()
+    upload = ready_upload(org, verifier, storage, UploadPurpose.VERIFICATION)
+    verification = Verification.objects.create(
+        organization=org,
+        upload_request=upload,
+        requested_by=verifier,
+        evidence={
+            "algorithm_label": "integrity_release_v1",
+            "exact_file_hash_match": False,
+            "limitations": "malformed-private-value",
+        },
+    )
+    client = Client()
+    client.force_login(verifier)
+
+    response = client.get(f"/api/v1/verifications/{verification.id}")
+
+    assert response.status_code == 200
+    assert response.json()["evidence"]["limitations"] == [
+        "evidence.not_proof_of_leak_edit_or_distribution",
+        "fingerprint.transformed_attribution_unavailable",
+    ]

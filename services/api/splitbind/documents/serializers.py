@@ -85,17 +85,18 @@ def _contract_evidence(value):
                 safe_regions.append({key: region[key] for key in ("x", "y", "width", "height")})
         projected["suspicious_regions"] = safe_regions
     limitations = value.get("limitations")
-    if isinstance(limitations, list):
+    if integrity_mode:
+        projected_limitations = ["evidence.not_proof_of_leak_edit_or_distribution"]
+        if projected.get("exact_file_hash_match") is not True:
+            projected_limitations.append(
+                "fingerprint.transformed_attribution_unavailable"
+            )
+        projected["limitations"] = projected_limitations
+    elif isinstance(limitations, list):
         projected_limitations = [
             item for item in limitations[:100]
             if isinstance(item, str) and _LIMITATION_ID.fullmatch(item)
         ]
-        if integrity_mode:
-            projected_limitations = ["evidence.not_proof_of_leak_edit_or_distribution"]
-            if projected.get("exact_file_hash_match") is not True:
-                projected_limitations.append(
-                    "fingerprint.transformed_attribution_unavailable"
-                )
         projected["limitations"] = projected_limitations
     return projected
 
