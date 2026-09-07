@@ -10,6 +10,8 @@ import numpy as np
 import pypdfium2 as pdfium
 import pytest
 import django
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from pypdf import PdfReader
 from pypdf import PdfWriter
 from pypdf.generic import NameObject, NumberObject
@@ -21,7 +23,7 @@ from django.utils import timezone
 
 django.setup()
 
-from splitbind.access.models import Organization, Recipient, Role, User
+from splitbind.access.models import Organization, Recipient, Role, SigningKey, User
 from splitbind.demo import issuance as issuance_module
 from splitbind.demo.issuance import (
     FROZEN_CANDIDATE_IDENTIFIER_HEX,
@@ -37,6 +39,8 @@ from splitbind.jobs.models import Job, JobKind, JobResultReceipt, JobStatus
 from splitbind_ref.fingerprint_v2 import decode_fingerprint_v2
 from splitbind_bench.pdf_fidelity import assess_pdf_fidelity
 from splitbind.uploads.models import PromotionStatus, UploadPurpose, UploadRequest
+from splitbind.release.manifest import public_key_pem
+from splitbind.release.mode import ReleaseMode
 
 from .fixtures import blank_pdf_bytes, encrypted_pdf_bytes, synthetic_pdf_bytes
 
@@ -132,6 +136,56 @@ def assert_failed_without_result(processing_issuance, safe_error_code: str):
     assert not JobResultReceipt.objects.filter(job_id=job.id).exists()
     assert output_key not in storage.objects
     assert output_key not in storage.object_bytes
+
+
+@pytest.mark.django_db
+def test_integrity_release_issuance_never_loads_or_embeds_hidden_fingerprint(
+    processing_issuance,
+    monkeypatch,
+    tmp_path,
+):
+    private_key = Ed25519PrivateKey.generate()
+    key_path = tmp_path / "manifest-signing-key.pem"
+    key_path.write_bytes(
+        private_key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    job, issuance, _document, storage = processing_issuance
+    SigningKey.objects.create(
+        organization=issuance.organization,
+        key_id="integrity-key-1",
+        public_key=public_key_pem(private_key),
+        valid_from=issuance.issued_at - timedelta(seconds=1),
+    )
+
+    monkeypatch.setattr(
+        issuance_module,
+        "_load_fingerprint_key",
+        lambda: pytest.fail("integrity release loaded a hidden fingerprint key"),
+    )
+    monkeypatch.setattr(
+        issuance_module,
+        "embed_fingerprint_v2",
+        lambda *args, **kwargs: pytest.fail("integrity release embedded a hidden fingerprint"),
+    )
+    with override_settings(
+        SPLITBIND_DEMO_MODE=False,
+        SPLITBIND_RELEASE_MODE=ReleaseMode.INTEGRITY_V1,
+        SPLITBIND_MANIFEST_SIGNING_KEY_FILE=str(key_path),
+    ):
+        result = process_issuance_job(job_id=job.id, storage=storage)
+
+    manifest = Manifest.objects.get(issuance=issuance)
+    assert result.algorithm_label == "integrity_release_v1"
+    assert result.output_sha256 == hashlib.sha256(
+        storage.object_bytes[result.output_object_key]
+    ).hexdigest()
+    assert manifest.signing_key.key_id == "integrity-key-1"
+    assert manifest.public_payload != manifest.internal_payload
+    assert "recipient_id" not in manifest.public_payload
 
 
 def test_same_input_identity_and_key_produce_identical_output_bytes():

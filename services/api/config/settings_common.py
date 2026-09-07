@@ -4,6 +4,7 @@ from pathlib import Path
 from django.core.exceptions import ImproperlyConfigured
 
 from .limits import load_runtime_limits
+from splitbind.release.mode import load_release_mode
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -32,6 +33,7 @@ INSTALLED_APPS = [
     "splitbind.audit.apps.AuditConfig",
     "splitbind.health.apps.HealthConfig",
     "splitbind.demo.apps.DemoConfig",
+    "splitbind.release",
 ]
 
 MIDDLEWARE = [
@@ -103,6 +105,12 @@ def load_demo_mode(environment: str, value: object) -> bool:
 
 
 SPLITBIND_DEMO_MODE = load_demo_mode(ENVIRONMENT, os.environ.get("SPLITBIND_DEMO_MODE"))
+SPLITBIND_RELEASE_MODE = load_release_mode(
+    ENVIRONMENT, os.environ.get("SPLITBIND_RELEASE_MODE")
+)
+SPLITBIND_MANIFEST_SIGNING_KEY_FILE = os.environ.get(
+    "SPLITBIND_MANIFEST_SIGNING_KEY_FILE"
+)
 globals().update(load_runtime_limits(ENVIRONMENT, os.environ))
 SPLITBIND_BROKER_READINESS = None
 BROKER_READINESS_TIMEOUT_SECONDS = 1.0
@@ -130,7 +138,7 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
-    "ENUM_ADD_EXPLICIT_BLANK_NULL_CHOICE": False,
+    "ENUM_ADD_EXPLICIT_BLANK_NULL_CHOICE": True,
     "ENUM_NAME_OVERRIDES": {
         "RoleEnum": ["administrator", "issuer", "verifier", "auditor"],
         "JobStatusEnum": [

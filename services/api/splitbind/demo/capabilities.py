@@ -4,6 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from splitbind.openapi import demo_capability_schema
+from splitbind.release.mode import integrity_release_enabled
 
 
 DEMO_PROCESSING_LIMITS = {
@@ -18,10 +19,19 @@ DEMO_ALGORITHM_LABEL = "experimental_unreleased_fingerprint_v2"
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def capabilities(request):
-    return Response(
-        {
-            "enabled": settings.SPLITBIND_DEMO_MODE,
-            "processing_limits": DEMO_PROCESSING_LIMITS,
-            "algorithm_label": DEMO_ALGORITHM_LABEL,
-        }
+    integrity_mode = integrity_release_enabled(
+        getattr(settings, "SPLITBIND_RELEASE_MODE", None)
     )
+    payload = {
+        "enabled": settings.SPLITBIND_DEMO_MODE or integrity_mode,
+        "processing_limits": DEMO_PROCESSING_LIMITS,
+        "algorithm_label": (
+            "integrity_release_v1" if integrity_mode else DEMO_ALGORITHM_LABEL
+        ),
+    }
+    if integrity_mode:
+        payload.update(
+            hidden_fingerprint_enabled=False,
+            transformed_attribution_available=False,
+        )
+    return Response(payload)

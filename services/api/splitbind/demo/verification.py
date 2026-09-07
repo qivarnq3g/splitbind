@@ -45,6 +45,7 @@ from splitbind.integrations.storage.base import (
 )
 from splitbind.jobs.models import Job, JobKind, JobResultReceipt, JobStatus
 from splitbind.jobs.state import transition_job
+from splitbind.release.mode import integrity_release_enabled
 from splitbind.uploads.models import PromotionStatus, UploadPurpose, UploadRequest
 from splitbind_ref.fingerprint_v2 import DecodeV2Decision, decode_fingerprint_v2
 
@@ -56,6 +57,8 @@ PDF_RENDER_SCALE = 2.0
 _LEGACY_CANONICAL_PAGE_CONTENT = b"q\n1152 0 0 2304 0 0 cm\n/Im0 Do\nQ\n"
 _UNKNOWN_PAGE_MIN_CONSISTENT_DECODES = 2
 _BASE_LIMITATIONS = DEMO_VERIFICATION_LIMITATIONS
+INTEGRITY_ALGORITHM_LABEL = "integrity_release_v1"
+TRANSFORMED_ATTRIBUTION_UNAVAILABLE = "fingerprint.transformed_attribution_unavailable"
 
 
 class DemoVerificationError(RuntimeError):
@@ -97,7 +100,10 @@ class _SourceResolution:
 def process_verification_job(
     *, job_id, storage, owner_token: uuid.UUID | None = None
 ) -> VerificationProcessingResult:
-    if not settings.SPLITBIND_DEMO_MODE:
+    integrity_mode = integrity_release_enabled(
+        getattr(settings, "SPLITBIND_RELEASE_MODE", None)
+    )
+    if not settings.SPLITBIND_DEMO_MODE and not integrity_mode:
         raise DemoVerificationError("DEMO_MODE_DISABLED")
     started = time.monotonic()
     acquired = _acquire_processing_claim(
@@ -110,11 +116,14 @@ def process_verification_job(
         raise DemoVerificationError("DEMO_JOB_CANCELLED")
 
     try:
-        try:
-            fingerprint_key = _load_fingerprint_key()
-            candidate, _candidate_identifier = _select_frozen_candidate()
-        except DemoIssuanceProcessingError as error:
-            raise DemoVerificationError(error.code) from error
+        fingerprint_key = None
+        candidate = None
+        if not integrity_mode:
+            try:
+                fingerprint_key = _load_fingerprint_key()
+                candidate, _candidate_identifier = _select_frozen_candidate()
+            except DemoIssuanceProcessingError as error:
+                raise DemoVerificationError(error.code) from error
         if _cancel_before_work(acquired):
             raise DemoVerificationError("DEMO_JOB_CANCELLED")
         try:
@@ -145,11 +154,16 @@ def process_verification_job(
         try:
             source_path = workspace_path / "suspect.bin"
             source_path.write_bytes(downloaded.data)
-            decode, pages_analyzed = _decode_content(
-                source_path.read_bytes(),
-                fingerprint_key=fingerprint_key,
-                candidate=candidate,
-            )
+            source_bytes = source_path.read_bytes()
+            if integrity_mode:
+                pages_analyzed = _inspect_integrity_content(source_bytes)
+                decode = _DecodeSummary(None, 0.0, 0, "payload_not_detected")
+            else:
+                decode, pages_analyzed = _decode_content(
+                    source_bytes,
+                    fingerprint_key=fingerprint_key,
+                    candidate=candidate,
+                )
         except Exception as error:
             cleanup_failures = _cleanup_workspace(workspace)
             if cleanup_failures:
@@ -173,6 +187,7 @@ def process_verification_job(
                 decode=decode,
                 pages_analyzed=pages_analyzed,
                 processing_ms=processing_ms,
+                exact_only=integrity_mode,
             )
         except DemoVerificationError:
             raise
@@ -261,6 +276,41 @@ def _decode_content(
         return _decode_png(source, fingerprint_key=fingerprint_key, candidate=candidate)
     if source.startswith(b"\xff\xd8\xff"):
         return _decode_jpeg(source, fingerprint_key=fingerprint_key, candidate=candidate)
+    raise DemoVerificationError("DEMO_INPUT_FORMAT_INVALID")
+
+
+def _inspect_integrity_content(source: bytes) -> int:
+    """Validate a bounded input without executing hidden-fingerprint recovery."""
+    if len(source) > DEMO_MAX_INPUT_BYTES:
+        raise DemoVerificationError("DEMO_INPUT_FILE_LIMIT")
+    if source.startswith(b"%PDF-"):
+        try:
+            document = pdfium.PdfDocument(source)
+        except pdfium.PdfiumError as error:
+            code = (
+                "DEMO_PDF_ENCRYPTED"
+                if error.err_code == pdfium.raw.FPDF_ERR_PASSWORD
+                else "DEMO_PDF_INVALID"
+            )
+            raise DemoVerificationError(code) from error
+        except Exception as error:
+            raise DemoVerificationError("DEMO_PDF_INVALID") from error
+        try:
+            document.init_forms()
+            page_count = len(document)
+            if not 1 <= page_count <= DEMO_MAX_PAGES:
+                raise DemoVerificationError("DEMO_PDF_PAGE_LIMIT")
+            _page_units, render_scales = _pdf_page_metadata(source, page_count)
+            _validate_pdf_raster_budget(document, render_scales)
+            return page_count
+        finally:
+            document.close()
+    if source.startswith(b"\x89PNG\r\n\x1a\n") or source.startswith(b"\xff\xd8\xff"):
+        image = cv2.imdecode(np.frombuffer(source, dtype=np.uint8), cv2.IMREAD_UNCHANGED)
+        if image is None or image.ndim not in (2, 3):
+            raise DemoVerificationError("DEMO_IMAGE_INVALID")
+        _validate_image_dimensions(width=image.shape[1], height=image.shape[0])
+        return 1
     raise DemoVerificationError("DEMO_INPUT_FORMAT_INVALID")
 
 
@@ -573,6 +623,7 @@ def _commit_verification_result(
     decode: _DecodeSummary,
     pages_analyzed: int,
     processing_ms: int,
+    exact_only: bool = False,
 ) -> VerificationProcessingResult | None:
     job = _locked_job(claim.job_id)
     verification, upload = _locked_verification_upload(job)
@@ -588,8 +639,13 @@ def _commit_verification_result(
         organization_id=claim.organization_id,
         input_sha256=input_sha256,
         decode=decode,
+        exact_only=exact_only,
     )
     limitations = tuple(dict.fromkeys((*_BASE_LIMITATIONS, *source.limitations)))
+    if exact_only:
+        # Preserve the already-migrated immutable demo evidence shape. The
+        # release projection below replaces it with the narrower public claim.
+        limitations = _BASE_LIMITATIONS
     evidence = {
         "algorithm_label": DEMO_ALGORITHM_LABEL,
         "decode_status": decode.status,
@@ -652,7 +708,11 @@ def _commit_verification_result(
 
 
 def _resolve_source_locked(
-    *, organization_id: uuid.UUID, input_sha256: str, decode: _DecodeSummary
+    *,
+    organization_id: uuid.UUID,
+    input_sha256: str,
+    decode: _DecodeSummary,
+    exact_only: bool = False,
 ) -> _SourceResolution:
     exact_candidates = list(
         Issuance.objects.select_for_update()
@@ -662,7 +722,7 @@ def _resolve_source_locked(
     if len(exact_candidates) == 1:
         issuance = exact_candidates[0]
         evidence_valid, manifest_valid = _validate_retained_source_locked(issuance)
-        if evidence_valid and manifest_valid is not False:
+        if evidence_valid and manifest_valid is True:
             limitations = (
                 ("manifest.signed_evidence_unavailable",)
                 if manifest_valid is None
@@ -674,6 +734,14 @@ def _resolve_source_locked(
                 True,
                 manifest_valid,
                 limitations,
+            )
+        if evidence_valid and manifest_valid is None and not exact_only:
+            return _SourceResolution(
+                VerificationStatus.VERIFIED_INTACT,
+                issuance.id,
+                True,
+                None,
+                ("manifest.signed_evidence_unavailable",),
             )
         return _SourceResolution(
             VerificationStatus.INVALID_MANIFEST,
@@ -689,6 +757,14 @@ def _resolve_source_locked(
             True,
             None,
             ("evidence.exact_hash_ambiguous", "manifest.signed_evidence_unavailable"),
+        )
+    if exact_only:
+        return _SourceResolution(
+            VerificationStatus.NO_WATERMARK,
+            None,
+            False,
+            None,
+            (TRANSFORMED_ATTRIBUTION_UNAVAILABLE,),
         )
     if decode.status == "decoded" and decode.issuance_id is not None:
         issuance = (
@@ -1026,13 +1102,22 @@ def _load_replay_result(
         or not receipt_exists
     ):
         raise DemoVerificationError("DEMO_VERIFICATION_RESULT_INVALID")
-    result_record.full_clean()
+    if not integrity_release_enabled(getattr(settings, "SPLITBIND_RELEASE_MODE", None)):
+        result_record.full_clean()
     return _result_from_record(result_record)
 
 
 def _result_from_record(record: DemoVerificationResult) -> VerificationProcessingResult:
     evidence = record.evidence
     metrics = record.metrics
+    integrity_mode = integrity_release_enabled(
+        getattr(settings, "SPLITBIND_RELEASE_MODE", None)
+    )
+    limitations = tuple(evidence["limitations"])
+    if integrity_mode:
+        limitations = ("evidence.not_proof_of_leak_edit_or_distribution",)
+        if evidence["exact_file_hash_match"] is not True:
+            limitations += (TRANSFORMED_ATTRIBUTION_UNAVAILABLE,)
     return VerificationProcessingResult(
         organization_id=record.organization_id,
         job_id=record.job_id,
@@ -1040,7 +1125,11 @@ def _result_from_record(record: DemoVerificationResult) -> VerificationProcessin
         status=record.result_status,
         recovered_issuance_id=record.recovered_issuance_id,
         input_sha256=record.input_sha256,
-        algorithm_label=evidence["algorithm_label"],
+        algorithm_label=(
+            INTEGRITY_ALGORITHM_LABEL
+            if integrity_release_enabled(getattr(settings, "SPLITBIND_RELEASE_MODE", None))
+            else evidence["algorithm_label"]
+        ),
         decode_status=evidence["decode_status"],
         fingerprint_confidence=evidence["fingerprint_confidence"],
         valid_vote_count=evidence["valid_vote_count"],
@@ -1048,6 +1137,6 @@ def _result_from_record(record: DemoVerificationResult) -> VerificationProcessin
         manifest_signature_valid=evidence["manifest_signature_valid"],
         pages_analyzed=evidence["analyzed_page_count"],
         processing_ms=metrics["processing_ms"],
-        limitations=tuple(evidence["limitations"]),
+        limitations=limitations,
         cleanup_failures=metrics["cleanup_failures"],
     )

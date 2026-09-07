@@ -18,6 +18,7 @@ from pypdf import PdfReader
 from pypdf.errors import PyPdfError
 from django.conf import settings
 from django.db import transaction
+from django.utils import timezone
 
 from splitbind.demo.capabilities import DEMO_ALGORITHM_LABEL
 from splitbind.demo.models import (
@@ -31,10 +32,18 @@ from splitbind.demo.models import (
     _allow_demo_result_write,
 )
 from splitbind.demo.results import IssuanceProcessingResult
-from splitbind.documents.models import Document, Issuance
+from splitbind.access.models import SigningKey, SigningKeyStatus
+from splitbind.documents.models import Document, Issuance, Manifest
 from splitbind.integrations.storage.base import StorageUnavailable, UploadRejected
 from splitbind.jobs.models import Job, JobKind, JobResultReceipt, JobStatus
 from splitbind.jobs.state import transition_job
+from splitbind.release.manifest import (
+    build_signed_issuance_manifest,
+    load_manifest_signing_key,
+    public_key_pem,
+)
+from splitbind.release.marker import apply_visible_marker
+from splitbind.release.mode import integrity_release_enabled
 from splitbind_ref.fingerprint_v2 import FingerprintV2Context, embed_fingerprint_v2
 from splitbind_ref.fingerprint_v2_profile import candidate_identifier_v2, load_v2_profiles
 
@@ -47,6 +56,8 @@ SOURCE_RENDER_SCALE = 2.0
 FINGERPRINT_KEY_ENV = "SPLITBIND_DEMO_FINGERPRINT_KEY_HEX"
 FROZEN_CANDIDATE_IDENTIFIER_HEX = DEMO_FROZEN_CANDIDATE_IDENTIFIER
 LIMITATIONS = DEMO_LIMITATIONS
+INTEGRITY_ALGORITHM_LABEL = "integrity_release_v1"
+INTEGRITY_RETENTION_POLICY_ID = "retention-v1"
 
 
 class DemoIssuanceError(RuntimeError):
@@ -81,7 +92,10 @@ class _CanonicalizedPage:
 def process_issuance_job(
     *, job_id, storage, owner_token: uuid.UUID | None = None
 ) -> IssuanceProcessingResult:
-    if not settings.SPLITBIND_DEMO_MODE:
+    integrity_mode = integrity_release_enabled(
+        getattr(settings, "SPLITBIND_RELEASE_MODE", None)
+    )
+    if not settings.SPLITBIND_DEMO_MODE and not integrity_mode:
         raise DemoIssuanceError("DEMO_MODE_DISABLED")
     started = time.monotonic()
     acquired = _acquire_processing_claim(
@@ -177,7 +191,19 @@ def _process_issuance_job(
     storage,
     started: float,
 ) -> IssuanceProcessingResult:
-    fingerprint_key = _load_fingerprint_key()
+    integrity_mode = integrity_release_enabled(
+        getattr(settings, "SPLITBIND_RELEASE_MODE", None)
+    )
+    fingerprint_key = None if integrity_mode else _load_fingerprint_key()
+    signing_private_key = None
+    if integrity_mode:
+        signing_key_file = getattr(settings, "SPLITBIND_MANIFEST_SIGNING_KEY_FILE", None)
+        if not signing_key_file:
+            raise DemoIssuanceError("MANIFEST_SIGNING_KEY_UNAVAILABLE")
+        try:
+            signing_private_key = load_manifest_signing_key(signing_key_file)
+        except ValueError as error:
+            raise DemoIssuanceError("MANIFEST_SIGNING_KEY_INVALID") from error
     workspace = tempfile.TemporaryDirectory(prefix=f"splitbind-demo-{claim.job_id}-")
     workspace_path = Path(workspace.name)
 
@@ -207,6 +233,7 @@ def _process_issuance_job(
             source_path.read_bytes(),
             issuance_id=claim.issuance_id,
             fingerprint_key=fingerprint_key,
+            visible_marker=integrity_mode,
         )
         output_path.write_bytes(output_bytes)
         if not _begin_output_upload(claim):
@@ -265,6 +292,7 @@ def _process_issuance_job(
             page_count=page_count,
             candidate_identifier=candidate_identifier,
             processing_ms=processing_ms,
+            signing_private_key=signing_private_key,
         )
     except Exception as error:
         cleanup_failures, code = _compensate_owned_output(
@@ -623,6 +651,11 @@ def _load_replay_result(
 
 
 def _result_from_evidence(evidence: DemoIssuanceResult) -> IssuanceProcessingResult:
+    algorithm_label = (
+        INTEGRITY_ALGORITHM_LABEL
+        if integrity_release_enabled(getattr(settings, "SPLITBIND_RELEASE_MODE", None))
+        else evidence.algorithm_label
+    )
     return IssuanceProcessingResult(
         organization_id=evidence.organization_id,
         job_id=evidence.job_id,
@@ -630,7 +663,7 @@ def _result_from_evidence(evidence: DemoIssuanceResult) -> IssuanceProcessingRes
         input_sha256=evidence.input_sha256,
         output_sha256=evidence.output_sha256,
         output_object_key=evidence.output_object_key,
-        algorithm_label=evidence.algorithm_label,
+        algorithm_label=algorithm_label,
         candidate_identifier=evidence.candidate_identifier,
         canonical_canvas=(evidence.canvas_height, evidence.canvas_width),
         pages_processed=evidence.page_count,
@@ -662,14 +695,21 @@ def _build_issuance_pdf(
     source_pdf: bytes,
     *,
     issuance_id: uuid.UUID,
-    fingerprint_key: bytes,
+    fingerprint_key: bytes | None,
+    visible_marker: bool = False,
 ) -> tuple[bytes, int, str]:
     if len(source_pdf) > DEMO_MAX_PDF_BYTES:
         raise DemoIssuanceError("DEMO_PDF_FILE_LIMIT")
     if not source_pdf.startswith(b"%PDF-"):
         raise DemoIssuanceError("DEMO_PDF_INVALID")
 
-    candidate, candidate_identifier = _select_frozen_candidate()
+    if visible_marker:
+        candidate = None
+        candidate_identifier = FROZEN_CANDIDATE_IDENTIFIER_HEX
+    else:
+        if fingerprint_key is None:
+            raise DemoIssuanceError("DEMO_FINGERPRINT_KEY_INVALID")
+        candidate, candidate_identifier = _select_frozen_candidate()
     try:
         input_pdf = pdfium.PdfDocument(source_pdf)
     except pdfium.PdfiumError as error:
@@ -707,20 +747,23 @@ def _build_issuance_pdf(
                     bitmap.close()
             finally:
                 source_page.close()
-            canonical = _canonicalize_page(rendered)
-            embedded = embed_fingerprint_v2(
-                canonical.canvas,
-                FingerprintV2Context(
-                    issuance_id=issuance_id,
-                    fingerprint_key=fingerprint_key,
-                    page_index=page_index,
-                ),
-                candidate,
-            ).image
-            content = embedded[
-                canonical.top : canonical.top + canonical.height,
-                canonical.left : canonical.left + canonical.width,
-            ]
+            if visible_marker:
+                content = apply_visible_marker(rendered, issuance_id)
+            else:
+                canonical = _canonicalize_page(rendered)
+                embedded = embed_fingerprint_v2(
+                    canonical.canvas,
+                    FingerprintV2Context(
+                        issuance_id=issuance_id,
+                        fingerprint_key=fingerprint_key,
+                        page_index=page_index,
+                    ),
+                    candidate,
+                ).image
+                content = embedded[
+                    canonical.top : canonical.top + canonical.height,
+                    canonical.left : canonical.left + canonical.width,
+                ]
             source_height, source_width = rendered.shape[:2]
             if content.shape[:2] != (source_height, source_width):
                 content = cv2.resize(
@@ -906,6 +949,7 @@ def _commit_issuance_result(
     page_count: int,
     candidate_identifier: str,
     processing_ms: int,
+    signing_private_key=None,
 ) -> IssuanceProcessingResult | None:
     job = _locked_job(claim.job_id)
     issuance, document = _locked_issuance_document(job)
@@ -929,6 +973,34 @@ def _commit_issuance_result(
     issuance.save(update_fields=["output_object_key", "output_sha256"])
     document.page_count = page_count
     document.save(update_fields=["page_count"])
+    if signing_private_key is not None:
+        signing_key = _integrity_signing_key_locked(
+            organization_id=claim.organization_id,
+            private_key=signing_private_key,
+            at=timezone.now(),
+        )
+        pair = build_signed_issuance_manifest(
+            issuance_id=issuance.id,
+            document_id=document.id,
+            recipient_id=issuance.recipient_id,
+            issued_at=issuance.issued_at,
+            source_sha256=input_sha256,
+            output_sha256=output_sha256,
+            signing_key_id=signing_key.key_id,
+            private_key=signing_private_key,
+            retention_policy_id=INTEGRITY_RETENTION_POLICY_ID,
+        )
+        manifest = Manifest(
+            organization_id=claim.organization_id,
+            issuance=issuance,
+            signing_key=signing_key,
+            internal_payload=pair.internal_payload,
+            internal_signature_envelope=pair.internal_signature_envelope,
+            public_payload=pair.public_payload,
+            public_signature_envelope=pair.public_signature_envelope,
+        )
+        manifest.full_clean()
+        manifest.save()
     JobResultReceipt.objects.create(
         message_id=_receipt_id(job),
         organization_id=claim.organization_id,
@@ -967,3 +1039,23 @@ def _commit_issuance_result(
     job.safe_error_code = None
     job.save(update_fields=["status", "safe_error_code", "updated_at"])
     return _result_from_evidence(evidence)
+
+
+def _integrity_signing_key_locked(*, organization_id, private_key, at):
+    candidates = list(
+        SigningKey.objects.select_for_update()
+        .filter(
+            organization_id=organization_id,
+            public_key=public_key_pem(private_key),
+            algorithm="Ed25519",
+            status=SigningKeyStatus.ACTIVE,
+            valid_from__lte=at,
+        )
+        .order_by("key_id")[:2]
+    )
+    candidates = [
+        key for key in candidates if key.valid_until is None or at < key.valid_until
+    ]
+    if len(candidates) != 1:
+        raise DemoIssuanceError("MANIFEST_SIGNING_KEY_UNREGISTERED")
+    return candidates[0]

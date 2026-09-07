@@ -10,6 +10,7 @@ from splitbind.access.models import Organization, Recipient, Role, User
 from splitbind.documents.models import Verification
 from splitbind.integrations.storage.fake import FakeObjectStorage
 from splitbind.uploads.models import UploadPurpose, UploadRequest
+from splitbind.release.mode import ReleaseMode
 
 
 SHA256 = "a" * 64
@@ -139,6 +140,8 @@ def test_verification_detail_projects_only_contract_evidence_and_metrics():
         upload_request=upload,
         requested_by=verifier,
         evidence={
+            "algorithm_label": "private_unreleased_algorithm",
+            "decode_status": "private_backend_status",
             "fingerprint_confidence": 0.75,
             "limitations": ["geometry.limited"],
             "input_object_key": "inputs/verification/private.bin",
@@ -156,6 +159,8 @@ def test_verification_detail_projects_only_contract_evidence_and_metrics():
 
     assert response.status_code == 200
     assert response.json()["evidence"] == {
+        "algorithm_label": None,
+        "decode_status": None,
         "fingerprint_confidence": 0.75,
         "limitations": ["geometry.limited"],
     }
@@ -163,3 +168,41 @@ def test_verification_detail_projects_only_contract_evidence_and_metrics():
     serialized = response.content.decode().lower()
     for forbidden in ("object_key", "private person", "provider.invalid", "exception_text"):
         assert forbidden not in serialized
+
+
+@pytest.mark.django_db
+@override_settings(SPLITBIND_RELEASE_MODE=ReleaseMode.INTEGRITY_V1)
+def test_verification_detail_projects_integrity_release_limits_without_hidden_claims():
+    org = Organization.objects.create(name="Integrity", slug=f"integrity-{uuid.uuid4().hex[:8]}")
+    verifier = make_user(org, Role.VERIFIER, "integrity-verifier")
+    storage = FakeObjectStorage()
+    upload = ready_upload(org, verifier, storage, UploadPurpose.VERIFICATION)
+    verification = Verification.objects.create(
+        organization=org,
+        upload_request=upload,
+        requested_by=verifier,
+        evidence={
+            "algorithm_label": "experimental_unreleased_fingerprint_v2",
+            "decode_status": "payload_not_detected",
+            "fingerprint_confidence": 0.0,
+            "valid_vote_count": 0,
+            "analyzed_page_count": 1,
+            "manifest_signature_valid": None,
+            "exact_file_hash_match": False,
+            "limitations": [
+                "fingerprint.experimental_unreleased_v2",
+                "fingerprint.not_gate_g1_evidence",
+            ],
+        },
+    )
+    client = Client()
+    client.force_login(verifier)
+
+    response = client.get(f"/api/v1/verifications/{verification.id}")
+
+    assert response.status_code == 200
+    assert response.json()["evidence"]["algorithm_label"] == "integrity_release_v1"
+    assert response.json()["evidence"]["limitations"] == [
+        "evidence.not_proof_of_leak_edit_or_distribution",
+        "fingerprint.transformed_attribution_unavailable",
+    ]

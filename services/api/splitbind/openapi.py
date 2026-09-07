@@ -82,7 +82,7 @@ class IssuanceSerializer(serializers.Serializer):
     issued_at = serializers.DateTimeField()
     result_available = serializers.BooleanField()
     algorithm_label = serializers.ChoiceField(
-        choices=["experimental_unreleased_fingerprint_v2"],
+        choices=["experimental_unreleased_fingerprint_v2", "integrity_release_v1"],
         allow_null=True,
     )
 
@@ -100,6 +100,24 @@ class SuspiciousRegionSerializer(serializers.Serializer):
 
 
 class VerificationEvidenceSerializer(serializers.Serializer):
+    algorithm_label = serializers.ChoiceField(
+        choices=["experimental_unreleased_fingerprint_v2", "integrity_release_v1"],
+        allow_null=True,
+        required=False,
+    )
+    decode_status = serializers.ChoiceField(
+        choices=[
+            "decoded",
+            "partial_payload_evidence",
+            "payload_not_detected",
+            "insufficient_sync_evidence",
+            "geometry_rejected",
+            "execution_error",
+            "cancelled",
+        ],
+        allow_null=True,
+        required=False,
+    )
     fingerprint_confidence = serializers.FloatField(min_value=0, max_value=1, required=False)
     integrity_score = serializers.FloatField(min_value=0, max_value=1, allow_null=True, required=False)
     valid_vote_count = serializers.IntegerField(min_value=0, required=False)
@@ -161,7 +179,11 @@ class DemoProcessingLimitsSerializer(serializers.Serializer):
 class DemoCapabilitySerializer(serializers.Serializer):
     enabled = serializers.BooleanField()
     processing_limits = DemoProcessingLimitsSerializer()
-    algorithm_label = serializers.ChoiceField(choices=["experimental_unreleased_fingerprint_v2"])
+    algorithm_label = serializers.ChoiceField(
+        choices=["experimental_unreleased_fingerprint_v2", "integrity_release_v1"]
+    )
+    hidden_fingerprint_enabled = serializers.BooleanField(required=False)
+    transformed_attribution_available = serializers.BooleanField(required=False)
 
 
 CSRF_HEADER = OpenApiParameter(

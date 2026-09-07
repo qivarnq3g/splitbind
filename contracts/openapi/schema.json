@@ -1131,10 +1131,11 @@
         "schemas": {
             "AlgorithmLabelEnum": {
                 "enum": [
-                    "experimental_unreleased_fingerprint_v2"
+                    "experimental_unreleased_fingerprint_v2",
+                    "integrity_release_v1"
                 ],
                 "type": "string",
-                "description": "* `experimental_unreleased_fingerprint_v2` - experimental_unreleased_fingerprint_v2"
+                "description": "* `experimental_unreleased_fingerprint_v2` - experimental_unreleased_fingerprint_v2\n* `integrity_release_v1` - integrity_release_v1"
             },
             "AuditEvent": {
                 "type": "object",
@@ -1219,6 +1220,19 @@
                     "code"
                 ]
             },
+            "DecodeStatusEnum": {
+                "enum": [
+                    "decoded",
+                    "partial_payload_evidence",
+                    "payload_not_detected",
+                    "insufficient_sync_evidence",
+                    "geometry_rejected",
+                    "execution_error",
+                    "cancelled"
+                ],
+                "type": "string",
+                "description": "* `decoded` - decoded\n* `partial_payload_evidence` - partial_payload_evidence\n* `payload_not_detected` - payload_not_detected\n* `insufficient_sync_evidence` - insufficient_sync_evidence\n* `geometry_rejected` - geometry_rejected\n* `execution_error` - execution_error\n* `cancelled` - cancelled"
+            },
             "DemoCapability": {
                 "type": "object",
                 "properties": {
@@ -1230,6 +1244,12 @@
                     },
                     "algorithm_label": {
                         "$ref": "#/components/schemas/AlgorithmLabelEnum"
+                    },
+                    "hidden_fingerprint_enabled": {
+                        "type": "boolean"
+                    },
+                    "transformed_attribution_available": {
+                        "type": "boolean"
                     }
                 },
                 "required": [
@@ -1291,12 +1311,15 @@
                         "nullable": true
                     },
                     "status": {
-                        "allOf": [
+                        "nullable": true,
+                        "oneOf": [
                             {
                                 "$ref": "#/components/schemas/JobStatusEnum"
+                            },
+                            {
+                                "$ref": "#/components/schemas/NullEnum"
                             }
-                        ],
-                        "nullable": true
+                        ]
                     },
                     "issued_at": {
                         "type": "string",
@@ -1306,12 +1329,15 @@
                         "type": "boolean"
                     },
                     "algorithm_label": {
-                        "allOf": [
+                        "nullable": true,
+                        "oneOf": [
                             {
                                 "$ref": "#/components/schemas/AlgorithmLabelEnum"
+                            },
+                            {
+                                "$ref": "#/components/schemas/NullEnum"
                             }
-                        ],
-                        "nullable": true
+                        ]
                     }
                 },
                 "required": [
@@ -1477,6 +1503,11 @@
                 "required": [
                     "password",
                     "username"
+                ]
+            },
+            "NullEnum": {
+                "enum": [
+                    null
                 ]
             },
             "Readiness": {
@@ -1756,20 +1787,26 @@
                         "nullable": true
                     },
                     "job_status": {
-                        "allOf": [
+                        "nullable": true,
+                        "oneOf": [
                             {
                                 "$ref": "#/components/schemas/JobStatusEnum"
+                            },
+                            {
+                                "$ref": "#/components/schemas/NullEnum"
                             }
-                        ],
-                        "nullable": true
+                        ]
                     },
                     "status": {
-                        "allOf": [
+                        "nullable": true,
+                        "oneOf": [
                             {
                                 "$ref": "#/components/schemas/VerificationStatusEnum"
+                            },
+                            {
+                                "$ref": "#/components/schemas/NullEnum"
                             }
-                        ],
-                        "nullable": true
+                        ]
                     },
                     "created_at": {
                         "type": "string",
@@ -1818,6 +1855,28 @@
             "VerificationEvidence": {
                 "type": "object",
                 "properties": {
+                    "algorithm_label": {
+                        "nullable": true,
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/AlgorithmLabelEnum"
+                            },
+                            {
+                                "$ref": "#/components/schemas/NullEnum"
+                            }
+                        ]
+                    },
+                    "decode_status": {
+                        "nullable": true,
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/DecodeStatusEnum"
+                            },
+                            {
+                                "$ref": "#/components/schemas/NullEnum"
+                            }
+                        ]
+                    },
                     "fingerprint_confidence": {
                         "type": "number",
                         "format": "double",

@@ -1,8 +1,10 @@
 import re
 
+from django.conf import settings
 from rest_framework import serializers
 
 from splitbind.jobs.models import JobStatus
+from splitbind.release.mode import integrity_release_enabled
 
 
 class IssuanceCreateSerializer(serializers.Serializer):
@@ -26,7 +28,34 @@ _METRIC_KEYS = {
 def _contract_evidence(value):
     if not isinstance(value, dict):
         return {}
-    projected = {}
+    integrity_mode = integrity_release_enabled(
+        getattr(settings, "SPLITBIND_RELEASE_MODE", None)
+    )
+    algorithm_label = value.get("algorithm_label")
+    if integrity_mode and algorithm_label == "experimental_unreleased_fingerprint_v2":
+        algorithm_label = "integrity_release_v1"
+    projected = {
+        "algorithm_label": (
+            algorithm_label
+            if algorithm_label
+            in {"experimental_unreleased_fingerprint_v2", "integrity_release_v1"}
+            else None
+        ),
+        "decode_status": (
+            value.get("decode_status")
+            if value.get("decode_status")
+            in {
+                "decoded",
+                "partial_payload_evidence",
+                "payload_not_detected",
+                "insufficient_sync_evidence",
+                "geometry_rejected",
+                "execution_error",
+                "cancelled",
+            }
+            else None
+        ),
+    }
     for key in ("fingerprint_confidence", "integrity_score"):
         item = value.get(key)
         if item is None and key == "integrity_score" and key in value:
@@ -57,10 +86,17 @@ def _contract_evidence(value):
         projected["suspicious_regions"] = safe_regions
     limitations = value.get("limitations")
     if isinstance(limitations, list):
-        projected["limitations"] = [
+        projected_limitations = [
             item for item in limitations[:100]
             if isinstance(item, str) and _LIMITATION_ID.fullmatch(item)
         ]
+        if integrity_mode:
+            projected_limitations = ["evidence.not_proof_of_leak_edit_or_distribution"]
+            if projected.get("exact_file_hash_match") is not True:
+                projected_limitations.append(
+                    "fingerprint.transformed_attribution_unavailable"
+                )
+        projected["limitations"] = projected_limitations
     return projected
 
 
@@ -113,7 +149,12 @@ def serialize_issuance(record, job=None):
         "status": job.status if job else None,
         "issued_at": record.issued_at.isoformat(),
         "result_available": evidence is not None,
-        "algorithm_label": evidence.algorithm_label if evidence else None,
+        "algorithm_label": (
+            "integrity_release_v1"
+            if evidence
+            and integrity_release_enabled(getattr(settings, "SPLITBIND_RELEASE_MODE", None))
+            else evidence.algorithm_label if evidence else None
+        ),
     }
 
 

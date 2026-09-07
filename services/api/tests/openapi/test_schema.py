@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from drf_spectacular.generators import SchemaGenerator
@@ -102,3 +104,25 @@ def test_schema_exposes_structured_response_contracts(schema):
         "INVALID_MANIFEST",
         "PROCESSING_FAILED",
     ]
+    assert enum_values("VerificationEvidence", "algorithm_label") == [
+        "experimental_unreleased_fingerprint_v2",
+        "integrity_release_v1",
+    ]
+    assert enum_values("VerificationEvidence", "decode_status") == [
+        "decoded",
+        "partial_payload_evidence",
+        "payload_not_detected",
+        "insufficient_sync_evidence",
+        "geometry_rejected",
+        "execution_error",
+        "cancelled",
+    ]
+    assert "NullEnum" in json.dumps(
+        components["VerificationEvidence"]["properties"]["algorithm_label"]
+    )
+    assert "NullEnum" in json.dumps(
+        components["VerificationEvidence"]["properties"]["decode_status"]
+    )
+    capability = components["DemoCapability"]["properties"]
+    assert capability["hidden_fingerprint_enabled"]["type"] == "boolean"
+    assert capability["transformed_attribution_available"]["type"] == "boolean"

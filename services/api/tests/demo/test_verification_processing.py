@@ -13,6 +13,7 @@ import django
 import numpy as np
 import pypdfium2 as pdfium
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import NameObject, NumberObject
 from django.apps import apps
@@ -24,7 +25,7 @@ from django.utils import timezone
 
 django.setup()
 
-from splitbind.access.models import Organization, Recipient, Role, User
+from splitbind.access.models import Organization, Recipient, Role, SigningKey, User
 from splitbind.demo.issuance import _build_issuance_pdf, _receipt_id, _select_frozen_candidate
 from splitbind.demo.verification import (
     _decode_pdf,
@@ -39,10 +40,12 @@ from splitbind.demo.models import (
     DemoOutputState,
     _allow_demo_result_write,
 )
-from splitbind.documents.models import Document, Issuance, Verification, VerificationStatus
+from splitbind.documents.models import Document, Issuance, Manifest, Verification, VerificationStatus
 from splitbind.integrations.storage.fake import FakeObjectStorage
 from splitbind.jobs.models import Job, JobKind, JobResultReceipt, JobStatus
 from splitbind.uploads.models import PromotionStatus, UploadPurpose, UploadRequest
+from splitbind.release.manifest import build_signed_issuance_manifest, public_key_pem
+from splitbind.release.mode import ReleaseMode
 
 from .fixtures import (
     blank_pdf_bytes,
@@ -527,6 +530,103 @@ def _assert_processing_failed(context, safe_error_code):
     assert result_record.result_status == VerificationStatus.PROCESSING_FAILED
     assert result_record.safe_error_code == safe_error_code
     assert not JobResultReceipt.objects.filter(job=job).exists()
+
+
+@pytest.mark.django_db
+def test_integrity_release_non_exact_input_never_runs_hidden_fingerprint_decoder(monkeypatch):
+    from splitbind.demo import verification as verification_module
+    from splitbind.demo.verification import process_verification_job
+
+    context = _new_verification_context(synthetic_image_bytes(extension=".png"))
+    monkeypatch.setattr(
+        verification_module,
+        "_decode_content",
+        lambda *args, **kwargs: pytest.fail("integrity release ran hidden fingerprint decode"),
+    )
+    with override_settings(
+        SPLITBIND_DEMO_MODE=False,
+        SPLITBIND_RELEASE_MODE=ReleaseMode.INTEGRITY_V1,
+    ):
+        result = process_verification_job(job_id=context[0].id, storage=context[2])
+
+    assert result.status == VerificationStatus.NO_WATERMARK
+    assert result.recovered_issuance_id is None
+    assert result.exact_file_hash_match is False
+    assert result.manifest_signature_valid is None
+    assert "fingerprint.transformed_attribution_unavailable" in result.limitations
+
+
+@pytest.mark.django_db
+def test_integrity_release_exact_hash_requires_and_verifies_signed_manifest(monkeypatch):
+    from splitbind.demo import verification as verification_module
+    from splitbind.demo.verification import process_verification_job
+
+    output = synthetic_pdf_bytes()
+    organization = Organization.objects.create(
+        name="Integrity exact verification",
+        slug=f"integrity-exact-{uuid.uuid4().hex[:8]}",
+    )
+    actor = User.objects.create_user(
+        username=f"integrity-{uuid.uuid4().hex[:8]}",
+        password="correct horse battery staple",
+        organization=organization,
+        role=Role.VERIFIER,
+    )
+    issuance = _record_committed_issuance(
+        organization=organization,
+        actor=actor,
+        output=output,
+    )
+    private_key = Ed25519PrivateKey.generate()
+    signing_key = SigningKey.objects.create(
+        organization=organization,
+        key_id="integrity-key-1",
+        public_key=public_key_pem(private_key),
+        valid_from=issuance.issued_at - timedelta(seconds=1),
+    )
+    pair = build_signed_issuance_manifest(
+        issuance_id=issuance.id,
+        document_id=issuance.document_id,
+        recipient_id=issuance.recipient_id,
+        issued_at=issuance.issued_at,
+        source_sha256=issuance.document.expected_source_sha256,
+        output_sha256=issuance.output_sha256,
+        signing_key_id=signing_key.key_id,
+        private_key=private_key,
+        retention_policy_id="retention-v1",
+    )
+    Manifest.objects.create(
+        organization=organization,
+        issuance=issuance,
+        signing_key=signing_key,
+        internal_payload=pair.internal_payload,
+        internal_signature_envelope=pair.internal_signature_envelope,
+        public_payload=pair.public_payload,
+        public_signature_envelope=pair.public_signature_envelope,
+    )
+    storage = FakeObjectStorage()
+    job, _verification = _processing_verification(
+        organization=organization,
+        actor=actor,
+        data=output,
+        storage=storage,
+    )
+    monkeypatch.setattr(
+        verification_module,
+        "_decode_content",
+        lambda *args, **kwargs: pytest.fail("exact integrity verification decoded fingerprint"),
+    )
+
+    with override_settings(
+        SPLITBIND_DEMO_MODE=False,
+        SPLITBIND_RELEASE_MODE=ReleaseMode.INTEGRITY_V1,
+    ):
+        result = process_verification_job(job_id=job.id, storage=storage)
+
+    assert result.status == VerificationStatus.VERIFIED_INTACT
+    assert result.recovered_issuance_id == issuance.id
+    assert result.exact_file_hash_match is True
+    assert result.manifest_signature_valid is True
 
 
 @pytest.mark.django_db
