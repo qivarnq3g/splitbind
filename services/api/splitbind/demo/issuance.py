@@ -683,12 +683,12 @@ def _build_issuance_pdf(
         raise DemoIssuanceError("DEMO_PDF_INVALID") from error
 
     try:
+        input_pdf.init_forms()
         page_count = len(input_pdf)
         if not 1 <= page_count <= DEMO_MAX_PAGES:
             raise DemoIssuanceError("DEMO_PDF_PAGE_LIMIT")
         page_units = _source_page_units(source_pdf, page_count)
         _validate_raster_budget(input_pdf, page_units)
-        input_pdf.init_forms()
 
         encoded_pages: list[tuple[bytes, int, int, float, float]] = []
         for page_index in range(page_count):

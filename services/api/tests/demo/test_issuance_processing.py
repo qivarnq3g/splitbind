@@ -152,6 +152,45 @@ def test_same_input_identity_and_key_produce_identical_output_bytes():
     assert first == second
 
 
+def test_forms_are_initialized_before_issuance_page_count_access(monkeypatch):
+    events = []
+
+    class FormOrderedDocument:
+        forms_initialized = False
+
+        def init_forms(self):
+            self.forms_initialized = True
+            events.append("init_forms")
+
+        def __len__(self):
+            assert self.forms_initialized, "page count accessed before form initialization"
+            events.append("len")
+            return 0
+
+        def close(self):
+            events.append("close")
+
+    monkeypatch.setattr(
+        issuance_module,
+        "_select_frozen_candidate",
+        lambda: (object(), "synthetic-candidate"),
+    )
+    monkeypatch.setattr(
+        issuance_module.pdfium,
+        "PdfDocument",
+        lambda _data: FormOrderedDocument(),
+    )
+
+    with pytest.raises(DemoIssuanceError, match="DEMO_PDF_PAGE_LIMIT"):
+        _build_issuance_pdf(
+            b"%PDF-synthetic",
+            issuance_id=uuid.uuid4(),
+            fingerprint_key=b"f" * 32,
+        )
+
+    assert events == ["init_forms", "len", "close"]
+
+
 @pytest.mark.django_db
 @override_settings(SPLITBIND_DEMO_MODE=True)
 def test_result_commit_locks_job_without_nullable_join(

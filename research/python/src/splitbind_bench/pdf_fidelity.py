@@ -35,9 +35,9 @@ def _open_document(data: bytes, stack: ExitStack) -> pdfium.PdfDocument:
     except pdfium.PdfiumError as error:
         raise ValueError("invalid_or_encrypted_pdf") from error
     stack.callback(document.close)
+    document.init_forms()
     if not 1 <= len(document) <= MAX_PAGES:
         raise ValueError("page_budget")
-    document.init_forms()
     return document
 
 

@@ -1,5 +1,6 @@
 """Final-file quality checks must catch geometry and image regressions."""
 
+from contextlib import ExitStack
 import json
 from pathlib import Path
 import subprocess
@@ -7,6 +8,7 @@ import sys
 
 import pytest
 
+from splitbind_bench import pdf_fidelity as fidelity_module
 from splitbind_bench.pdf_fidelity import assess_pdf_fidelity
 
 
@@ -50,6 +52,37 @@ def test_identical_pdf_passes_and_report_is_strict_json():
     assert report["pages"][0]["ssim"] == pytest.approx(1)
     assert report["source_bytes"] == len(original)
     json.dumps(report, allow_nan=False)
+
+
+def test_forms_are_initialized_before_page_count_access(monkeypatch):
+    events = []
+
+    class FormOrderedDocument:
+        forms_initialized = False
+
+        def init_forms(self):
+            self.forms_initialized = True
+            events.append("init_forms")
+
+        def __len__(self):
+            assert self.forms_initialized, "page count accessed before form initialization"
+            events.append("len")
+            return 0
+
+        def close(self):
+            events.append("close")
+
+    monkeypatch.setattr(
+        fidelity_module.pdfium,
+        "PdfDocument",
+        lambda _data: FormOrderedDocument(),
+    )
+
+    with ExitStack() as stack:
+        with pytest.raises(ValueError, match="page_budget"):
+            fidelity_module._open_document(b"%PDF-synthetic", stack)
+
+    assert events == ["init_forms", "len", "close"]
 
 
 def test_changed_page_size_fails_without_resizing_or_hiding_the_difference():

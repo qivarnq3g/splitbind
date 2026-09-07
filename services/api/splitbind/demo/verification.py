@@ -54,6 +54,7 @@ DEMO_MAX_PAGES = 5
 DEMO_MAX_RASTER_PIXELS = 40_000_000
 PDF_RENDER_SCALE = 2.0
 _LEGACY_CANONICAL_PAGE_CONTENT = b"q\n1152 0 0 2304 0 0 cm\n/Im0 Do\nQ\n"
+_UNKNOWN_PAGE_MIN_CONSISTENT_DECODES = 2
 _BASE_LIMITATIONS = DEMO_VERIFICATION_LIMITATIONS
 
 
@@ -277,12 +278,12 @@ def _decode_pdf(source: bytes, *, fingerprint_key: bytes, candidate) -> tuple[_D
         raise DemoVerificationError("DEMO_PDF_INVALID") from error
 
     try:
+        document.init_forms()
         page_count = len(document)
         if not 1 <= page_count <= DEMO_MAX_PAGES:
             raise DemoVerificationError("DEMO_PDF_PAGE_LIMIT")
         _page_units, render_scales = _pdf_page_metadata(source, page_count)
         _validate_pdf_raster_budget(document, render_scales)
-        document.init_forms()
         decisions: list[DecodeV2Decision] = []
         for page_index in range(page_count):
             page = document[page_index]
@@ -373,7 +374,7 @@ def _decode_image(
         )
         for page_index in range(DEMO_MAX_PAGES)
     ]
-    return _aggregate_decisions(decisions), 1
+    return _aggregate_unknown_page_decisions(decisions), 1
 
 
 def _jpeg_dimensions(source: bytes) -> tuple[int, int]:
@@ -454,6 +455,10 @@ def _pdf_page_metadata(
 def _is_legacy_canonical_page(page, user_unit: float) -> bool:
     if user_unit != 1.0 or page.rotation != 0:
         return False
+    if set(page) != {"/Type", "/Parent", "/MediaBox", "/Resources", "/Contents"}:
+        return False
+    if page.get("/Type") != "/Page":
+        return False
     expected_box = (0.0, 0.0, 1152.0, 2304.0)
     if tuple(float(value) for value in page.mediabox) != expected_box:
         return False
@@ -475,8 +480,19 @@ def _is_legacy_canonical_page(page, user_unit: float) -> bool:
     if set(xobjects) != {"/Im0"}:
         return False
     image = xobjects["/Im0"].get_object()
+    if set(image) != {
+        "/Type",
+        "/Subtype",
+        "/Width",
+        "/Height",
+        "/ColorSpace",
+        "/BitsPerComponent",
+        "/Filter",
+    }:
+        return False
     return (
-        image.get("/Subtype") == "/Image"
+        image.get("/Type") == "/XObject"
+        and image.get("/Subtype") == "/Image"
         and image.get("/Filter") == "/DCTDecode"
         and int(image.get("/Width", 0)) == 1152
         and int(image.get("/Height", 0)) == 2304
@@ -524,6 +540,29 @@ def _aggregate_decisions(decisions: list[DecodeV2Decision]) -> _DecodeSummary:
         if status in statuses:
             return _DecodeSummary(None, confidence, valid_votes, status)
     raise DemoVerificationError("DEMO_FINGERPRINT_DECODE_FAILED")
+
+
+def _aggregate_unknown_page_decisions(
+    decisions: list[DecodeV2Decision],
+) -> _DecodeSummary:
+    summary = _aggregate_decisions(decisions)
+    if summary.status != "decoded":
+        return summary
+    consistent_support = sum(
+        decision.status == "decoded" and decision.issuance_id == summary.issuance_id
+        for decision in decisions
+    )
+    if (
+        not isinstance(summary.issuance_id, uuid.UUID)
+        or consistent_support < _UNKNOWN_PAGE_MIN_CONSISTENT_DECODES
+    ):
+        return _DecodeSummary(
+            None,
+            summary.confidence,
+            summary.valid_votes,
+            "partial_payload_evidence",
+        )
+    return summary
 
 
 @transaction.atomic

@@ -151,6 +151,38 @@ def test_pdf_decode_honors_user_unit_for_equivalent_physical_page():
     assert decision.issuance_id == ISSUANCE_ID
 
 
+def test_forms_are_initialized_before_verification_page_count_access(monkeypatch):
+    from splitbind.demo import verification as verification_module
+
+    events = []
+
+    class FormOrderedDocument:
+        forms_initialized = False
+
+        def init_forms(self):
+            self.forms_initialized = True
+            events.append("init_forms")
+
+        def __len__(self):
+            assert self.forms_initialized, "page count accessed before form initialization"
+            events.append("len")
+            return 0
+
+        def close(self):
+            events.append("close")
+
+    monkeypatch.setattr(
+        verification_module.pdfium,
+        "PdfDocument",
+        lambda _data: FormOrderedDocument(),
+    )
+
+    with pytest.raises(verification_module.DemoVerificationError, match="DEMO_PDF_PAGE_LIMIT"):
+        _decode_pdf(b"%PDF-synthetic", fingerprint_key=FINGERPRINT_KEY, candidate=object())
+
+    assert events == ["init_forms", "len", "close"]
+
+
 def test_legacy_canonical_pages_use_72_dpi_compatibility_scale():
     output, _page_count, _candidate_id = _build_issuance_pdf(
         synthetic_pdf_bytes(page_count=4),
@@ -220,10 +252,37 @@ def test_noncanonical_legacy_page_content_uses_physical_144_dpi_scale():
     assert render_scales == (2.0,)
 
 
+@pytest.mark.parametrize(
+    ("page_extra", "image_extra"),
+    [
+        (b" /Annots []", b""),
+        (b"", b" /SMask null"),
+        (b"", b" /Decode [0 1 0 1 0 1]"),
+    ],
+    ids=["annotations", "soft-mask", "decode-array"],
+)
+def test_legacy_compatibility_rejects_extra_page_or_image_entries(
+    page_extra,
+    image_extra,
+):
+    legacy_shape_with_extra = _legacy_image_only_pdf(
+        [b"synthetic-jpeg"],
+        page_extra=page_extra,
+        image_extra=image_extra,
+    )
+
+    units, render_scales = _pdf_page_metadata(legacy_shape_with_extra, 1)
+
+    assert units == (1.0,)
+    assert render_scales == (2.0,)
+
+
 def _legacy_image_only_pdf(
     jpeg_pages: list[bytes],
     *,
     page_content: bytes = b"q\n1152 0 0 2304 0 0 cm\n/Im0 Do\nQ\n",
+    page_extra: bytes = b"",
+    image_extra: bytes = b"",
 ) -> bytes:
     page_refs = [3 + index * 3 for index in range(len(jpeg_pages))]
     objects = [
@@ -244,10 +303,13 @@ def _legacy_image_only_pdf(
                 b"/Resources << /XObject << /Im0 "
                 + f"{image_ref} 0 R".encode()
                 + b" >> >> /Contents "
-                + f"{content_ref} 0 R >>".encode(),
+                + f"{content_ref} 0 R".encode()
+                + page_extra
+                + b" >>",
                 b"<< /Type /XObject /Subtype /Image /Width 1152 /Height 2304 "
                 b"/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length "
                 + str(len(jpeg)).encode()
+                + image_extra
                 + b" >>\nstream\n"
                 + jpeg
                 + b"\nendstream",
@@ -670,7 +732,7 @@ def test_modified_issued_pdf_requires_real_decode_and_keeps_hash_fact_separate(
     ("extension", "page_index"),
     [(".png", 1), (".jpg", 4)],
 )
-def test_144_dpi_issued_page_image_decodes_across_bounded_page_indices(
+def test_standalone_issued_page_does_not_attribute_from_one_page_index_hypothesis(
     issued_five_page_pdf_bytes,
     monkeypatch,
     extension,
@@ -689,7 +751,7 @@ def test_144_dpi_issued_page_image_decodes_across_bounded_page_indices(
         organization=organization,
         role=Role.VERIFIER,
     )
-    issuance = _record_committed_issuance(
+    _record_committed_issuance(
         organization=organization,
         actor=actor,
         output=issued_five_page_pdf_bytes,
@@ -711,11 +773,84 @@ def test_144_dpi_issued_page_image_decodes_across_bounded_page_indices(
     result = process_verification_job(job_id=job.id, storage=storage)
 
     verification.refresh_from_db()
-    assert result.status == VerificationStatus.SOURCE_IDENTIFIED_MODIFIED
-    assert result.decode_status == "decoded"
-    assert result.recovered_issuance_id == issuance.id
+    assert result.status == VerificationStatus.PARTIAL_EVIDENCE
+    assert result.decode_status == "partial_payload_evidence"
+    assert result.recovered_issuance_id is None
     assert result.pages_analyzed == 1
-    assert verification.recovered_issuance_id == issuance.id
+    assert verification.recovered_issuance_id is None
+
+
+def test_unknown_page_index_requires_two_consistent_uuid_decodes():
+    from splitbind.demo import verification as verification_module
+    from splitbind_ref.fingerprint_v2 import DecodeV2Decision
+
+    decisions = [
+        DecodeV2Decision(ISSUANCE_ID, 0.9, 3, 0.0, "decoded"),
+        DecodeV2Decision(ISSUANCE_ID, 0.8, 2, 0.0, "decoded"),
+        DecodeV2Decision(None, 0.0, 0, None, "payload_not_detected"),
+    ]
+
+    summary = verification_module._aggregate_unknown_page_decisions(decisions)
+
+    assert summary.status == "decoded"
+    assert summary.issuance_id == ISSUANCE_ID
+    assert summary.valid_votes == 5
+
+
+def test_unknown_page_index_rejects_lone_uuid_decode():
+    from splitbind.demo import verification as verification_module
+    from splitbind_ref.fingerprint_v2 import DecodeV2Decision
+
+    decisions = [
+        DecodeV2Decision(ISSUANCE_ID, 0.9, 3, 0.0, "decoded"),
+        DecodeV2Decision(None, 0.0, 0, None, "payload_not_detected"),
+        DecodeV2Decision(None, 0.0, 0, None, "insufficient_sync_evidence"),
+    ]
+
+    summary = verification_module._aggregate_unknown_page_decisions(decisions)
+
+    assert summary.status == "partial_payload_evidence"
+    assert summary.issuance_id is None
+    assert summary.valid_votes == 3
+
+
+def test_unknown_page_index_rejects_consistent_non_uuid_values():
+    from splitbind.demo import verification as verification_module
+    from splitbind_ref.fingerprint_v2 import DecodeV2Decision
+
+    decisions = [
+        DecodeV2Decision("not-a-uuid", 0.9, 3, 0.0, "decoded"),
+        DecodeV2Decision("not-a-uuid", 0.8, 2, 0.0, "decoded"),
+    ]
+
+    summary = verification_module._aggregate_unknown_page_decisions(decisions)
+
+    assert summary.status == "partial_payload_evidence"
+    assert summary.issuance_id is None
+    assert summary.valid_votes == 5
+
+
+def test_standalone_issued_page_with_wrong_key_never_attributes(
+    issued_five_page_pdf_bytes,
+):
+    from splitbind.demo import verification as verification_module
+
+    suspect = _issued_page_image(
+        issued_five_page_pdf_bytes,
+        page_index=2,
+        extension=".png",
+    )
+    candidate, _identifier = _select_frozen_candidate()
+
+    summary, page_count = verification_module._decode_content(
+        suspect,
+        fingerprint_key=b"wrong-key-material".ljust(32, b"!"),
+        candidate=candidate,
+    )
+
+    assert page_count == 1
+    assert summary.issuance_id is None
+    assert summary.status != "decoded"
 
 
 @pytest.mark.django_db
