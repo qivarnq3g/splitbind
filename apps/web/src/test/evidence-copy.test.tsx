@@ -54,6 +54,21 @@ describe("verification evidence language", () => {
     expect(screen.getByText(LIMITATION_COPY["fingerprint.experimental_unreleased_v2"]!)).toBeInTheDocument();
   });
 
+  it("explains a non-exact integrity result without claiming a watermark search", () => {
+    render(<EvidenceSummary
+      status="NO_WATERMARK"
+      evidence={{
+        algorithm_label: "integrity_release_v1",
+        exact_file_hash_match: false,
+        limitations: ["fingerprint.transformed_attribution_unavailable"],
+      }}
+    />);
+
+    expect(screen.getByText("Tệp không khớp chính xác với bản đã cấp phát.")).toBeVisible();
+    expect(screen.getByText("Nhận diện fingerprint sau biến đổi chưa khả dụng.")).toBeInTheDocument();
+    expect(screen.queryByText(STATUS_COPY.NO_WATERMARK.inference)).not.toBeInTheDocument();
+  });
+
   it("does not turn an omitted suspicious-region field into a zero count", () => {
     render(<EvidenceSummary status="NO_WATERMARK" evidence={{}} />);
     const fact = screen.getByText("Số vùng nghi vấn").parentElement!;

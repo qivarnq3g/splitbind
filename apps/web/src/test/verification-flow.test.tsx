@@ -150,6 +150,30 @@ describe("verification browser workflow", () => {
     expect(document.body).not.toHaveTextContent(/mã người nhận:\s*[0-9a-f-]{36}/i);
   });
 
+  it("labels a non-exact integrity result as an exact-file mismatch", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async (input) => {
+      const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
+      if (path === "/api/v1/auth/session") return json(session("verifier"));
+      return json({
+        id: VERIFICATION_ID, job_id: JOB_ID, job_status: "succeeded", status: "NO_WATERMARK",
+        created_at: "2026-08-30T12:01:00Z", completed_at: "2026-08-30T12:03:00Z",
+        evidence: {
+          algorithm_label: "integrity_release_v1",
+          exact_file_hash_match: false,
+          limitations: ["fingerprint.transformed_attribution_unavailable"],
+        },
+        metrics: { processing_ms: 25 },
+      });
+    }));
+
+    renderApp(`/verifications/${VERIFICATION_ID}`);
+
+    expect(await screen.findByRole("heading", { name: "Không khớp file đã cấp phát" })).toBeVisible();
+    expect(screen.getByText("Tệp không khớp chính xác với bản đã cấp phát.")).toBeVisible();
+    fireEvent.click(screen.getByText("Xem chi tiết kỹ thuật"));
+    expect(screen.getByText("Nhận diện fingerprint sau biến đổi chưa khả dụng.")).toBeVisible();
+  });
+
   it("shows a safe scoped denial for a foreign verification", async () => {
     vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async (input) => {
       const path = new URL(input instanceof Request ? input.url : String(input)).pathname;

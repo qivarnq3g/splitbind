@@ -5,7 +5,7 @@ import { CompactIdentifier } from "../components/CompactIdentifier";
 import { StatusBadge } from "../components/StatusBadge";
 import { canViewVerification, useSession } from "../features/auth/session";
 import { EvidenceSummary } from "../features/evidence/EvidenceSummary";
-import { STATUS_COPY } from "../features/evidence/copy";
+import { verificationCopy } from "../features/evidence/copy";
 import { JOB_LABELS } from "../features/jobs/useJob";
 import { getVerification } from "../features/verifications/verifications";
 
@@ -29,6 +29,13 @@ export function VerificationDetailPage() {
     queryFn: ({ signal }) => getVerification(id!, signal),
     enabled: Boolean(id) && permitted,
   });
+  const resultCopy = verification.data?.status
+    ? verificationCopy(
+      verification.data.status,
+      verification.data.evidence.algorithm_label,
+      verification.data.evidence.exact_file_hash_match,
+    )
+    : null;
 
   if (!permitted) {
     return (
@@ -52,7 +59,7 @@ export function VerificationDetailPage() {
             <StatusBadge
               label="Trạng thái kết quả"
               status={verification.data.job_status}
-              title={verification.data.status ? STATUS_COPY[verification.data.status].label : verification.data.job_status ? JOB_LABELS[verification.data.job_status] ?? verification.data.job_status : "Chưa có công việc"}
+              title={resultCopy?.label ?? (verification.data.job_status ? JOB_LABELS[verification.data.job_status] ?? verification.data.job_status : "Chưa có công việc")}
             />
             <dl className="status-details">
               <div><dt>Mã kiểm chứng</dt><dd><CompactIdentifier label="Mã kiểm chứng" value={verification.data.id} /></dd></div>

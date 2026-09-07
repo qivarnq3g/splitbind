@@ -1,9 +1,12 @@
+import type { components } from "../../api/generated/schema";
+
 export const LIMITATION_COPY: Record<string, string> = {
   no_watermark_not_exclusion: "Không phát hiện watermark không có nghĩa tài liệu chắc chắn không thuộc hệ thống.",
   partial_not_attribution: "Bằng chứng hiện có chưa đủ ngưỡng để gán nguồn phát hành.",
   match_not_actor_proof: "Khớp bản cấp phát không chứng minh người nhận đã sửa, làm rò rỉ hoặc phát tán tài liệu.",
   technical_not_legal: "Đây là tín hiệu kỹ thuật, không phải kết luận pháp lý.",
   "fingerprint.experimental_unreleased_v2": "Dấu vân tay này là ứng viên thử nghiệm và chưa được phát hành.",
+  "fingerprint.transformed_attribution_unavailable": "Nhận diện fingerprint sau biến đổi chưa khả dụng.",
   "fingerprint.not_gate_g1_evidence": "Kết quả này chưa phải bằng chứng đạt cổng đánh giá phát hành.",
   "evidence.not_proof_of_leak_edit_or_distribution": "Kết quả không chứng minh ai đã làm rò rỉ, chỉnh sửa hoặc phân phối tài liệu.",
   "integrity.not_evaluated": "Demo không đánh giá watermark toàn vẹn hoặc định vị vùng chỉnh sửa.",
@@ -37,6 +40,28 @@ export const STATUS_COPY = {
 } as const;
 
 export type VerificationStatus = keyof typeof STATUS_COPY;
+
+type AlgorithmLabel = components["schemas"]["AlgorithmLabelEnum"] | components["schemas"]["NullEnum"] | null | undefined;
+
+const INTEGRITY_NON_EXACT_COPY = {
+  label: "Không khớp file đã cấp phát",
+  inference: "Tệp không khớp chính xác với bản đã cấp phát.",
+} as const;
+
+export function isIntegrityNonExact(
+  algorithmLabel: AlgorithmLabel,
+  exactFileHashMatch: boolean | null | undefined,
+): boolean {
+  return algorithmLabel === "integrity_release_v1" && exactFileHashMatch === false;
+}
+
+export function verificationCopy(
+  status: VerificationStatus,
+  algorithmLabel: AlgorithmLabel,
+  exactFileHashMatch: boolean | null | undefined,
+) {
+  return isIntegrityNonExact(algorithmLabel, exactFileHashMatch) ? INTEGRITY_NON_EXACT_COPY : STATUS_COPY[status];
+}
 
 export const STATUS_LIMITATIONS: Record<VerificationStatus, string[]> = {
   VERIFIED_INTACT: ["match_not_actor_proof", "technical_not_legal"],

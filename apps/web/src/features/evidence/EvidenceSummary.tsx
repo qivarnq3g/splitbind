@@ -1,6 +1,6 @@
 import type { components } from "../../api/generated/schema";
 import { IntegrityMap } from "./IntegrityMap";
-import { LIMITATION_COPY, STATUS_COPY, STATUS_LIMITATIONS, type VerificationStatus } from "./copy";
+import { LIMITATION_COPY, STATUS_LIMITATIONS, isIntegrityNonExact, verificationCopy, type VerificationStatus } from "./copy";
 
 type Evidence = components["schemas"]["VerificationEvidence"];
 
@@ -24,15 +24,20 @@ function scoreLabel(value: number | null | undefined): string {
 
 export function EvidenceSummary({ status, evidence }: { status: VerificationStatus; evidence: Evidence }) {
   const knownLimitations = (evidence.limitations ?? []).filter((id) => id in LIMITATION_COPY);
-  const limitationIds = Array.from(new Set([...STATUS_LIMITATIONS[status], ...knownLimitations]));
+  const integrityNonExact = isIntegrityNonExact(evidence.algorithm_label, evidence.exact_file_hash_match);
+  const defaultLimitations = integrityNonExact
+    ? ["fingerprint.transformed_attribution_unavailable", "technical_not_legal"]
+    : STATUS_LIMITATIONS[status];
+  const limitationIds = Array.from(new Set([...defaultLimitations, ...knownLimitations]));
   const unknownLimitationCount = (evidence.limitations?.length ?? 0) - knownLimitations.length;
   const regions = evidence.suspicious_regions;
+  const copy = verificationCopy(status, evidence.algorithm_label, evidence.exact_file_hash_match);
 
   return (
     <article className="evidence-summary">
       <section className="evidence-conclusion" aria-label="Ý nghĩa kết quả">
         <p className="evidence-kicker">Ý nghĩa kết quả</p>
-        <p>{STATUS_COPY[status].inference}</p>
+        <p>{copy.inference}</p>
       </section>
       <details className="technical-details">
         <summary>Xem chi tiết kỹ thuật</summary>

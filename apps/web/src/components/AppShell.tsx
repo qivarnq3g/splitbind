@@ -17,6 +17,7 @@ export function AppShell() {
     staleTime: 30_000,
     retry: false,
   });
+  const isIntegrityRelease = demoCapabilities.data?.algorithm_label === "integrity_release_v1";
 
   return (
     <div className="app-shell">
@@ -43,7 +44,11 @@ export function AppShell() {
         ) : <NavLink className="rail-account" to="/login">Đăng nhập</NavLink>}
       </header>
       <div className="app-content">
-        {demoCapabilities.data?.enabled ? (
+        {isIntegrityRelease ? (
+          <aside className="demo-banner" aria-label="Khả năng xác minh">
+            <p><strong>Xác minh chính xác file đã cấp phát.</strong> Nhận diện fingerprint sau biến đổi chưa khả dụng.</p>
+          </aside>
+        ) : demoCapabilities.data?.enabled ? (
           <aside className="demo-banner" aria-label="Giới hạn chế độ demo">
             <p><strong>Bản demo.</strong> Kết quả chỉ mang tính kỹ thuật, không xác định người làm rò rỉ hoặc chỉnh sửa.</p>
           </aside>

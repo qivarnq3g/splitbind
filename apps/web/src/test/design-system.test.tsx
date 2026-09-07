@@ -146,6 +146,33 @@ describe("SplitBind design system", () => {
     expect(banner).toHaveTextContent("Bản demo. Kết quả chỉ mang tính kỹ thuật, không xác định người làm rò rỉ hoặc chỉnh sửa.");
   });
 
+  it("describes the production integrity capability without calling it a demo", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async (input) => {
+      const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
+      if (path === "/api/v1/auth/session") {
+        return json({
+          authenticated: true,
+          csrf_token: "csrf-token",
+          user: { id: USER_ID, username: "issuer.demo", role: "issuer", organization_id: ORGANIZATION_ID },
+        });
+      }
+      return json({
+        enabled: true,
+        processing_limits: { max_pdf_pages: 5, max_pdf_bytes: 10 * 1024 * 1024, max_image_pixels: 40_000_000 },
+        algorithm_label: "integrity_release_v1",
+        hidden_fingerprint_enabled: false,
+        transformed_attribution_available: false,
+      });
+    }));
+
+    renderApp("/issue");
+
+    const banner = await screen.findByRole("complementary", { name: "Khả năng xác minh" });
+    expect(banner).toHaveTextContent("Xác minh chính xác file đã cấp phát");
+    expect(banner).toHaveTextContent("Nhận diện fingerprint sau biến đổi chưa khả dụng");
+    expect(banner).not.toHaveTextContent("Bản demo");
+  });
+
   it("shortens long identifiers and copies the full value on demand", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
