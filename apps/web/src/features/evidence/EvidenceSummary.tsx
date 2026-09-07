@@ -24,8 +24,7 @@ function scoreLabel(value: number | null | undefined): string {
 
 export function EvidenceSummary({ status, evidence }: { status: VerificationStatus; evidence: Evidence }) {
   const knownLimitations = (evidence.limitations ?? []).filter((id) => id in LIMITATION_COPY);
-  const limitationIds = Array.from(new Set([...STATUS_LIMITATIONS[status], ...knownLimitations]))
-    .filter((id) => id !== "fingerprint.experimental_unreleased_v2");
+  const limitationIds = Array.from(new Set([...STATUS_LIMITATIONS[status], ...knownLimitations]));
   const unknownLimitationCount = (evidence.limitations?.length ?? 0) - knownLimitations.length;
   const regions = evidence.suspicious_regions;
 

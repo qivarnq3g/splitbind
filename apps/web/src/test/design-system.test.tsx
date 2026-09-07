@@ -49,6 +49,14 @@ describe("SplitBind design system", () => {
     expect([...references].filter((token) => !definitions.has(token))).toEqual([]);
   });
 
+  it("keeps compact controls keyboard-sized and removes active motion when requested", () => {
+    const styles = readFileSync(resolve(process.cwd(), "src/styles/app.css"), "utf8");
+
+    expect(styles).toMatch(/\.copy-identifier\s*\{[^}]*min-width:\s*var\(--control-height\)[^}]*min-height:\s*var\(--control-height\)/s);
+    expect(styles).toMatch(/\.technical-details summary\s*\{[^}]*min-height:\s*var\(--control-height\)/s);
+    expect(styles).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*\.copy-identifier:active[\s\S]*transform:\s*none/s);
+  });
+
   it("separates product context from the secure login form", async () => {
     vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async () => json({
       authenticated: false,

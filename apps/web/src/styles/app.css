@@ -1007,8 +1007,10 @@ progress {
 
 .copy-identifier {
   display: inline-grid;
-  width: 2rem;
-  height: 2rem;
+  width: var(--control-height);
+  min-width: var(--control-height);
+  height: var(--control-height);
+  min-height: var(--control-height);
   place-items: center;
   padding: 0;
   border: var(--rule-hair) solid var(--color-rule);
@@ -1053,7 +1055,10 @@ progress {
 }
 
 .technical-details summary {
+  display: inline-flex;
+  align-items: center;
   width: fit-content;
+  min-height: var(--control-height);
   color: var(--color-accent-hover);
   cursor: pointer;
   font-family: var(--font-display);
@@ -1204,4 +1209,11 @@ progress {
 .field .file-trigger:active,
 .copy-identifier:active {
   transform: translateY(1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .field .file-trigger:active,
+  .copy-identifier:active {
+    transform: none;
+  }
 }

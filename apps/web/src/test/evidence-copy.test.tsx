@@ -45,6 +45,15 @@ describe("verification evidence language", () => {
     expect(screen.getByText("Kết quả có thêm giới hạn kỹ thuật chưa được giao diện mô tả chi tiết.")).toBeInTheDocument();
   });
 
+  it("keeps the unreleased fingerprint warning when the API reports it", () => {
+    render(<EvidenceSummary
+      status="PARTIAL_EVIDENCE"
+      evidence={{ limitations: ["fingerprint.experimental_unreleased_v2"] }}
+    />);
+
+    expect(screen.getByText(LIMITATION_COPY["fingerprint.experimental_unreleased_v2"]!)).toBeInTheDocument();
+  });
+
   it("does not turn an omitted suspicious-region field into a zero count", () => {
     render(<EvidenceSummary status="NO_WATERMARK" evidence={{}} />);
     const fact = screen.getByText("Số vùng nghi vấn").parentElement!;
