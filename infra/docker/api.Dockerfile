@@ -39,6 +39,7 @@ COPY --chown=10001:10001 services/api/config ./config
 COPY --chown=10001:10001 services/api/splitbind ./splitbind
 COPY --chown=10001:10001 contracts/algorithm /app/contracts/algorithm
 COPY --chmod=0555 infra/docker/api-entrypoint.sh /usr/local/bin/api-entrypoint.sh
+COPY --chmod=0555 infra/docker/migration-entrypoint.sh /usr/local/bin/migration-entrypoint.sh
 COPY --chmod=0555 infra/docker/worker-entrypoint.sh /usr/local/bin/worker-entrypoint.sh
 
 USER 10001:10001

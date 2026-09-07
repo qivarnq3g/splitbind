@@ -6,7 +6,6 @@ if [ "${SPLITBIND_RELEASE_MODE:-}" != "integrity_v1" ]; then
     exit 78
 fi
 
-python manage.py migrate --noinput
 exec python -m gunicorn config.wsgi:application \
     --bind 0.0.0.0:8000 \
     --workers 2 \

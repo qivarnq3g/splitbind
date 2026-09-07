@@ -151,3 +151,19 @@ def test_compose_contract_validator_accepts_the_release_file():
 
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["service_count"] == 3
+
+
+def test_api_startup_never_runs_schema_migrations():
+    entrypoint = (ROOT / "infra" / "docker" / "api-entrypoint.sh").read_text(
+        encoding="utf-8"
+    )
+    migration_entrypoint = (
+        ROOT / "infra" / "docker" / "migration-entrypoint.sh"
+    ).read_text(encoding="utf-8")
+    dockerfile = (ROOT / "infra" / "docker" / "api.Dockerfile").read_text(
+        encoding="utf-8"
+    )
+
+    assert "manage.py migrate" not in entrypoint
+    assert "exec python manage.py migrate --noinput" in migration_entrypoint
+    assert "migration-entrypoint.sh" in dockerfile
