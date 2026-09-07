@@ -2,25 +2,14 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 
+import { DocumentFileInput } from "../components/DocumentFileInput";
+import { WorkflowSteps } from "../components/WorkflowSteps";
 import { canCreateIssuance, useSession } from "../features/auth/session";
 import { createIssuance } from "../features/issuances/issuances";
 import { SafeApiError } from "../features/shared/apiError";
 import { UploadStage, uploadIssuancePdf, validatePdf } from "../features/uploads/uploadIssuance";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const STAGE_STEP: Record<UploadStage, number> = {
-  hashing: 1,
-  intent: 2,
-  uploading: 3,
-  finalizing: 4,
-};
-const STAGE_LABEL: Record<UploadStage, string> = {
-  hashing: "Đang kiểm tra tệp",
-  intent: "Đang tạo phiên tải lên",
-  uploading: "Đang tải tệp",
-  finalizing: "Đang xác nhận tệp",
-};
-
 export function IssueDocumentPage() {
   const session = useSession();
   const navigate = useNavigate();
@@ -37,7 +26,7 @@ export function IssueDocumentPage() {
       if (!file) throw new SafeApiError("Chưa có tệp PDF. Chọn một tệp rồi thử lại.");
       validatePdf(file);
       if (!UUID_PATTERN.test(recipientId)) {
-        throw new SafeApiError("Mã người nhận chưa đúng định dạng UUID. Kiểm tra mã rồi thử lại.");
+        throw new SafeApiError("Mã người nhận chưa đúng. Kiểm tra mã rồi thử lại.");
       }
       abortRef.current?.abort();
       const controller = new AbortController();
@@ -86,37 +75,32 @@ export function IssueDocumentPage() {
   }
 
   const error = validationError ?? issuance.error?.message ?? null;
-  const progressStep = stage ? STAGE_STEP[stage] : 0;
-
   return (
     <main className="workspace-page">
       <header className="page-heading">
         <h1>Tạo bản cấp phát</h1>
-        <p>Chọn một PDF, nhập mã người nhận trong tổ chức và theo dõi công việc xử lý.</p>
+        <p>Chọn PDF và người nhận để tạo bản cấp phát riêng.</p>
       </header>
 
       <section className="workbench" aria-labelledby="issuance-form-heading">
         <div className="workbench-caption">
-          <h2 id="issuance-form-heading">Thông tin đầu vào</h2>
-          <p>Giới hạn phía trình duyệt là 10 MiB. Máy chủ và worker vẫn kiểm tra lại nội dung.</p>
+          <h2 id="issuance-form-heading">Tệp và người nhận</h2>
+          <p>Chọn tài liệu, sau đó nhập mã người nhận được cấp.</p>
         </div>
         <form className="form-stack issuance-form" onSubmit={submit} aria-busy={issuance.isPending}>
-          <div className="field" data-state={validationError ? "error" : file ? "success" : "default"}>
-            <label htmlFor="pdf-file">Tệp PDF</label>
-            <input
-              className="file-control"
+          <div className="field upload-dropzone" data-state={validationError ? "error" : file ? "success" : "default"}>
+            <DocumentFileInput
               id="pdf-file"
-              name="pdf-file"
-              type="file"
+              label="Tệp PDF"
               accept="application/pdf,.pdf"
-              required
               disabled={issuance.isPending}
-              aria-invalid={Boolean(validationError)}
-              aria-describedby="pdf-help"
-              onChange={(event) => selectFile(event.target.files?.[0])}
+              invalid={Boolean(validationError)}
+              describedBy="pdf-help"
+              filename={file?.name ?? null}
+              onChange={selectFile}
             />
             <p className={validationError ? "field-help field-help-error" : "field-help"} id="pdf-help">
-              {validationError ?? (file ? `${file.name} · ${Math.max(1, Math.ceil(file.size / 1024))} KiB` : "PDF tối đa 10 MiB và 50 trang; worker xác minh định dạng thực tế.")}
+              {validationError ?? (file ? `${Math.max(1, Math.ceil(file.size / 1024))} KiB` : "PDF · tối đa 10 MiB · tối đa 50 trang")}
             </p>
           </div>
 
@@ -135,19 +119,12 @@ export function IssueDocumentPage() {
               value={recipientId}
               onChange={(event) => setRecipientId(event.target.value.trim())}
             />
-            <p className="field-help" id="recipient-help">API hiện nhận UUID người nhận; chưa có endpoint danh sách để chọn.</p>
+            <p className="field-help" id="recipient-help">Nhập mã người nhận do hệ thống cấp.</p>
           </div>
 
-          <div className="progress-slot" aria-live="polite">
-            {stage ? (
-              <>
-                <div className="progress-copy"><span>{STAGE_LABEL[stage]}</span><span>Bước {progressStep}/4</span></div>
-                <progress max="4" value={progressStep}>Bước {progressStep}/4</progress>
-              </>
-            ) : <p>Quy trình chỉ bắt đầu khi bạn xác nhận tạo bản cấp phát.</p>}
-          </div>
+          <WorkflowSteps stage={stage} />
 
-          {error ? <p className="form-error" role="alert">{error}</p> : <p className="form-error" aria-hidden="true">&nbsp;</p>}
+          {error ? <p className="form-error" role="alert">{error}</p> : null}
           <button className="button button-primary" type="submit" disabled={issuance.isPending} data-state={issuance.isPending ? "loading" : error ? "error" : "default"}>
             {issuance.isPending ? "Đang tạo bản cấp phát" : "Tạo bản cấp phát"}
           </button>

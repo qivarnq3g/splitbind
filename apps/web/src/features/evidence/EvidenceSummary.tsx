@@ -24,47 +24,43 @@ function scoreLabel(value: number | null | undefined): string {
 
 export function EvidenceSummary({ status, evidence }: { status: VerificationStatus; evidence: Evidence }) {
   const knownLimitations = (evidence.limitations ?? []).filter((id) => id in LIMITATION_COPY);
-  const limitationIds = Array.from(new Set([...STATUS_LIMITATIONS[status], ...knownLimitations]));
+  const limitationIds = Array.from(new Set([...STATUS_LIMITATIONS[status], ...knownLimitations]))
+    .filter((id) => id !== "fingerprint.experimental_unreleased_v2");
   const unknownLimitationCount = (evidence.limitations?.length ?? 0) - knownLimitations.length;
   const regions = evidence.suspicious_regions;
 
   return (
     <article className="evidence-summary">
-      <section className="evidence-section" aria-labelledby="facts-heading">
-        <h2 id="facts-heading">Sự kiện</h2>
-        <dl className="evidence-facts">
-          <div><dt>Chữ ký manifest</dt><dd>{signatureLabel(evidence.manifest_signature_valid)}</dd></div>
-          <div><dt>Hash tệp chính xác</dt><dd>{hashLabel(evidence.exact_file_hash_match)}</dd></div>
-          <div><dt>Số trang đã phân tích</dt><dd>{evidence.analyzed_page_count ?? "API chưa cung cấp"}</dd></div>
-          <div><dt>Số phiếu hợp lệ</dt><dd>{evidence.valid_vote_count ?? "API chưa cung cấp"}</dd></div>
-          <div><dt>Số vùng nghi vấn</dt><dd>{regions ? regions.length : "API chưa cung cấp"}</dd></div>
-        </dl>
-        <p className="evidence-absence">API không công khai mã người nhận hoặc danh tính người được phát hiện trong kết quả này.</p>
-      </section>
-
-      <section className="evidence-section" aria-labelledby="confidence-heading">
-        <h2 id="confidence-heading">Độ tin cậy</h2>
-        <dl className="evidence-facts">
-          <div><dt>Điểm fingerprint</dt><dd>{scoreLabel(evidence.fingerprint_confidence)}</dd></div>
-          <div><dt>Điểm toàn vẹn</dt><dd>{scoreLabel(evidence.integrity_score)}</dd></div>
-        </dl>
-        <p className="evidence-absence">API chưa cung cấp ngưỡng quyết định, vì vậy giao diện không tự đánh giá điểm là cao hay thấp.</p>
-      </section>
-
-      <section className="evidence-section" aria-labelledby="limitations-heading">
-        <h2 id="limitations-heading">Giới hạn</h2>
-        <ul className="limitation-list">
-          {limitationIds.map((id) => <li key={id}>{LIMITATION_COPY[id]}</li>)}
-          {unknownLimitationCount > 0 ? <li>Kết quả có thêm giới hạn kỹ thuật chưa được giao diện mô tả chi tiết.</li> : null}
-        </ul>
-        <IntegrityMap regions={regions} />
-      </section>
-
-      <section className="evidence-section" aria-labelledby="inference-heading">
-        <h2 id="inference-heading">Suy luận thận trọng</h2>
-        <p className="inference-label">{STATUS_COPY[status].label}</p>
+      <section className="evidence-conclusion" aria-label="Ý nghĩa kết quả">
+        <p className="evidence-kicker">Ý nghĩa kết quả</p>
         <p>{STATUS_COPY[status].inference}</p>
       </section>
+      <details className="technical-details">
+        <summary>Xem chi tiết kỹ thuật</summary>
+        <div className="technical-details-body">
+          <section aria-labelledby="technical-data-heading">
+            <h2 id="technical-data-heading">Dữ liệu kỹ thuật</h2>
+            <dl className="evidence-facts">
+              <div><dt>Chữ ký bảo vệ</dt><dd>{signatureLabel(evidence.manifest_signature_valid)}</dd></div>
+              <div><dt>Tệp gốc</dt><dd>{hashLabel(evidence.exact_file_hash_match)}</dd></div>
+              <div><dt>Số trang đã phân tích</dt><dd>{evidence.analyzed_page_count ?? "API chưa cung cấp"}</dd></div>
+              <div><dt>Số phiếu hợp lệ</dt><dd>{evidence.valid_vote_count ?? "API chưa cung cấp"}</dd></div>
+              <div><dt>Số vùng nghi vấn</dt><dd>{regions ? regions.length : "API chưa cung cấp"}</dd></div>
+              <div><dt>Điểm fingerprint</dt><dd>{scoreLabel(evidence.fingerprint_confidence)}</dd></div>
+              <div><dt>Điểm toàn vẹn</dt><dd>{scoreLabel(evidence.integrity_score)}</dd></div>
+            </dl>
+            <p className="evidence-absence">Chưa có ngưỡng quyết định để đánh giá các điểm là cao hay thấp.</p>
+          </section>
+          <section aria-labelledby="technical-limitations-heading">
+            <h2 id="technical-limitations-heading">Giới hạn của kết quả</h2>
+            <ul className="limitation-list">
+              {limitationIds.map((id) => <li key={id}>{LIMITATION_COPY[id]}</li>)}
+              {unknownLimitationCount > 0 ? <li>Kết quả có thêm giới hạn kỹ thuật chưa được giao diện mô tả chi tiết.</li> : null}
+            </ul>
+            <IntegrityMap regions={regions} />
+          </section>
+        </div>
+      </details>
     </article>
   );
 }

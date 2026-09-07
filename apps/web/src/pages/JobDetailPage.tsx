@@ -1,5 +1,7 @@
 import { Link, useLocation, useParams } from "react-router-dom";
 
+import { CompactIdentifier } from "../components/CompactIdentifier";
+import { StatusBadge } from "../components/StatusBadge";
 import { JOB_LABELS, useJob } from "../features/jobs/useJob";
 
 export function JobDetailPage() {
@@ -14,23 +16,17 @@ export function JobDetailPage() {
     <main className="workspace-page">
       <header className="page-heading">
         <h1>Tiến độ xử lý</h1>
-        <p>Trang tự cập nhật với khoảng chờ tăng dần, tối đa 5 giây, và dừng khi công việc kết thúc.</p>
+        <p>Trạng thái sẽ tự động cập nhật cho đến khi hoàn tất.</p>
       </header>
       {job.isPending ? (
         <section className="status-board" aria-busy="true"><p>Đang tải trạng thái</p></section>
       ) : job.error ? (
         <section className="status-board"><p className="form-error" role="alert">{job.error.message}</p></section>
       ) : job.data ? (
-        <section className="status-board" aria-live="polite">
-          <div className="status-primary" data-status={job.data.status}>
-            <span className="status-dot" aria-hidden="true" />
-            <div>
-              <p>Trạng thái công việc</p>
-              <h2>{JOB_LABELS[job.data.status] ?? job.data.status}</h2>
-            </div>
-          </div>
+        <section className="status-board job-record" aria-live="polite">
+          <StatusBadge label="Trạng thái công việc" status={job.data.status} title={JOB_LABELS[job.data.status] ?? job.data.status} />
           <dl className="status-details">
-            <div><dt>Mã công việc</dt><dd>{job.data.id}</dd></div>
+            <div><dt>Mã công việc</dt><dd><CompactIdentifier label="Mã công việc" value={job.data.id} /></dd></div>
             <div><dt>Lần xử lý</dt><dd>{job.data.attempt + 1}</dd></div>
             <div><dt>Cập nhật</dt><dd>{new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(job.data.updated_at))}</dd></div>
           </dl>

@@ -2,18 +2,12 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 
+import { DocumentFileInput } from "../components/DocumentFileInput";
+import { WorkflowSteps } from "../components/WorkflowSteps";
 import { canCreateVerification, useSession } from "../features/auth/session";
 import { SafeApiError } from "../features/shared/apiError";
 import { type UploadStage, uploadVerificationPdf, validateVerificationFile } from "../features/uploads/uploadIssuance";
 import { createVerification } from "../features/verifications/verifications";
-
-const STAGE_STEP: Record<UploadStage, number> = { hashing: 1, intent: 2, uploading: 3, finalizing: 4 };
-const STAGE_LABEL: Record<UploadStage, string> = {
-  hashing: "Đang kiểm tra tệp",
-  intent: "Đang tạo phiên tải lên",
-  uploading: "Đang tải tệp",
-  finalizing: "Đang xác nhận tệp",
-};
 
 export function VerifyDocumentPage() {
   const session = useSession();
@@ -76,47 +70,35 @@ export function VerifyDocumentPage() {
   }
 
   const error = validationError ?? verification.error?.message ?? null;
-  const progressStep = stage ? STAGE_STEP[stage] : 0;
-
   return (
     <main className="workspace-page">
       <header className="page-heading">
         <h1>Xác minh tài liệu</h1>
-        <p>Tải một PDF, PNG hoặc JPEG nghi vấn để kiểm tra dấu vân tay, manifest và tín hiệu toàn vẹn trong phạm vi hệ thống cung cấp.</p>
+        <p>Tải tài liệu lên để xem kết quả kiểm tra kỹ thuật.</p>
       </header>
       <section className="workbench" aria-labelledby="verification-form-heading">
         <div className="workbench-caption">
-          <h2 id="verification-form-heading">Tài liệu cần kiểm chứng</h2>
-          <p>Trình duyệt giới hạn tệp ở 10 MiB. Máy chủ và worker vẫn phải xác minh lại định dạng, số trang hoặc kích thước ảnh.</p>
+          <h2 id="verification-form-heading">Tệp cần kiểm tra</h2>
+          <p>Hỗ trợ PDF, PNG và JPEG.</p>
         </div>
         <form className="form-stack" onSubmit={submit} aria-busy={verification.isPending}>
-          <div className="field" data-state={validationError ? "error" : file ? "success" : "default"}>
-            <label htmlFor="verification-pdf">Tệp cần kiểm chứng</label>
-            <input
-              className="file-control"
+          <div className="field upload-dropzone" data-state={validationError ? "error" : file ? "success" : "default"}>
+            <DocumentFileInput
               id="verification-pdf"
-              name="verification-pdf"
-              type="file"
+              label="Tệp cần kiểm chứng"
               accept="application/pdf,image/png,image/jpeg,.pdf,.png,.jpg,.jpeg"
-              required
               disabled={verification.isPending}
-              aria-invalid={Boolean(validationError)}
-              aria-describedby="verification-pdf-help"
-              onChange={(event) => selectFile(event.target.files?.[0])}
+              invalid={Boolean(validationError)}
+              describedBy="verification-pdf-help"
+              filename={file?.name ?? null}
+              onChange={selectFile}
             />
             <p className={validationError ? "field-help field-help-error" : "field-help"} id="verification-pdf-help">
-              {validationError ?? (file ? `${file.name} · ${Math.max(1, Math.ceil(file.size / 1024))} KiB` : "PDF, PNG hoặc JPEG tối đa 10 MiB; worker giới hạn PDF ở 50 trang và ảnh ở 40 megapixel.")}
+              {validationError ?? (file ? `${Math.max(1, Math.ceil(file.size / 1024))} KiB` : "Tối đa 10 MiB · PDF tối đa 50 trang")}
             </p>
           </div>
-          <div className="progress-slot" aria-live="polite">
-            {stage ? (
-              <>
-                <div className="progress-copy"><span>{STAGE_LABEL[stage]}</span><span>Bước {progressStep}/4</span></div>
-                <progress max="4" value={progressStep}>Bước {progressStep}/4</progress>
-              </>
-            ) : <p>Quy trình chỉ bắt đầu khi bạn xác nhận tài liệu cần kiểm chứng.</p>}
-          </div>
-          {error ? <p className="form-error" role="alert">{error}</p> : <p className="form-error" aria-hidden="true">&nbsp;</p>}
+          <WorkflowSteps stage={stage} />
+          {error ? <p className="form-error" role="alert">{error}</p> : null}
           <button className="button button-primary" type="submit" disabled={verification.isPending} data-state={verification.isPending ? "loading" : error ? "error" : "default"}>
             {verification.isPending ? "Đang bắt đầu xác minh" : "Bắt đầu xác minh"}
           </button>

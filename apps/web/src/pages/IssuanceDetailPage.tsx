@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 
+import { CompactIdentifier } from "../components/CompactIdentifier";
 import {
   getIssuance,
   getIssuanceResult,
@@ -47,14 +48,14 @@ export function IssuanceDetailPage() {
     <main className="workspace-page">
       <header className="page-heading">
         <h1>Hồ sơ cấp phát</h1>
-        <p>Thông tin được giới hạn theo tổ chức và vai trò của phiên đăng nhập.</p>
+        <p>Thông tin và bản PDF đã tạo cho lần cấp phát này.</p>
       </header>
       {issuance.isPending ? <section className="status-board" aria-busy="true"><p>Đang tải hồ sơ</p></section> : null}
       {issuance.error ? <p className="form-error" role="alert">{issuance.error.message}</p> : null}
       {issuance.data ? (
-        <section className="status-board">
+        <section className="status-board issuance-record">
           <dl className="status-details">
-            <div><dt>Mã hồ sơ</dt><dd>{issuance.data.id}</dd></div>
+            <div><dt>Mã hồ sơ</dt><dd><CompactIdentifier label="Mã hồ sơ" value={issuance.data.id} /></dd></div>
             <div><dt>Trạng thái</dt><dd>{issuance.data.status ? JOB_LABELS[issuance.data.status] ?? issuance.data.status : "Chưa có"}</dd></div>
             <div><dt>Thời điểm tạo</dt><dd>{new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(issuance.data.issued_at))}</dd></div>
             {issuance.data.algorithm_label ? <div><dt>Mức độ thuật toán</dt><dd>Thử nghiệm — chưa phát hành</dd></div> : null}

@@ -319,8 +319,8 @@ describe("issuance browser workflow", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const view = renderApp(`/issuances/${ISSUANCE_ID}`);
-    expect(await screen.findByText("Chế độ demo cục bộ — vân tay thử nghiệm, chưa phát hành.")).toBeVisible();
-    expect(screen.getByText("Kết quả kỹ thuật không chứng minh ai đã làm rò rỉ, chỉnh sửa hoặc phân phối tài liệu.")).toBeVisible();
+    expect(await screen.findByText("Bản demo.")).toBeVisible();
+    expect(screen.getByText(/Kết quả chỉ mang tính kỹ thuật, không xác định người làm rò rỉ hoặc chỉnh sửa/)).toBeVisible();
 
     view.unmount();
     cleanup();

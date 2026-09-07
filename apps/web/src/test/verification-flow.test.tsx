@@ -80,6 +80,7 @@ describe("verification browser workflow", () => {
     }));
 
     renderApp();
+    expect(await screen.findByText("Tải tài liệu lên để xem kết quả kiểm tra kỹ thuật.")).toBeVisible();
     fireEvent.change(await screen.findByLabelText("Tệp cần kiểm chứng"), {
       target: { files: [new File(["%PDF-1.4\n%%EOF"], "suspect.pdf", { type: "application/pdf" })] },
     });
@@ -135,15 +136,17 @@ describe("verification browser workflow", () => {
           fingerprint_confidence: 0.75, integrity_score: 0.5, valid_vote_count: 9, analyzed_page_count: 3,
           manifest_signature_valid: true, exact_file_hash_match: false,
           suspicious_regions: [{ x: 0.1, y: 0.2, width: 0.3, height: 0.1 }],
-          limitations: ["private.backend.id", "technical_not_legal"],
+          limitations: ["fingerprint.experimental_unreleased_v2", "fingerprint.not_gate_g1_evidence", "evidence.not_proof_of_leak_edit_or_distribution", "integrity.not_evaluated"],
         }, metrics: { processing_ms: 25 },
       });
     }));
     renderApp(`/verifications/${VERIFICATION_ID}`);
     expect(await screen.findByRole("heading", { name: "Khớp nguồn, có dấu hiệu thay đổi" })).toBeVisible();
+    fireEvent.click(screen.getByText("Xem chi tiết kỹ thuật"));
+    expect(screen.getByText("Demo không đánh giá watermark toàn vẹn hoặc định vị vùng chỉnh sửa.")).toBeVisible();
     expect(screen.getByText("0,75")).toBeVisible();
     expect(screen.getByText("API chưa cung cấp trang tương ứng và hình học từng trang", { exact: false })).toBeVisible();
-    expect(screen.queryByText("private.backend.id")).not.toBeInTheDocument();
+    expect(screen.queryByText(/giới hạn kỹ thuật chưa được giao diện mô tả/)).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/mã người nhận:\s*[0-9a-f-]{36}/i);
   });
 

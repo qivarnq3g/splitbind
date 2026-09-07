@@ -26,11 +26,13 @@ export function LoginPage() {
 
   return (
     <main className="login-page">
+      <aside className="login-intro" aria-label="Giới thiệu SplitBind">
+        <p className="login-intro-title">Bảo vệ tài liệu quan trọng</p>
+        <p>Cấp phát và kiểm tra tài liệu trong một nơi.</p>
+      </aside>
       <section className="login-panel" aria-labelledby="login-heading">
-        <p className="product-mark" aria-hidden="true">SB</p>
         <h1 id="login-heading">Đăng nhập SplitBind</h1>
-        <p>Tiếp tục vào không gian cấp phát tài liệu của tổ chức.</p>
-        <form className="form-stack" onSubmit={(event) => void submit(event)} aria-busy={login.isPending}>
+        <form className="form-stack" aria-label="Đăng nhập SplitBind" onSubmit={(event) => void submit(event)} aria-busy={login.isPending}>
           <div className="field">
             <label htmlFor="username">Tên đăng nhập</label>
             <input
@@ -41,7 +43,6 @@ export function LoginPage() {
               value={username}
               onChange={(event) => setUsername(event.target.value)}
             />
-            <p className="field-help">Tài khoản do quản trị viên của tổ chức cấp.</p>
           </div>
           <div className="field">
             <label htmlFor="password">Mật khẩu</label>
@@ -54,7 +55,6 @@ export function LoginPage() {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
             />
-            <p className="field-help">Ứng dụng không ghi mật khẩu vào localStorage hoặc trạng thái dùng chung phía trình duyệt.</p>
           </div>
           {login.error ? <p className="form-error" role="alert">{login.error.message}</p> : <p className="form-error" aria-hidden="true">&nbsp;</p>}
           <button className="button button-primary" type="submit" disabled={login.isPending} data-state={login.isPending ? "loading" : "default"}>

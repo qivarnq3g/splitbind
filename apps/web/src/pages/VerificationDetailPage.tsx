@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 
+import { CompactIdentifier } from "../components/CompactIdentifier";
+import { StatusBadge } from "../components/StatusBadge";
 import { canViewVerification, useSession } from "../features/auth/session";
 import { EvidenceSummary } from "../features/evidence/EvidenceSummary";
 import { STATUS_COPY } from "../features/evidence/copy";
@@ -40,22 +42,20 @@ export function VerificationDetailPage() {
     <main className="workspace-page">
       <header className="page-heading">
         <h1>Kết quả kiểm chứng</h1>
-        <p>Bằng chứng kỹ thuật được trình bày tách biệt với giới hạn và suy luận để tránh khẳng định quá mức.</p>
+        <p>Xem kết luận trước, mở chi tiết kỹ thuật khi cần.</p>
       </header>
       {verification.isPending ? <section className="status-board" aria-busy="true"><p>Đang tải hồ sơ kiểm chứng</p></section> : null}
       {verification.error ? <p className="form-error" role="alert">{verification.error.message}</p> : null}
       {verification.data ? (
         <>
-          <section className="status-board">
-            <div className="status-primary" data-status={verification.data.job_status ?? undefined}>
-              <span className="status-dot" aria-hidden="true" />
-              <div>
-                <p>Trạng thái kết quả</p>
-                <h2>{verification.data.status ? STATUS_COPY[verification.data.status].label : verification.data.job_status ? JOB_LABELS[verification.data.job_status] : "Chưa có công việc"}</h2>
-              </div>
-            </div>
+          <section className="status-board verification-record">
+            <StatusBadge
+              label="Trạng thái kết quả"
+              status={verification.data.job_status}
+              title={verification.data.status ? STATUS_COPY[verification.data.status].label : verification.data.job_status ? JOB_LABELS[verification.data.job_status] ?? verification.data.job_status : "Chưa có công việc"}
+            />
             <dl className="status-details">
-              <div><dt>Mã kiểm chứng</dt><dd>{verification.data.id}</dd></div>
+              <div><dt>Mã kiểm chứng</dt><dd><CompactIdentifier label="Mã kiểm chứng" value={verification.data.id} /></dd></div>
               <div><dt>Công việc</dt><dd>{verification.data.job_status ? JOB_LABELS[verification.data.job_status] : "Chưa có"}</dd></div>
               <div><dt>Thời điểm tạo</dt><dd>{new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(verification.data.created_at))}</dd></div>
             </dl>
