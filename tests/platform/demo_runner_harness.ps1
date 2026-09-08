@@ -160,15 +160,29 @@ switch ($Scenario) {
     }
     "python-dependency-probe" {
         $probePath = Join-Path $ScratchRoot "python-probe.txt"
-        $fakePython = Join-Path $ScratchRoot "python.cmd"
-        [System.IO.File]::WriteAllLines(
-            $fakePython,
-            @(
-                "@echo off",
-                "> `"%SPLITBIND_PYTHON_PROBE%`" echo %*",
-                "exit /b 0"
+        $isWin = ($null -ne (Get-Variable -Name IsWindows -ErrorAction SilentlyContinue) -and $IsWindows) -or ($env:OS -eq "Windows_NT")
+        if ($isWin) {
+            $fakePython = Join-Path $ScratchRoot "python.cmd"
+            [System.IO.File]::WriteAllLines(
+                $fakePython,
+                @(
+                    "@echo off",
+                    "> `"%SPLITBIND_PYTHON_PROBE%`" echo %*",
+                    "exit /b 0"
+                )
             )
-        )
+        } else {
+            $fakePython = Join-Path $ScratchRoot "python"
+            [System.IO.File]::WriteAllLines(
+                $fakePython,
+                @(
+                    "#!/bin/sh",
+                    "echo `"`$*`" > `"`$SPLITBIND_PYTHON_PROBE`"",
+                    "exit 0"
+                )
+            )
+            & chmod +x $fakePython
+        }
         $priorProbe = $env:SPLITBIND_PYTHON_PROBE
         $priorPythonPath = $env:PYTHONPATH
         $env:SPLITBIND_PYTHON_PROBE = $probePath
