@@ -1720,6 +1720,26 @@ progress {
   animation: scan-vertical 1.8s ease-in-out infinite alternate;
 }
 
+.scan-laser-beam-primary {
+  animation: scan-vertical 1.8s ease-in-out infinite alternate;
+}
+
+.scan-laser-beam-secondary {
+  position: absolute;
+  top: 0;
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--color-info), transparent);
+  box-shadow: 0 0 8px var(--color-info);
+  animation: scan-vertical-secondary 1.8s ease-in-out infinite alternate;
+  animation-delay: 0.3s;
+}
+
+@keyframes scan-vertical-secondary {
+  0% { transform: translateY(0); opacity: 0.2; }
+  100% { transform: translateY(120px); opacity: 0.8; }
+}
+
 @keyframes scan-vertical {
   0% { transform: translateY(0); opacity: 0.3; }
   100% { transform: translateY(120px); opacity: 0.95; }
@@ -2475,6 +2495,279 @@ progress {
   .issuance-chamber *,
   .issuance-chamber *::before,
   .issuance-chamber *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* Verification Inspection Chamber */
+.verification-chamber {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.verification-chamber .chamber-badge {
+  color: var(--color-info);
+}
+
+.verification-chamber .chamber-stage-pill[data-stage="optical_scan"] {
+  color: var(--color-focus);
+  background: var(--color-paper-3);
+  border-color: var(--color-focus);
+}
+
+.verification-chamber .chamber-stage-pill[data-stage="signal_extraction"] {
+  color: var(--color-info);
+  background: var(--color-info-soft);
+  border-color: var(--color-info);
+}
+
+.verification-chamber .chamber-stage-pill[data-stage="signal_comparison"] {
+  color: var(--color-accent);
+  background: var(--color-accent-soft);
+  border-color: var(--color-accent);
+}
+
+.verification-chamber .chamber-stage-pill[data-stage="resolution_handoff"] {
+  color: var(--color-success);
+  background: var(--color-success-soft);
+  border-color: var(--color-success);
+}
+
+.verification-viewport {
+  min-height: 200px;
+}
+
+.verification-grid-backdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.4;
+  background-image:
+    linear-gradient(to right, var(--color-rule-soft) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-rule-soft) 1px, transparent 1px);
+  background-size: 14px 14px;
+}
+
+.chamber-corner-bracket {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-color: var(--color-info);
+  border-style: solid;
+  pointer-events: none;
+  opacity: 0.55;
+  z-index: 2;
+  transition: opacity var(--dur-status) var(--ease-out);
+}
+
+.corner-top-left {
+  top: var(--space-xs);
+  left: var(--space-xs);
+  border-width: var(--rule-fine) 0 0 var(--rule-fine);
+}
+
+.corner-top-right {
+  top: var(--space-xs);
+  right: var(--space-xs);
+  border-width: var(--rule-fine) var(--rule-fine) 0 0;
+}
+
+.corner-bottom-left {
+  bottom: var(--space-xs);
+  left: var(--space-xs);
+  border-width: 0 0 var(--rule-fine) var(--rule-fine);
+}
+
+.corner-bottom-right {
+  bottom: var(--space-xs);
+  right: var(--space-xs);
+  border-width: 0 var(--rule-fine) var(--rule-fine) 0;
+}
+
+.verification-laser-primary {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--color-accent), var(--color-info), var(--color-accent), transparent);
+  box-shadow: 0 0 12px var(--color-focus);
+  pointer-events: none;
+  opacity: 0;
+  z-index: 4;
+}
+
+.verification-laser-secondary {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--color-info), transparent);
+  box-shadow: 0 0 8px var(--color-info);
+  pointer-events: none;
+  opacity: 0;
+  z-index: 4;
+}
+
+.verification-frequency-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  padding: var(--space-sm);
+  gap: var(--space-xs);
+  opacity: 0;
+  transition: opacity var(--dur-status) var(--ease-out);
+}
+
+.verification-chamber[data-stage="signal_extraction"] .verification-frequency-grid,
+.verification-chamber[data-stage="signal_comparison"] .verification-frequency-grid {
+  opacity: 0.95;
+}
+
+.verification-freq-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: var(--rule-hair) dashed var(--color-info);
+  border-radius: var(--radius-sm);
+  background: var(--color-info-soft);
+  color: var(--color-info);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  opacity: 0.8;
+  gap: 2px;
+  backdrop-filter: blur(1px);
+}
+
+.verification-freq-cell small {
+  font-size: 0.65rem;
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+.verification-comparison-tracks {
+  position: absolute;
+  bottom: var(--space-xs);
+  left: var(--space-sm);
+  right: var(--space-sm);
+  pointer-events: none;
+  z-index: 3;
+  display: flex;
+  justify-content: space-around;
+  align-items: flex-end;
+  gap: var(--space-md);
+  padding: var(--space-2xs) var(--space-xs);
+  background: var(--color-paper-3);
+  border: var(--rule-hair) solid var(--color-rule-2);
+  border-radius: var(--radius-sm);
+  opacity: 0;
+  transition: opacity var(--dur-status) var(--ease-out);
+}
+
+.verification-chamber[data-stage="signal_comparison"] .verification-comparison-tracks {
+  opacity: 0.95;
+}
+
+.signal-track-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.signal-track-label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.signal-bars-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 24px;
+}
+
+.verification-signal-bar {
+  width: 4px;
+  border-radius: var(--radius-pill);
+  transition: height var(--dur-short) var(--ease-out);
+}
+
+.signal-bar-expected {
+  background: var(--color-neutral);
+}
+
+.signal-bar-observed {
+  background: var(--color-accent);
+}
+
+.verification-region-reticle {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  border: var(--rule-hair) dashed var(--color-warning);
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+  opacity: 0;
+  z-index: 3;
+  transition: opacity var(--dur-status) var(--ease-out);
+}
+
+.region-reticle-inner {
+  position: absolute;
+  inset: 3px;
+  border: var(--rule-hair) solid var(--color-warning);
+  opacity: 0.55;
+  border-radius: 2px;
+}
+
+.reticle-a {
+  top: 22%;
+  left: 20%;
+}
+
+.reticle-b {
+  bottom: 26%;
+  right: 20%;
+}
+
+.verification-chamber[data-stage="signal_comparison"] .verification-region-reticle {
+  opacity: 0.9;
+}
+
+.verification-resolution-wave {
+  position: absolute;
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  border: var(--rule-fine) solid var(--color-success);
+  pointer-events: none;
+  opacity: 0;
+  z-index: 4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .verification-chamber *,
+  .verification-chamber *::before,
+  .verification-chamber *::after {
     animation: none !important;
     transition: none !important;
   }
