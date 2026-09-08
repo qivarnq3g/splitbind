@@ -203,6 +203,7 @@ class DemoRunnerContractTest(unittest.TestCase):
         self.assertIn("PID 1", observed["error"])
         self.assertIn("PID 3", observed["error"])
 
+    @unittest.skipUnless(os.name == "nt", "Windows Start-Process contract")
     def test_child_process_gets_minimal_environment_without_vite_or_cloud_sentinels(self):
         dump_script = self.scratch / "dump-environment.ps1"
         dump_script.write_text(
@@ -227,6 +228,7 @@ class DemoRunnerContractTest(unittest.TestCase):
         self.assertIn("Node 24", observed["error"])
         self.assertFalse(observed["demo_created"])
 
+    @unittest.skipUnless(os.name == "nt", "Windows reparse-point contract")
     def test_reparse_chain_and_leaf_are_rejected_before_external_write(self):
         observed = run_harness("reparse", self.scratch)
 
