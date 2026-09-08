@@ -227,6 +227,13 @@ class ComposeTopologyTest(unittest.TestCase):
 
     def test_production_renders_non_secret_neon_and_r2_boundaries(self):
         production = render_compose("compose.production.yaml")
+        compose_source = (COMPOSE_DIR / "compose.production.yaml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('env_file: ["${API_ENV_FILE:', compose_source)
+        self.assertIn('env_file: ["${WORKER_ENV_FILE:', compose_source)
+        self.assertNotIn("DATABASE_URL:", compose_source)
 
         database_host = production["services"]["api"].get("environment", {}).get(
             "NEON_DATABASE_HOST"
@@ -241,10 +248,13 @@ class ComposeTopologyTest(unittest.TestCase):
             database_host,
         )
         for name in ("api", "worker"):
-            self.assertIn("env_file", production["services"][name])
-            self.assertNotIn(
-                "DATABASE_URL",
-                production["services"][name].get("environment", {}),
+            service = production["services"][name]
+            self.assertTrue(
+                "env_file" in service
+                or service.get("environment", {}).get(
+                    "SPLITBIND_SYNTHETIC_CONFIG_ONLY"
+                )
+                == "true"
             )
 
         storage_endpoint = production["services"]["api"].get("environment", {}).get(

@@ -33,20 +33,30 @@ function Assert-RepositoryRoot {
 }
 
 function Assert-ContainedNonReparsePath([string]$Path, [string]$Root) {
-    $rootPath = [System.IO.Path]::GetFullPath($Root).TrimEnd('\')
+    $separatorChars = @(
+        [System.IO.Path]::DirectorySeparatorChar,
+        [System.IO.Path]::AltDirectorySeparatorChar
+    )
+    $rootPath = [System.IO.Path]::GetFullPath($Root).TrimEnd($separatorChars)
     $candidatePath = [System.IO.Path]::GetFullPath($Path)
-    $prefix = $rootPath + '\'
+    $prefix = $rootPath + [System.IO.Path]::DirectorySeparatorChar
+    $pathComparison = if ([System.IO.Path]::DirectorySeparatorChar -eq '\') {
+        [System.StringComparison]::OrdinalIgnoreCase
+    }
+    else {
+        [System.StringComparison]::Ordinal
+    }
     if ($candidatePath -ne $rootPath -and
-        -not $candidatePath.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        -not $candidatePath.StartsWith($prefix, $pathComparison)) {
         throw "Demo path escapes its trusted root: $candidatePath"
     }
     $rootItem = Get-Item -Force -LiteralPath $rootPath -ErrorAction SilentlyContinue
     if ($null -ne $rootItem -and ($rootItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
         throw "Demo path root cannot be a reparse point: $rootPath"
     }
-    $relative = $candidatePath.Substring($rootPath.Length).TrimStart('\')
+    $relative = $candidatePath.Substring($rootPath.Length).TrimStart($separatorChars)
     $current = $rootPath
-    foreach ($component in @($relative.Split(@('\'), [System.StringSplitOptions]::RemoveEmptyEntries))) {
+    foreach ($component in @($relative.Split($separatorChars, [System.StringSplitOptions]::RemoveEmptyEntries))) {
         $current = Join-Path $current $component
         $item = Get-Item -Force -LiteralPath $current -ErrorAction SilentlyContinue
         if ($null -eq $item) {
