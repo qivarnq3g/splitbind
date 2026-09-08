@@ -1,3 +1,6 @@
+﻿import { DragEvent, useState } from "react";
+import { FileCheck2, UploadCloud } from "lucide-react";
+
 type Props = {
   id: string;
   label: string;
@@ -10,10 +13,38 @@ type Props = {
 };
 
 export function DocumentFileInput({ id, label, accept, describedBy, disabled, invalid, filename, onChange }: Props) {
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  function handleDragOver(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    if (!disabled) setIsDragOver(true);
+  }
+
+  function handleDragLeave(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setIsDragOver(false);
+  }
+
+  function handleDrop(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setIsDragOver(false);
+    if (!disabled && e.dataTransfer.files?.[0]) {
+      onChange(e.dataTransfer.files[0]);
+    }
+  }
+
   return (
     <>
       <span className="field-label">{label}</span>
-      <div className="file-picker">
+      <div
+        className={`file-picker ${isDragOver ? "is-dragover" : ""} ${filename ? "has-file" : "is-empty"}`.trim()}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        <div className="file-picker-icon" aria-hidden="true">
+          {filename ? <FileCheck2 size={22} strokeWidth={2} /> : <UploadCloud size={22} strokeWidth={1.75} />}
+        </div>
         <input
           className="file-control"
           id={id}

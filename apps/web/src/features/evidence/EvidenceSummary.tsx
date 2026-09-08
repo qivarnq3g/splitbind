@@ -1,6 +1,16 @@
+import { useRef } from "react";
+import { useGSAP } from "@gsap/react";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+
 import type { components } from "../../api/generated/schema";
 import { IntegrityMap } from "./IntegrityMap";
 import { LIMITATION_COPY, STATUS_LIMITATIONS, isIntegrityNonExact, verificationCopy, type VerificationStatus } from "./copy";
+
+gsap.registerPlugin(useGSAP);
+if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+  gsap.registerPlugin(ScrollTrigger);
+}
 
 type Evidence = components["schemas"]["VerificationEvidence"];
 
@@ -23,6 +33,7 @@ function scoreLabel(value: number | null | undefined): string {
 }
 
 export function EvidenceSummary({ status, evidence }: { status: VerificationStatus; evidence: Evidence }) {
+  const rootRef = useRef<HTMLElement>(null);
   const knownLimitations = (evidence.limitations ?? []).filter((id) => id in LIMITATION_COPY);
   const integrityNonExact = isIntegrityNonExact(evidence.algorithm_label, evidence.exact_file_hash_match);
   const defaultLimitations = integrityNonExact
@@ -33,8 +44,38 @@ export function EvidenceSummary({ status, evidence }: { status: VerificationStat
   const regions = evidence.suspicious_regions;
   const copy = verificationCopy(status, evidence.algorithm_label, evidence.exact_file_hash_match);
 
+  useGSAP(
+    () => {
+      if (typeof window.matchMedia !== "function" || !rootRef.current) return;
+      const media = gsap.matchMedia();
+
+      media.add("(prefers-reduced-motion: no-preference)", () => {
+        gsap.fromTo(
+          ".evidence-conclusion",
+          { autoAlpha: 0, y: 8 },
+          { autoAlpha: 1, y: 0, duration: 0.32, ease: "power2.out", clearProps: "all" }
+        );
+
+        ScrollTrigger.create({
+          trigger: rootRef.current,
+          start: "top 88%",
+          onEnter: () => {
+            gsap.fromTo(
+              ".evidence-facts > div",
+              { autoAlpha: 0, y: 5 },
+              { autoAlpha: 1, y: 0, duration: 0.22, stagger: 0.03, ease: "power2.out", clearProps: "all" }
+            );
+          },
+        });
+      });
+
+      return () => media.revert();
+    },
+    { scope: rootRef }
+  );
+
   return (
-    <article className="evidence-summary">
+    <article ref={rootRef} className="evidence-summary">
       <section className="evidence-conclusion" aria-label="Ý nghĩa kết quả">
         <p className="evidence-kicker">Ý nghĩa kết quả</p>
         <p>{copy.inference}</p>
