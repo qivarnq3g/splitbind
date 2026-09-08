@@ -52,6 +52,10 @@ def render_compose(
                 "ACME_EMAIL": "compose-test@example.invalid",
                 "NEON_DATABASE_HOST": "ep-synthetic.neon.tech.invalid",
                 "R2_ENDPOINT": "https://synthetic-account.r2.cloudflarestorage.com.invalid",
+                "API_ENV_FILE": "./config-test-api.env",
+                "WORKER_ENV_FILE": "./config-test-worker.env",
+                "MANIFEST_SIGNING_KEY_FILE": "./config-test-secret.bin",
+                "MANIFEST_SIGNING_KEY_PASSPHRASE_FILE": "./config-test-secret.bin",
             }
         )
     environment.update(environment_overrides or {})
@@ -168,7 +172,7 @@ class ComposeTopologyTest(unittest.TestCase):
         production = render_compose("compose.production.yaml", use_config_env=False)
         self.assertEqual(
             set(production["services"]),
-            {"caddy", "api", "outbox", "rabbitmq", "worker"},
+            {"caddy", "api", "worker"},
         )
         self.assertEqual(
             production["services"]["caddy"]["ports"],
@@ -187,43 +191,48 @@ class ComposeTopologyTest(unittest.TestCase):
                 },
             ],
         )
-        for name in ("api", "outbox", "rabbitmq", "worker"):
+        for name in ("api", "worker"):
             self.assertNotIn("ports", production["services"][name])
         self.assertEqual(
             secret_sources(production["services"]["worker"]),
-            {"manifest_signing_key", "fingerprint_key", "integrity_key"},
+            {"manifest_signing_key", "manifest_signing_key_passphrase"},
         )
-        for name in ("caddy", "api", "outbox", "rabbitmq"):
+        for name in ("caddy", "api"):
             self.assertFalse(secret_sources(production["services"][name]))
         self.assertEqual(
             {name: definition["file"] for name, definition in production["secrets"].items()},
             {
-                "manifest_signing_key": "/run/splitbind/secrets/manifest-signing-key.pk8",
-                "fingerprint_key": "/run/splitbind/secrets/fingerprint-key.bin",
-                "integrity_key": "/run/splitbind/secrets/integrity-key.bin",
+                "manifest_signing_key": "./config-test-secret.bin",
+                "manifest_signing_key_passphrase": "./config-test-secret.bin",
             },
         )
-        for item in production["services"]["worker"]["secrets"]:
-            self.assertEqual(item["target"], f"/run/secrets/{item['source']}")
+        self.assertEqual(
+            {
+                item["source"]: item["target"]
+                for item in production["services"]["worker"]["secrets"]
+            },
+            {
+                "manifest_signing_key": "manifest_signing_key",
+                "manifest_signing_key_passphrase": "manifest_signing_key_passphrase",
+            },
+        )
 
     def test_production_renders_non_secret_neon_and_r2_boundaries(self):
         production = render_compose("compose.production.yaml")
 
         database_host = production["services"]["api"].get("environment", {}).get(
-            "SPLITBIND_DATABASE_HOST"
+            "NEON_DATABASE_HOST"
         )
         self.assertIsNotNone(database_host)
         self.assertEqual(
-            production["services"]["outbox"]["environment"][
-                "SPLITBIND_DATABASE_HOST"
-            ],
+            production["services"]["worker"]["environment"]["NEON_DATABASE_HOST"],
             database_host,
         )
         self.assertEqual(
             validate_database_host(database_host, ".neon.tech.invalid"),
             database_host,
         )
-        for name in ("api", "outbox"):
+        for name in ("api", "worker"):
             self.assertIn("env_file", production["services"][name])
             self.assertNotIn(
                 "DATABASE_URL",
@@ -251,10 +260,6 @@ class ComposeTopologyTest(unittest.TestCase):
         )
         self.assertNotIn("minio", parsed_storage.hostname or "")
         self.assertNotIn("localhost", parsed_storage.hostname or "")
-        self.assertNotIn(
-            "OBJECT_STORAGE_ENDPOINT",
-            production["services"]["outbox"].get("environment", {}),
-        )
 
     def test_rendered_production_rejects_a_credential_bearing_database_host(self):
         production = render_compose(
@@ -266,9 +271,7 @@ class ComposeTopologyTest(unittest.TestCase):
                 )
             },
         )
-        database_host = production["services"]["api"]["environment"][
-            "SPLITBIND_DATABASE_HOST"
-        ]
+        database_host = production["services"]["api"]["environment"]["NEON_DATABASE_HOST"]
 
         with self.assertRaisesRegex(
             DatabaseHostValidationError,
