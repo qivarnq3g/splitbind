@@ -124,6 +124,10 @@ COMMANDS = [
     },
 ]
 
+RELEASE_COMMANDS = [
+    command for command in COMMANDS if command["name"] != "research-tests"
+]
+
 
 def _materialize(argv):
     materialized = [sys.executable if value == "{python}" else value for value in argv]
@@ -146,12 +150,18 @@ def run_commands(commands):
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--release",
+        action="store_true",
+        help="exclude unreleased research benchmarks from the integrity release gate",
+    )
     args = parser.parse_args(argv)
+    commands = RELEASE_COMMANDS if args.release else COMMANDS
     if args.dry_run:
-        json.dump({"schema_version": 1, "commands": COMMANDS}, sys.stdout)
+        json.dump({"schema_version": 1, "commands": commands}, sys.stdout)
         sys.stdout.write("\n")
         return 0
-    return run_commands(COMMANDS)
+    return run_commands(commands)
 
 
 if __name__ == "__main__":

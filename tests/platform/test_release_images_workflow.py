@@ -21,7 +21,7 @@ class ReleaseImagesWorkflowContractTest(unittest.TestCase):
             "python-version-file: .python-version",
             "node-version-file: .nvmrc",
             "npm install --global npm@12.0.1 --ignore-scripts",
-            "python infra/scripts/run_smoke.py",
+            "python infra/scripts/run_smoke.py --release",
             "needs: verify",
             "if: github.event_name != 'pull_request'",
             "contents: read",

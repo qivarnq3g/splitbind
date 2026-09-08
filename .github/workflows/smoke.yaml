@@ -13,4 +13,4 @@ jobs:
       - run: npm install --global npm@12.0.1 --ignore-scripts
       - shell: pwsh
         run: ./infra/scripts/verify-toolchain.ps1
-      - run: python infra/scripts/run_smoke.py
+      - run: python infra/scripts/run_smoke.py --release

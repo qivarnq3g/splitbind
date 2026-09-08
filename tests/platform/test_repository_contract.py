@@ -184,8 +184,29 @@ class RepositoryContractTest(unittest.TestCase):
     def test_ci_invokes_the_shared_smoke_plan(self):
         workflow = (ROOT / ".github/workflows/smoke.yaml").read_text(encoding="utf-8")
 
-        self.assertIn("run: python infra/scripts/run_smoke.py", workflow)
+        self.assertIn("run: python infra/scripts/run_smoke.py --release", workflow)
         self.assertNotIn("run_smoke.py --dry-run", workflow)
+
+    def test_release_smoke_excludes_unreleased_research_benchmarks(self):
+        result = subprocess.run(
+            [
+                sys.executable,
+                "infra/scripts/run_smoke.py",
+                "--dry-run",
+                "--release",
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, self._combined_output(result))
+        names = [command["name"] for command in json.loads(result.stdout)["commands"]]
+        self.assertIn("api-tests", names)
+        self.assertIn("web-tests", names)
+        self.assertIn("platform-tests", names)
+        self.assertNotIn("research-tests", names)
 
     def test_smoke_runner_propagates_the_first_failure_and_stops(self):
         program = """
