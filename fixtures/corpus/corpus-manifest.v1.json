@@ -1,0 +1,335 @@
+{
+  "schema_version": 1,
+  "generator": {
+    "name": "splitbind-synthetic-corpus",
+    "version": "1.0.0",
+    "seed": 20260827
+  },
+  "license": "CC0-1.0",
+  "max_fixture_bytes": 2000000,
+  "entries": [
+    {
+      "fixture_id": "pdf-one-vector",
+      "kind": "clean_pdf",
+      "relative_path": "generated/clean-one-page-vector.pdf",
+      "generator_version": "1.0.0",
+      "generator_seed": 20260827,
+      "pages": 1,
+      "dimensions": {
+        "width": 612,
+        "height": 792,
+        "unit": "points"
+      },
+      "sha256": "ba1c3ef1b1742400aa646eb14215d094fee7a37d32589836530ee83549f79004",
+      "license": "CC0-1.0",
+      "content_features": [
+        "vector_text",
+        "grayscale_shapes",
+        "mixed",
+        "synthetic_raster"
+      ]
+    },
+    {
+      "fixture_id": "pdf-one-gradient",
+      "kind": "clean_pdf",
+      "relative_path": "generated/clean-one-page-gradient.pdf",
+      "generator_version": "1.0.0",
+      "generator_seed": 20260828,
+      "pages": 1,
+      "dimensions": {
+        "width": 612,
+        "height": 792,
+        "unit": "points"
+      },
+      "sha256": "6c10295bdb6169daf08d8927bdb853ceceb28d43732023ab4054eee60e2d00cc",
+      "license": "CC0-1.0",
+      "content_features": [
+        "vector_text",
+        "grayscale_shapes",
+        "gradient",
+        "synthetic_raster"
+      ]
+    },
+    {
+      "fixture_id": "pdf-one-whitespace",
+      "kind": "clean_pdf",
+      "relative_path": "generated/clean-one-page-whitespace.pdf",
+      "generator_version": "1.0.0",
+      "generator_seed": 20260829,
+      "pages": 1,
+      "dimensions": {
+        "width": 612,
+        "height": 792,
+        "unit": "points"
+      },
+      "sha256": "5be4bacf7636bf442919287bb88867e36c67b87fb053616801167a6bcec855a9",
+      "license": "CC0-1.0",
+      "content_features": [
+        "vector_text",
+        "grayscale_shapes",
+        "whitespace",
+        "synthetic_raster"
+      ]
+    },
+    {
+      "fixture_id": "pdf-multi-mixed",
+      "kind": "clean_pdf",
+      "relative_path": "generated/clean-multi-page-mixed.pdf",
+      "generator_version": "1.0.0",
+      "generator_seed": 20260830,
+      "pages": 3,
+      "dimensions": {
+        "width": 612,
+        "height": 792,
+        "unit": "points"
+      },
+      "sha256": "a5b701a4fded59b4f00ea46af993a3fd428ce0602135aeb27472bc59dc3910f1",
+      "license": "CC0-1.0",
+      "content_features": [
+        "vector_text",
+        "grayscale_shapes",
+        "mixed",
+        "synthetic_raster"
+      ]
+    },
+    {
+      "fixture_id": "pdf-multi-noise",
+      "kind": "clean_pdf",
+      "relative_path": "generated/clean-multi-page-noise.pdf",
+      "generator_version": "1.0.0",
+      "generator_seed": 20260831,
+      "pages": 2,
+      "dimensions": {
+        "width": 612,
+        "height": 792,
+        "unit": "points"
+      },
+      "sha256": "9b985b91f999df5fbfe88e7796b3796e2c70b7b1a0afc02526266f1757ecb7ec",
+      "license": "CC0-1.0",
+      "content_features": [
+        "vector_text",
+        "grayscale_shapes",
+        "noise",
+        "synthetic_raster"
+      ]
+    },
+    {
+      "fixture_id": "image-clean-gradient",
+      "kind": "clean_image",
+      "relative_path": "generated/clean-gradient.png",
+      "generator_version": "1.0.0",
+      "generator_seed": 20260847,
+      "pages": 1,
+      "dimensions": {
+        "width": 640,
+        "height": 480,
+        "unit": "pixels"
+      },
+      "sha256": "569e6a95f8be4f247ce3c9f308d5b9fa8b81dbd6aa7fa55beaa4c6a8ed47d963",
+      "license": "CC0-1.0"
+    },
+    {
+      "fixture_id": "image-clean-noise",
+      "kind": "clean_image",
+      "relative_path": "generated/clean-noise.png",
+      "generator_version": "1.0.0",
+      "generator_seed": 20260848,
+      "pages": 1,
+      "dimensions": {
+        "width": 640,
+        "height": 480,
+        "unit": "pixels"
+      },
+      "sha256": "8665cb85a6687d90a3ad0fb077540535eb3c4b767e62fd5e29a831458ffdcba8",
+      "license": "CC0-1.0"
+    },
+    {
+      "fixture_id": "image-clean-mixed",
+      "kind": "clean_image",
+      "relative_path": "generated/clean-mixed-contrast.png",
+      "generator_version": "1.0.0",
+      "generator_seed": 20260849,
+      "pages": 1,
+      "dimensions": {
+        "width": 640,
+        "height": 480,
+        "unit": "pixels"
+      },
+      "sha256": "5d3fe4676c5065eb427a9239ec6558b0254282337a8ddbd672ce55755e40c6c7",
+      "license": "CC0-1.0"
+    },
+    {
+      "fixture_id": "negative-external-00",
+      "kind": "negative_external",
+      "relative_path": "generated/negative-external-00.png",
+      "generator_version": "1.0.0",
+      "generator_seed": 20260927,
+      "pages": 1,
+      "dimensions": {
+        "width": 512,
+        "height": 384,
+        "unit": "pixels"
+      },
+      "sha256": "74110df35a76efc8438e4ec3bf4fe83af403ddc8a7c690490dc76215425ea452",
+      "license": "CC0-1.0"
+    },
+    {
+      "fixture_id": "negative-external-01",
+      "kind": "negative_external",
+      "relative_path": "generated/negative-external-01.png",
+      "generator_version": "1.0.0",
+      "generator_seed": 20260928,
+      "pages": 1,
+      "dimensions": {
+        "width": 512,
+        "height": 384,
+        "unit": "pixels"
+      },
+      "sha256": "7127b03490e2dd4c157450f4842cf2671cbaddb860caf563f1588217892ba39f",
+      "license": "CC0-1.0"
+    },
+    {
+      "fixture_id": "negative-external-02",
+      "kind": "negative_external",
+      "relative_path": "generated/negative-external-02.png",
+      "generator_version": "1.0.0",
+      "generator_seed": 20260929,
+      "pages": 1,
+      "dimensions": {
+        "width": 512,
+        "height": 384,
+        "unit": "pixels"
+      },
+      "sha256": "b7d1e8684c1cf11e030fbcf74f64b10c49fcb5c051d3dc4aee749564e5a68e41",
+      "license": "CC0-1.0"
+    },
+    {
+      "fixture_id": "negative-external-03",
+      "kind": "negative_external",
+      "relative_path": "generated/negative-external-03.png",
+      "generator_version": "1.0.0",
+      "generator_seed": 20260930,
+      "pages": 1,
+      "dimensions": {
+        "width": 512,
+        "height": 384,
+        "unit": "pixels"
+      },
+      "sha256": "e97d9b9dd55ad088b1b5eaad12d8fefd923c3e159553c5bce2616650a0dce29a",
+      "license": "CC0-1.0"
+    },
+    {
+      "fixture_id": "negative-external-04",
+      "kind": "negative_external",
+      "relative_path": "generated/negative-external-04.png",
+      "generator_version": "1.0.0",
+      "generator_seed": 20260931,
+      "pages": 1,
+      "dimensions": {
+        "width": 512,
+        "height": 384,
+        "unit": "pixels"
+      },
+      "sha256": "358957b04eff0269454575c28f165146eefa87aa891407ad6f2986bdb049eb5b",
+      "license": "CC0-1.0"
+    },
+    {
+      "fixture_id": "negative-external-05",
+      "kind": "negative_external",
+      "relative_path": "generated/negative-external-05.png",
+      "generator_version": "1.0.0",
+      "generator_seed": 20260932,
+      "pages": 1,
+      "dimensions": {
+        "width": 512,
+        "height": 384,
+        "unit": "pixels"
+      },
+      "sha256": "a034f557d58f6c8b539cbd061213b245362f442e03d6fdcb5522cfe166b81481",
+      "license": "CC0-1.0"
+    },
+    {
+      "fixture_id": "negative-external-06",
+      "kind": "negative_external",
+      "relative_path": "generated/negative-external-06.png",
+      "generator_version": "1.0.0",
+      "generator_seed": 20260933,
+      "pages": 1,
+      "dimensions": {
+        "width": 512,
+        "height": 384,
+        "unit": "pixels"
+      },
+      "sha256": "08492badf5ac90e976799d09b0a8c3a21f0235c36b081bb245254a31b6c0d362",
+      "license": "CC0-1.0"
+    },
+    {
+      "fixture_id": "negative-external-07",
+      "kind": "negative_external",
+      "relative_path": "generated/negative-external-07.png",
+      "generator_version": "1.0.0",
+      "generator_seed": 20260934,
+      "pages": 1,
+      "dimensions": {
+        "width": 512,
+        "height": 384,
+        "unit": "pixels"
+      },
+      "sha256": "a61299c85d17309cb0c4038f22907686653706b26f0621d01639e6bab7d2b9d6",
+      "license": "CC0-1.0"
+    },
+    {
+      "fixture_id": "negative-external-08",
+      "kind": "negative_external",
+      "relative_path": "generated/negative-external-08.png",
+      "generator_version": "1.0.0",
+      "generator_seed": 20260935,
+      "pages": 1,
+      "dimensions": {
+        "width": 512,
+        "height": 384,
+        "unit": "pixels"
+      },
+      "sha256": "bfa99aeec56e06f47807b74d8f69c8013574f186ccc668a5a89391d0367eca00",
+      "license": "CC0-1.0"
+    },
+    {
+      "fixture_id": "negative-external-09",
+      "kind": "negative_external",
+      "relative_path": "generated/negative-external-09.png",
+      "generator_version": "1.0.0",
+      "generator_seed": 20260936,
+      "pages": 1,
+      "dimensions": {
+        "width": 512,
+        "height": 384,
+        "unit": "pixels"
+      },
+      "sha256": "ba1dc22bcdae4d44423f1c359a20c9c83d169ca9eb03ccd3d6c984275f1bcbeb",
+      "license": "CC0-1.0"
+    },
+    {
+      "fixture_id": "tamper-ground-truth",
+      "kind": "tamper_ground_truth",
+      "relative_path": "generated/tamper-ground-truth.png",
+      "generator_version": "1.0.0",
+      "generator_seed": 20261027,
+      "pages": 1,
+      "dimensions": {
+        "width": 640,
+        "height": 480,
+        "unit": "pixels"
+      },
+      "sha256": "bdb9093335b6b4f5b7581140143768cca589d71f2c213f7b0c0e333d0cf2d186",
+      "license": "CC0-1.0",
+      "ground_truth_regions": [
+        {
+          "x": 0.2,
+          "y": 0.25,
+          "width": 0.3,
+          "height": 0.25
+        }
+      ]
+    }
+  ]
+}

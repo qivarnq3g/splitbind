@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://splitbind.qivarn.id.vn/contracts/jsonschema/job-result-v1.schema.json",
+  "title": "JobResultV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "message_type",
+    "message_id",
+    "job_id",
+    "attempt",
+    "output_object_key",
+    "output_sha256",
+    "recovered_issuance_id",
+    "verification_status",
+    "evidence",
+    "metrics",
+    "safe_error_code",
+    "correlation_id"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "message_type": {
+      "type": "string",
+      "enum": ["job.succeeded", "job.retryable_failed", "job.failed", "job.cancelled"]
+    },
+    "message_id": {"type": "string", "format": "uuid"},
+    "job_id": {"type": "string", "format": "uuid"},
+    "attempt": {"type": "integer", "minimum": 0, "maximum": 2},
+    "output_object_key": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^(?![a-zA-Z][a-zA-Z0-9+.-]*://)(?!/)(?!.*\\.\\.)(?!.*[?&]).+$"
+        },
+        {"type": "null"}
+      ]
+    },
+    "output_sha256": {
+      "anyOf": [
+        {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        {"type": "null"}
+      ]
+    },
+    "recovered_issuance_id": {
+      "anyOf": [
+        {"type": "string", "format": "uuid"},
+        {"type": "null"}
+      ]
+    },
+    "verification_status": {
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "VERIFIED_INTACT",
+            "SOURCE_IDENTIFIED_MODIFIED",
+            "PARTIAL_EVIDENCE",
+            "NO_WATERMARK",
+            "INVALID_MANIFEST",
+            "PROCESSING_FAILED"
+          ]
+        },
+        {"type": "null"}
+      ]
+    },
+    "evidence": {
+      "anyOf": [
+        {"$ref": "https://splitbind.qivarn.id.vn/contracts/jsonschema/evidence-v1.schema.json"},
+        {"type": "null"}
+      ]
+    },
+    "metrics": {
+      "$ref": "https://splitbind.qivarn.id.vn/contracts/jsonschema/job-metrics-v1.schema.json"
+    },
+    "safe_error_code": {
+      "anyOf": [
+        {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$", "maxLength": 64},
+        {"type": "null"}
+      ]
+    },
+    "correlation_id": {"type": "string", "format": "uuid"}
+  }
+}

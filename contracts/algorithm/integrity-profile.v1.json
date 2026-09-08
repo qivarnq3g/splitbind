@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "profile_id": "splitbind-integrity-candidate-v1",
+  "status": "research-candidate",
+  "region_size_px": 128,
+  "content_feature": {
+    "color_channel": "luminance",
+    "transform": "dct",
+    "coefficient_band": "low-frequency-quantized",
+    "coefficient_positions": [
+      [0, 0], [0, 1], [1, 0], [1, 1],
+      [0, 2], [2, 0], [1, 2], [2, 1],
+      [0, 3], [3, 0], [1, 3], [3, 1],
+      [2, 2], [2, 3], [3, 2], [3, 3]
+    ],
+    "quantization_step": 512.0,
+    "encoding": "signed-int16-big-endian"
+  },
+  "authentication": {
+    "algorithm": "hmac-sha256",
+    "tag_bytes": 4,
+    "binding_inputs": [
+      "content_feature",
+      "region_index_be32",
+      "document_nonce"
+    ],
+    "placement": "key-derived-partner-region",
+    "exclude_destination_coefficients_from_feature": true
+  },
+  "partner_mapping": {
+    "derivation": "hmac-sha256-sorted-ring-v1",
+    "domain": "splitbind-integrity-partners-v1",
+    "replica_ring_shifts": [1, 2, 3]
+  },
+  "embedding": {
+    "transform": "dct",
+    "quantizer": "parity-qim",
+    "qim_delta": 48.0,
+    "tag_coefficient_sets": [
+      {"row_start": 8, "column_start": 8, "rows": 4, "columns": 8},
+      {"row_start": 12, "column_start": 8, "rows": 4, "columns": 8},
+      {"row_start": 16, "column_start": 8, "rows": 4, "columns": 8}
+    ],
+    "minimum_replica_votes": 2,
+    "minimum_bit_confidence": 0.2
+  },
+  "localization": {
+    "coordinate_space": "normalized-xywh",
+    "score_range": [0.0, 1.0]
+  },
+  "decision_policy": {
+    "minimum_complete_regions": 4,
+    "strong_compression_mismatch_ratio": 0.1,
+    "geometry_failure_mismatch_ratio": 0.25,
+    "high_confidence_threshold": 0.85,
+    "limitation_ids": {
+      "strong_compression": "integrity.strong_compression",
+      "geometry_failure": "integrity.geometry_failure",
+      "insufficient_complete_regions": "integrity.insufficient_complete_regions",
+      "indeterminate": "integrity.indeterminate"
+    }
+  },
+  "input_bounds": {
+    "supported_dtype": "uint8",
+    "supported_channels": [1, 3],
+    "max_pixels": 40000000,
+    "key_bytes": {"minimum": 16, "maximum": 64},
+    "nonce_bytes": {"minimum": 8, "maximum": 64},
+    "partial_region_policy": "ignore"
+  }
+}

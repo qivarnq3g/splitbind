@@ -10,6 +10,8 @@ Dockerfile text eol=lf
 *.ps1 text eol=crlf
 *.bat text eol=crlf
 *.cmd text eol=crlf
+contracts/algorithm/fingerprint-candidates.v2.json text eol=lf
+contracts/algorithm/fingerprint-candidates.v3.json text eol=lf
 
 *.pdf binary
 *.png binary

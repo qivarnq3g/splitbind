@@ -1,0 +1,77 @@
+name: splitbind-local
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    profiles: [core, full]
+    networks: [app]
+  minio:
+    image: minio/minio
+    command: server /data
+    profiles: [core, full]
+    networks: [app]
+  minio-demo:
+    image: ${DEMO_MINIO_IMAGE:?DEMO_MINIO_IMAGE must name the exact locally loaded demo image}
+    pull_policy: never
+    command: ["server", "/data"]
+    profiles: [demo]
+    ports:
+      - target: 9000
+        published: "9000"
+        host_ip: 127.0.0.1
+        protocol: tcp
+    environment:
+      MINIO_ROOT_USER: ${DEMO_MINIO_ROOT_USER:?DEMO_MINIO_ROOT_USER is required}
+      MINIO_ROOT_PASSWORD: ${DEMO_MINIO_ROOT_PASSWORD:?DEMO_MINIO_ROOT_PASSWORD is required}
+    volumes:
+      - type: bind
+        source: ${DEMO_MINIO_DATA_PATH:?DEMO_MINIO_DATA_PATH must be a contained demo path}
+        target: /data
+    networks: [app]
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    profiles: [core, full]
+    networks: [app]
+  api:
+    image: splitbind-api:local
+    profiles: [core, full]
+    networks: [app]
+    depends_on: [postgres, minio, rabbitmq]
+  outbox:
+    image: splitbind-api:local
+    command: ["python", "manage.py", "run_event_bridge"]
+    profiles: [core, full]
+    networks: [app]
+    depends_on: [postgres, rabbitmq]
+  worker:
+    image: splitbind-worker:local
+    profiles: [core, full]
+    networks: [app]
+    depends_on: [rabbitmq, minio]
+  caddy:
+    image: splitbind-web:local
+    profiles: [core, full]
+    ports: ["8080:8080"]
+    environment:
+      SPLITBIND_HOSTNAME: "http://:8080"
+      ACME_EMAIL: "local@example.invalid"
+    networks: [app]
+    depends_on: [api]
+  research:
+    profiles: [research, full]
+    image: splitbind-research:local
+  prometheus:
+    image: prom/prometheus
+    profiles: [observability, full]
+    networks: [app]
+  e2e:
+    image: splitbind-e2e:local
+    profiles: [full]
+    command: ["npm", "run", "e2e", "--workspace", "@splitbind/web"]
+    environment:
+      BASE_URL: "http://caddy:8080"
+    networks: [app]
+    depends_on: [caddy, outbox, worker]
+
+networks:
+  app: {}

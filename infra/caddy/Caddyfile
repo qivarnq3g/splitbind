@@ -1,0 +1,28 @@
+{
+    admin off
+    http_port 8080
+    https_port 8443
+    email {$ACME_EMAIL}
+}
+
+{$SPLITBIND_HOSTNAME} {
+    encode zstd gzip
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "same-origin"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        Content-Security-Policy "default-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+    }
+    handle /api/* {
+        reverse_proxy api:8000
+    }
+    handle /health/* {
+        reverse_proxy api:8000
+    }
+    handle {
+        root * /srv/web
+        try_files {path} /index.html
+        file_server
+    }
+}

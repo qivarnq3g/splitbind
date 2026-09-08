@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools==84.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "splitbind-ref"
+version = "0.1.0"
+description = "Reference algorithms for SplitBind research validation"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+  "cryptography==50.0.1",
+  "numpy==2.4.6",
+  "opencv-python-headless==4.13.0.92",
+  "pypdfium2==5.13.0",
+  "pypdf==6.16.2",
+  "reedsolo==1.7.0",
+  "rfc8785==0.1.4",
+]
+
+[project.optional-dependencies]
+test = [
+  "hypothesis==6.165.10",
+  "jsonschema==4.26.0",
+  "PyNaCl==1.6.2",
+  "pytest==9.1.1",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

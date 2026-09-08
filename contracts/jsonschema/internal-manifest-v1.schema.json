@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://splitbind.qivarn.id.vn/contracts/jsonschema/internal-manifest-v1.schema.json",
+  "title": "InternalManifestV1",
+  "description": "The exact protected internal payload canonicalized independently with RFC 8785 and signed with a detached Ed25519 signature.",
+  "type": "object",
+  "additionalProperties": false,
+  "x-signature": {
+    "algorithm": "Ed25519",
+    "canonicalization": "RFC8785-JCS",
+    "scope": "internal-manifest-canonical-bytes",
+    "detached": true
+  },
+  "required": [
+    "schema_version",
+    "issuance_id",
+    "document_id",
+    "recipient_id",
+    "issued_at",
+    "source_sha256",
+    "output_sha256",
+    "fingerprint_algorithm",
+    "integrity_algorithm",
+    "signing_key_id",
+    "retention_policy_id"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "issuance_id": {"type": "string", "format": "uuid"},
+    "document_id": {"type": "string", "format": "uuid"},
+    "recipient_id": {"type": "string", "format": "uuid"},
+    "issued_at": {"type": "string", "format": "date-time", "pattern": "Z$"},
+    "source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "output_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "fingerprint_algorithm": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+    },
+    "integrity_algorithm": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+    },
+    "signing_key_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "retention_policy_id": {"type": "string", "minLength": 1, "maxLength": 128}
+  }
+}

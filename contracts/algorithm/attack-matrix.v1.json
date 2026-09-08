@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "jpeg_quality": [95, 85, 70, 50],
+  "crop_fraction": [0.1, 0.25, 0.5],
+  "resize_scale": [0.5, 0.75, 1.5],
+  "rotation_degrees": [-5, -3, -1, 1, 3, 5],
+  "brightness_contrast": [
+    {
+      "brightness_factor": 0.85,
+      "contrast_factor": 0.9
+    },
+    {
+      "brightness_factor": 1.15,
+      "contrast_factor": 1.0
+    },
+    {
+      "brightness_factor": 1.0,
+      "contrast_factor": 1.2
+    }
+  ],
+  "gaussian_noise_blur": [
+    {
+      "noise_sigma": 3.0,
+      "blur_sigma": 0.0
+    },
+    {
+      "noise_sigma": 8.0,
+      "blur_sigma": 0.8
+    },
+    {
+      "noise_sigma": 15.0,
+      "blur_sigma": 1.2
+    }
+  ],
+  "screenshot": [
+    {
+      "kind": "raster",
+      "width_px": 1920,
+      "height_px": 1080
+    },
+    {
+      "kind": "raster",
+      "width_px": 1366,
+      "height_px": 768
+    },
+    {
+      "kind": "perspective",
+      "width_px": 1920,
+      "height_px": 1080,
+      "corner_offsets": [
+        [0.03, 0.02],
+        [-0.02, 0.04],
+        [-0.03, -0.02],
+        [0.02, -0.03]
+      ]
+    }
+  ],
+  "combined": [
+    {
+      "operations": ["jpeg", "crop"],
+      "jpeg_quality": 70,
+      "crop_fraction": 0.25
+    },
+    {
+      "operations": ["screenshot", "perspective"],
+      "width_px": 1920,
+      "height_px": 1080,
+      "corner_offsets": [
+        [0.03, 0.02],
+        [-0.02, 0.04],
+        [-0.03, -0.02],
+        [0.02, -0.03]
+      ]
+    }
+  ],
+  "tamper": [
+    {
+      "kind": "replace_text",
+      "region": {"x": 0.15, "y": 0.15, "width": 0.35, "height": 0.1}
+    },
+    {
+      "kind": "cover_region",
+      "region": {"x": 0.55, "y": 0.2, "width": 0.25, "height": 0.2}
+    },
+    {
+      "kind": "copy_move",
+      "region": {"x": 0.2, "y": 0.55, "width": 0.2, "height": 0.2}
+    },
+    {
+      "kind": "insert_object",
+      "region": {"x": 0.6, "y": 0.6, "width": 0.25, "height": 0.2}
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://splitbind.qivarn.id.vn/contracts/jsonschema/job-metrics-v1.schema.json",
+  "title": "JobMetricsV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "processing_ms",
+    "pages_processed",
+    "peak_rss_bytes",
+    "temp_peak_bytes",
+    "cleanup_failures"
+  ],
+  "properties": {
+    "processing_ms": {"type": "integer", "minimum": 0},
+    "pages_processed": {"type": "integer", "minimum": 0},
+    "peak_rss_bytes": {"type": "integer", "minimum": 0},
+    "temp_peak_bytes": {"type": "integer", "minimum": 0},
+    "cleanup_failures": {"type": "integer", "minimum": 0}
+  }
+}

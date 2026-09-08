@@ -1,8 +1,26 @@
 # SplitBind
 
+> Fingerprint research status: V1 remains unreleased after execution errors. The V2 pre-gate completed, but its hash-bound selection contains 0/16 candidates; Task 7 therefore did not run the V2 full matrix, `fingerprint-profile.v2.json` is absent, and Rust A7 remains blocked. See the [factual V2 no-release report](docs/evaluation/fingerprint-profile-v2.md).
+
 SplitBind là hệ thống truy vết toàn vẹn văn bản dành cho bài tập lớn môn An toàn thông tin của Nhóm 9. Hệ thống cấp một dấu vân tay riêng cho từng bản PDF gửi tới người nhận, sau đó hỗ trợ xác minh nguồn phát hành và dấu hiệu chỉnh sửa trên tài liệu nghi vấn.
 
-> Trạng thái: đang ở giai đoạn đặc tả thiết kế. Repository chưa chứa mã ứng dụng chạy được.
+> Trạng thái: MVP đang được triển khai. Repository đã có reference implementation, Django control plane, OpenAPI/typed TypeScript client và giao diện React cho đăng nhập, cấp phát, kiểm chứng, theo dõi job và đọc bằng chứng kỹ thuật. Luồng trình bày cục bộ dùng Python demo worker thử nghiệm và chưa có runtime end-to-end evidence trên host kiểm thử; Rust worker cùng processing/deployment production vẫn chưa hoàn thành.
+
+## Demo trình bày cục bộ
+
+Sau khi chuẩn bị đúng Python 3.11 `.venv`, dependency Node và image MinIO đã nạp sẵn, chạy từ thư mục gốc:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File infra/scripts/run_demo.ps1
+```
+
+Runner chỉ khởi động Django API, một demo worker và Vite trên máy host, cùng profile Compose riêng chứa MinIO tại `127.0.0.1:9000`; dữ liệu MinIO được giữ trong `artifacts/demo/minio-data/`. Runner không cài package, tải image hay liên hệ dịch vụ cloud; nếu thiếu điều kiện, thông báo lỗi sẽ nêu hành động cục bộ cần thực hiện. Runner chỉ in URL `http://127.0.0.1:5173`, tài khoản tổng hợp, mật khẩu tổng hợp, thư mục log và lệnh dừng chính xác sau khi revalidate cả ba PID, Compose/MinIO, API và Vite:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File infra/scripts/run_demo.ps1 -Stop
+```
+
+Xem [runbook local/offline](docs/runbooks/local-and-offline.md#demo-trình-bày-trong-năm-phút) để thực hiện luồng cấp phát rồi kiểm chứng. Demo dùng `experimental_unreleased_fingerprint_v2`: không có profile được promote hay manifest ký, và kết quả không thể chứng minh ai đã làm rò rỉ, chỉnh sửa hoặc phân phối tài liệu.
 
 ## Chức năng lõi
 
@@ -11,20 +29,25 @@ SplitBind là hệ thống truy vết toàn vẹn văn bản dành cho bài tậ
 - Xác thực hồ sơ phát hành bằng manifest SHA-256 ký Ed25519
 - Trả kết quả kèm mức tin cậy, giới hạn bằng chứng và audit log
 
-## Kiến trúc dự kiến
+## Kiến trúc đã chốt
 
 - React, TypeScript và Vite cho giao diện
 - Django REST Framework cho API và control plane
 - RabbitMQ cùng transactional outbox cho hàng đợi công việc
 - Rust cho worker xử lý PDF và ảnh trong production
 - Python cho prototype, test vector và benchmark nghiên cứu
-- PostgreSQL, Cloudflare R2, Caddy và Docker Compose
+- Azure Linux VM chạy Caddy và Docker Compose
+- Neon PostgreSQL, Cloudflare R2 và Azure Key Vault cho dữ liệu và bí mật
 
-Thiết kế ưu tiên tính đúng đắn, bảo mật và khả năng tái lập, đồng thời giới hạn nghiêm ngặt RAM, dung lượng tạm và thời gian lưu dữ liệu để phù hợp hạ tầng miễn phí.
+Server chính là Azure VM `Standard_B2ls_v2`, Debian 13 x86-64, 2 vCPU, 4 GiB RAM và Standard SSD 32 GiB. Compute host đã được cấp phát nhưng phải giữ deallocated cho đến khi có release candidate và budget guardrail đã được xác minh. Website production sẽ dùng `splitbind.qivarn.id.vn`; domain gốc `qivarn.id.vn` vẫn phục vụ hệ thống hiện hữu. Máy Mac cùng Lima chỉ là phương án dự phòng.
+
+Thiết kế ưu tiên tính đúng đắn, bảo mật và khả năng tái lập, đồng thời giới hạn nghiêm ngặt RAM, dung lượng tạm và thời gian lưu dữ liệu.
 
 ## Tài liệu
 
 - [Đặc tả thiết kế production](docs/superpowers/specs/2026-08-13-splitbind-production-design.md)
+- [ADR-001: Kiến trúc production trên Azure](docs/decisions/001-azure-production-architecture.md)
+- [Kế hoạch triển khai MVP](docs/superpowers/plans/2026-08-27-splitbind-mvp-master.md)
 
 Tài liệu môn học, thư trao đổi với giảng viên và thông tin thiết bị thành viên được lưu cục bộ, không thuộc phạm vi repository.
 

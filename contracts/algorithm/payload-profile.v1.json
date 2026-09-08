@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "payload": {
+    "magic_ascii": "SB",
+    "schema_version_bytes": 1,
+    "issuance_uuid_bytes": 16,
+    "crc32_bytes": 4,
+    "byte_order": "big-endian",
+    "total_bytes": 23
+  },
+  "crc32": {
+    "name": "CRC-32/ISO-HDLC",
+    "polynomial": "0x04c11db7",
+    "initial_value": "0xffffffff",
+    "reflect_input": true,
+    "reflect_output": true,
+    "xor_output": "0xffffffff",
+    "input_bytes": 19
+  },
+  "reed_solomon": {
+    "field": "GF(256)",
+    "primitive_polynomial": "0x11d",
+    "parity_symbols": 16,
+    "message_bytes": 23,
+    "codeword_bytes": 39,
+    "correctable_symbol_errors": 8
+  },
+  "interleave_depth": 8,
+  "golden_vector": {
+    "schema_version": 1,
+    "issuance_id": "12345678-1234-5678-1234-567812345678",
+    "body_hex": "53420112345678123456781234567812345678",
+    "crc32_hex": "9ae24281",
+    "payload_hex": "534201123456781234567812345678123456789ae24281"
+  }
+}

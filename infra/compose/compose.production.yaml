@@ -1,0 +1,111 @@
+name: splitbind-production
+
+services:
+  caddy:
+    image: ${WEB_IMAGE:?WEB_IMAGE must be an immutable digest}
+    user: "10002:10002"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp:size=16777216,mode=1770,uid=10002,gid=10002"]
+    mem_limit: 128m
+    cpus: 0.25
+    ports:
+      - target: 8080
+        published: "80"
+        protocol: tcp
+      - target: 8443
+        published: "443"
+        protocol: tcp
+    environment:
+      SPLITBIND_HOSTNAME: ${SPLITBIND_HOSTNAME:?SPLITBIND_HOSTNAME is required}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL is required}
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    healthcheck:
+      test: ["CMD", "caddy", "validate", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks: [app]
+    depends_on:
+      api:
+        condition: service_healthy
+  api:
+    image: ${API_IMAGE:?API_IMAGE must be an immutable digest}
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp:size=268435456,mode=1770,uid=10001,gid=10001"]
+    mem_limit: 512m
+    cpus: 0.75
+    env_file: ["${API_ENV_FILE:?API_ENV_FILE is required}"]
+    environment:
+      ENVIRONMENT: production
+      SPLITBIND_RELEASE_MODE: integrity_v1
+      NEON_DATABASE_HOST: ${NEON_DATABASE_HOST:?NEON_DATABASE_HOST is required}
+      OBJECT_STORAGE_ENDPOINT: ${R2_ENDPOINT:?R2_ENDPOINT is required}
+      OBJECT_STORAGE_ENDPOINT_HINT: ${R2_ENDPOINT:?R2_ENDPOINT is required}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=2).read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    stop_grace_period: 30s
+    restart: unless-stopped
+    networks: [app]
+  worker:
+    image: ${API_IMAGE:?API_IMAGE must be an immutable digest}
+    entrypoint: ["/usr/local/bin/worker-entrypoint.sh"]
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp:size=2147483648,mode=1770,uid=10001,gid=10001"]
+    mem_limit: 2g
+    cpus: 1.0
+    env_file: ["${WORKER_ENV_FILE:?WORKER_ENV_FILE is required}"]
+    environment:
+      ENVIRONMENT: production
+      SPLITBIND_RELEASE_MODE: integrity_v1
+      WORKER_CONCURRENCY: "1"
+      NEON_DATABASE_HOST: ${NEON_DATABASE_HOST:?NEON_DATABASE_HOST is required}
+      OBJECT_STORAGE_ENDPOINT: ${R2_ENDPOINT:?R2_ENDPOINT is required}
+      OBJECT_STORAGE_ENDPOINT_HINT: ${R2_ENDPOINT:?R2_ENDPOINT is required}
+      SPLITBIND_MANIFEST_SIGNING_KEY_FILE: /run/secrets/manifest_signing_key
+      SPLITBIND_MANIFEST_SIGNING_KEY_PASSPHRASE_FILE: /run/secrets/manifest_signing_key_passphrase
+    secrets:
+      - source: manifest_signing_key
+        target: manifest_signing_key
+      - source: manifest_signing_key_passphrase
+        target: manifest_signing_key_passphrase
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    stop_grace_period: 30s
+    restart: unless-stopped
+    networks: [app]
+    depends_on:
+      api:
+        condition: service_healthy
+
+networks:
+  app: {}
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}
+
+secrets:
+  manifest_signing_key:
+    file: "${MANIFEST_SIGNING_KEY_FILE:?MANIFEST_SIGNING_KEY_FILE is required}"
+  manifest_signing_key_passphrase:
+    file: "${MANIFEST_SIGNING_KEY_PASSPHRASE_FILE:-/run/splitbind/secrets/manifest-signing-key.passphrase}"

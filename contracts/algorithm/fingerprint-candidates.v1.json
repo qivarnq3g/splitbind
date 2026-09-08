@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "fixed": {
+    "wavelet": "haar",
+    "wavelet_level": 1,
+    "detail_band": "HL",
+    "transform_dtype": "float64",
+    "dct_block_size": 8,
+    "dct_transform": "orthonormal-dct-ii",
+    "midband_pairs": [
+      [
+        [1, 2],
+        [2, 1]
+      ],
+      [
+        [2, 3],
+        [3, 2]
+      ]
+    ],
+    "luminance": {
+      "channel_order": "BGR",
+      "standard": "BT.601-full-range",
+      "coefficients": [0.114, 0.587, 0.299]
+    },
+    "padding": {
+      "mode": "edge",
+      "edges": ["bottom", "right"],
+      "inverse_crop": "original-shape"
+    },
+    "qim_rounding": "ties-to-even",
+    "raster": {
+      "input_dtypes": ["uint8", "uint16"],
+      "rounding": "nearest-bt601-floor-ceil-combination",
+      "clipping": "original-unsigned-depth"
+    },
+    "ecc_parity_symbols": 16,
+    "interleave_depth": 8,
+    "sync_detector": "orb-ransac"
+  },
+  "sweep": {
+    "qim_delta": [6.0, 8.0, 10.0, 12.0],
+    "tile_size_px": [256, 384],
+    "tiles_per_page": [12, 18, 24],
+    "payload_repetitions": [3, 5]
+  }
+}

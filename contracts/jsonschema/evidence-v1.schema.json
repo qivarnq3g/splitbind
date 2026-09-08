@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://splitbind.qivarn.id.vn/contracts/jsonschema/evidence-v1.schema.json",
+  "title": "EvidenceV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "fingerprint_confidence",
+    "valid_vote_count",
+    "analyzed_page_count",
+    "manifest_signature_valid",
+    "exact_file_hash_match",
+    "integrity_score",
+    "suspicious_regions",
+    "limitations"
+  ],
+  "properties": {
+    "fingerprint_confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+    "valid_vote_count": {"type": "integer", "minimum": 0},
+    "analyzed_page_count": {"type": "integer", "minimum": 0},
+    "manifest_signature_valid": {"type": ["boolean", "null"]},
+    "exact_file_hash_match": {"type": ["boolean", "null"]},
+    "integrity_score": {
+      "anyOf": [
+        {"type": "number", "minimum": 0.0, "maximum": 1.0},
+        {"type": "null"}
+      ]
+    },
+    "suspicious_regions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/normalizedRectangle"}
+    },
+    "limitations": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_.-]*$"
+      }
+    }
+  },
+  "$defs": {
+    "normalizedRectangle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+        "y": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+        "width": {"type": "number", "exclusiveMinimum": 0.0, "maximum": 1.0},
+        "height": {"type": "number", "exclusiveMinimum": 0.0, "maximum": 1.0}
+      }
+    }
+  }
+}

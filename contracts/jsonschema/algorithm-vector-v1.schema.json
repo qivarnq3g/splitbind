@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://splitbind.qivarn.id.vn/contracts/jsonschema/algorithm-vector-v1.schema.json",
+  "title": "AlgorithmVectorV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "vector_id",
+    "vector_type",
+    "profile_sha256",
+    "seed",
+    "input_hex",
+    "expected_hex"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "vector_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+    "vector_type": {
+      "type": "string",
+      "enum": ["payload", "ecc", "layout", "qim", "integrity", "manifest", "decode"]
+    },
+    "profile_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "seed": {"type": "integer", "minimum": 0},
+    "input_hex": {"type": "string", "pattern": "^(?:[0-9a-f]{2})*$"},
+    "expected_hex": {"type": "string", "pattern": "^(?:[0-9a-f]{2})*$"}
+  }
+}

@@ -1,0 +1,71 @@
+:root {
+  --color-paper: oklch(98.2% 0.006 275);
+  --color-paper-2: oklch(95.8% 0.012 275);
+  --color-paper-3: oklch(92.5% 0.018 275);
+  --color-surface: oklch(99.6% 0.002 275);
+  --color-ink: oklch(18% 0.025 275);
+  --color-ink-2: oklch(29% 0.027 275);
+  --color-muted: oklch(49% 0.025 275);
+  --color-neutral: oklch(39% 0.025 275);
+  --color-rule: oklch(84% 0.018 275);
+  --color-rule-soft: oklch(90% 0.014 275);
+  --color-rule-2: oklch(72% 0.025 275);
+  --color-accent: oklch(52% 0.22 278);
+  --color-accent-hover: oklch(45% 0.21 278);
+  --color-accent-soft: oklch(94% 0.035 278);
+  --color-accent-ink: oklch(99% 0.004 275);
+  --color-focus: oklch(58% 0.2 278);
+  --color-error: oklch(47% 0.18 25);
+  --color-error-soft: oklch(95% 0.025 25);
+  --color-success: oklch(40% 0.12 155);
+  --color-success-soft: oklch(95% 0.025 155);
+
+  --font-display: "Manrope Variable", "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", "SFMono-Regular", ui-monospace, monospace;
+  --font-outlier: var(--font-mono);
+
+  --space-3xs: 0.25rem;
+  --space-2xs: 0.5rem;
+  --space-xs: 0.75rem;
+  --space-sm: 1rem;
+  --space-md: 1.5rem;
+  --space-lg: 2rem;
+  --space-xl: 3rem;
+  --space-2xl: 4.5rem;
+  --space-3xl: 7rem;
+  --space-4xl: 10rem;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-md: 1.125rem;
+  --text-lg: 1.375rem;
+  --text-xl: 1.75rem;
+  --text-2xl: 2.25rem;
+  --text-display: clamp(2.5rem, 5vw, 4.75rem);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-micro: 120ms;
+  --dur-short: 220ms;
+  --dur-long: 420ms;
+  --dur-status: 280ms;
+
+  --rule-hair: 1px;
+  --rule-fine: 2px;
+  --rule-thin: var(--rule-hair);
+  --rule-focus: var(--rule-fine);
+  --radius-card: 0.875rem;
+  --radius-pill: 999px;
+  --radius-input: 0.625rem;
+  --radius-control: var(--radius-input);
+  --radius-panel: var(--radius-card);
+  --shadow-card: 0 1rem 3rem oklch(18% 0.025 275 / 0.08);
+  --control-height: 2.75rem;
+  --header-height: 4.25rem;
+
+  --z-base: 1;
+  --z-sticky: 200;
+}
