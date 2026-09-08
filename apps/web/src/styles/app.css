@@ -3066,3 +3066,418 @@ progress {
     transition: none !important;
   }
 }
+
+.verification-seal-construction,
+.issuance-seal-construction {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-lg);
+  background: var(--color-surface);
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+  margin-bottom: var(--space-md);
+}
+
+.verification-seal-construction.seal-intact,
+.issuance-seal-construction {
+  border-color: var(--color-success);
+  background: linear-gradient(135deg, var(--color-surface) 0%, var(--color-success-soft) 100%);
+}
+
+.verification-seal-construction.seal-anomaly {
+  border-color: var(--color-error);
+  background: linear-gradient(135deg, var(--color-surface) 0%, var(--color-error-soft) 100%);
+}
+
+.seal-construction-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 160px;
+  height: 160px;
+  flex-shrink: 0;
+}
+
+.seal-concentric-rings {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.seal-ring {
+  position: absolute;
+  border-radius: 50%;
+  transform-origin: center;
+}
+
+.ring-outer {
+  inset: 0;
+  border: var(--rule-hair) dashed var(--color-success);
+  opacity: 0.4;
+}
+
+.ring-mid {
+  inset: 12px;
+  border: var(--rule-hair) solid var(--color-success);
+  opacity: 0.6;
+}
+
+.ring-inner {
+  inset: 24px;
+  border: var(--rule-hair) dotted var(--color-success);
+  opacity: 0.75;
+}
+
+.stamp-seal-lock {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.stamp-seal-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3xs);
+  padding: 2px 8px;
+  background: var(--color-surface);
+  border: var(--rule-fine) solid var(--color-success);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-sm);
+}
+
+.stamp-lock-icon {
+  color: var(--color-success);
+}
+
+.stamp-lock-text {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--color-success);
+  letter-spacing: 0.05em;
+}
+
+.seal-construction-meta {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.seal-authoritative-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: 4px 10px;
+  background: var(--color-surface);
+  border: var(--rule-hair) solid var(--color-success);
+  border-radius: var(--radius-pill);
+  width: fit-content;
+}
+
+.seal-beacon-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-success);
+}
+
+.seal-authoritative-title {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-success);
+}
+
+.seal-payoff-headline {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--color-ink);
+  margin: 0;
+}
+
+.seal-payoff-description {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.seal-telemetry-readout {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-sm);
+  margin-top: var(--space-2xs);
+  padding-top: var(--space-xs);
+  border-top: var(--rule-hair) solid var(--color-rule-soft);
+}
+
+.seal-readout-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.seal-readout-item .readout-label {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+}
+
+.seal-readout-item .readout-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.seal-construction-stage.failure-stage {
+  position: relative;
+}
+
+.fractured-geometry {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.fracture-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.fracture-trace {
+  fill: none;
+  stroke: var(--color-error);
+  stroke-width: var(--rule-hair);
+  stroke-dasharray: 4 2;
+  opacity: 0.8;
+}
+
+.discrepancy-reticles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.discrepancy-reticle {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  border: var(--rule-hair) dashed var(--color-error);
+  border-radius: var(--radius-sm);
+  background: var(--color-error-soft);
+}
+
+.discrepancy-reticle.reticle-1 {
+  top: 10%;
+  left: 10%;
+}
+
+.discrepancy-reticle.reticle-2 {
+  bottom: 12%;
+  right: 12%;
+}
+
+.reticle-corner {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-color: var(--color-error);
+  border-style: solid;
+}
+
+.reticle-corner.r-tl {
+  top: -1px;
+  left: -1px;
+  border-width: 2px 0 0 2px;
+}
+
+.reticle-corner.r-tr {
+  top: -1px;
+  right: -1px;
+  border-width: 2px 2px 0 0;
+}
+
+.reticle-corner.r-bl {
+  bottom: -1px;
+  left: -1px;
+  border-width: 0 0 2px 2px;
+}
+
+.reticle-corner.r-br {
+  bottom: -1px;
+  right: -1px;
+  border-width: 0 2px 2px 0;
+}
+
+.reticle-tag {
+  position: absolute;
+  top: -14px;
+  left: 0;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--color-error);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.evidence-anomaly-beacon {
+  position: absolute;
+  top: 48%;
+  left: 48%;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.evidence-anomaly-beacon .beacon-ping {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: var(--rule-hair) solid var(--color-error);
+  background: var(--color-error-soft);
+}
+
+.evidence-anomaly-beacon .beacon-core {
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--color-error);
+}
+
+.tamper-telemetry-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: 4px 10px;
+  background: var(--color-surface);
+  border: var(--rule-hair) solid var(--color-error);
+  border-radius: var(--radius-pill);
+  width: fit-content;
+}
+
+.tamper-beacon-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-error);
+}
+
+.tamper-telemetry-title {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-error);
+}
+
+.tamper-payoff-headline {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--color-ink);
+  margin: 0;
+}
+
+.tamper-payoff-description {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.tamper-telemetry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  padding: var(--space-sm);
+  background: var(--color-surface);
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-md);
+  margin-top: var(--space-xs);
+}
+
+.tamper-telemetry-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+}
+
+.tamper-alert-icon {
+  color: var(--color-error);
+  flex-shrink: 0;
+}
+
+.tamper-telemetry-header h4 {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0;
+  color: var(--color-error);
+}
+
+.tamper-telemetry-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-xs);
+  margin-top: var(--space-3xs);
+}
+
+.tamper-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tamper-metric .metric-label {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+}
+
+.tamper-metric .metric-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-error);
+}
+
+@media (max-width: 768px) {
+  .verification-seal-construction,
+  .issuance-seal-construction {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .seal-authoritative-badge,
+  .tamper-telemetry-badge {
+    align-self: center;
+  }
+
+  .seal-telemetry-readout,
+  .tamper-telemetry-metrics {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .verification-seal-construction *,
+  .verification-seal-construction *::before,
+  .verification-seal-construction *::after,
+  .issuance-seal-construction *,
+  .issuance-seal-construction *::before,
+  .issuance-seal-construction *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

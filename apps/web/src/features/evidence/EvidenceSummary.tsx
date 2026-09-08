@@ -46,7 +46,14 @@ export function EvidenceSummary({ status, evidence }: { status: VerificationStat
 
   useGSAP(
     () => {
-      if (typeof window.matchMedia !== "function" || !rootRef.current) return;
+      if (typeof window === "undefined" || typeof window.matchMedia !== "function" || !rootRef.current) return;
+
+      const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (prefersReduced) {
+        gsap.set(".evidence-conclusion, .evidence-facts > div, .limitation-list > li", { clearProps: "all" });
+        return;
+      }
+
       const media = gsap.matchMedia();
 
       media.add("(prefers-reduced-motion: no-preference)", () => {
@@ -56,17 +63,19 @@ export function EvidenceSummary({ status, evidence }: { status: VerificationStat
           { autoAlpha: 1, y: 0, duration: 0.32, ease: "power2.out", clearProps: "all" }
         );
 
-        ScrollTrigger.create({
-          trigger: rootRef.current,
-          start: "top 88%",
-          onEnter: () => {
-            gsap.fromTo(
-              ".evidence-facts > div",
-              { autoAlpha: 0, y: 5 },
-              { autoAlpha: 1, y: 0, duration: 0.22, stagger: 0.03, ease: "power2.out", clearProps: "all" }
-            );
-          },
-        });
+        if (typeof ScrollTrigger !== "undefined") {
+          ScrollTrigger.create({
+            trigger: rootRef.current,
+            start: "top 88%",
+            onEnter: () => {
+              gsap.fromTo(
+                ".evidence-facts > div",
+                { autoAlpha: 0, y: 5 },
+                { autoAlpha: 1, y: 0, duration: 0.22, stagger: 0.03, ease: "power2.out", clearProps: "all" }
+              );
+            },
+          });
+        }
       });
 
       return () => media.revert();

@@ -1,8 +1,12 @@
-﻿import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, ExternalLink, FileCheck, FileSpreadsheet, Loader2, Shield } from "lucide-react";
+import { useRef } from "react";
+import { useGSAP } from "@gsap/react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import gsap from "gsap";
+import { Download, ExternalLink, FileCheck, Loader2, Shield, ShieldCheck } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
 import { CompactIdentifier } from "../components/CompactIdentifier";
+import { CryptographicMotif } from "../components/CryptographicMotif";
 import {
   getIssuance,
   getIssuanceResult,
@@ -11,9 +15,12 @@ import {
 } from "../features/issuances/issuances";
 import { JOB_LABELS } from "../features/jobs/useJob";
 
+gsap.registerPlugin(useGSAP);
+
 export function IssuanceDetailPage() {
   const { id } = useParams();
   const queryClient = useQueryClient();
+  const pageRef = useRef<HTMLElement>(null);
   const issuance = useQuery({
     queryKey: ["issuance", id],
     queryFn: ({ signal }) => getIssuance(id!, signal),
@@ -37,6 +44,61 @@ export function IssuanceDetailPage() {
     "dead_lettered",
     "cancelled",
   ].includes(issuance.data.status);
+  const isCompleted = issuance.data?.status === "succeeded" || Boolean(issuance.data?.result_available);
+
+  useGSAP(
+    () => {
+      if (typeof window === "undefined" || typeof window.matchMedia !== "function" || !pageRef.current || !issuance.data) {
+        return;
+      }
+
+      const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (prefersReduced) {
+        gsap.set(
+          ".seal-ring, .stamp-seal-lock, .seal-authoritative-badge, .status-details > div, .result-actions",
+          { clearProps: "all" }
+        );
+        return;
+      }
+
+      const tl = gsap.timeline({ defaults: { ease: "power2.out" } });
+
+      if (isCompleted) {
+        tl.fromTo(
+          ".seal-ring",
+          { scale: 0.65, opacity: 0, rotation: -40 },
+          { scale: 1, opacity: 1, rotation: 0, duration: 0.65, stagger: 0.1, ease: "back.out(1.5)" }
+        )
+        .fromTo(
+          ".stamp-seal-lock",
+          { scale: 1.35, opacity: 0, y: -8 },
+          { scale: 1, opacity: 1, y: 0, duration: 0.45, ease: "back.out(2)" },
+          "-=0.25"
+        )
+        .fromTo(
+          ".seal-authoritative-badge",
+          { opacity: 0, y: 8 },
+          { opacity: 1, y: 0, duration: 0.35 },
+          "-=0.2"
+        );
+      }
+
+      tl.fromTo(
+        ".status-details > div",
+        { opacity: 0, y: 8 },
+        { opacity: 1, y: 0, duration: 0.3, stagger: 0.06, clearProps: "transform,opacity" },
+        "-=0.1"
+      )
+      .fromTo(
+        ".result-actions",
+        { opacity: 0, y: 6 },
+        { opacity: 1, y: 0, duration: 0.35, clearProps: "transform,opacity" },
+        "-=0.15"
+      );
+    },
+    { scope: pageRef, dependencies: [issuance.data?.status, isCompleted], revertOnUpdate: true }
+  );
+
   const downloadLabel = download.isPending
     ? "Đang tạo liên kết"
     : download.isError
@@ -46,7 +108,7 @@ export function IssuanceDetailPage() {
         : "Tải PDF kết quả";
 
   return (
-    <main className="workspace-page">
+    <main ref={pageRef} className="workspace-page">
       <header className="page-heading">
         <div className="page-heading-badge">
           <FileCheck size={14} aria-hidden="true" />
@@ -68,16 +130,51 @@ export function IssuanceDetailPage() {
       {issuance.error ? <p className="form-error" role="alert">{issuance.error.message}</p> : null}
 
       {issuance.data ? (
-        <section className="status-board issuance-record">
-          <div className="record-header">
-            <div className="record-icon" aria-hidden="true">
-              <Shield size={22} strokeWidth={2} />
+        <>
+          {isCompleted ? (
+            <section
+              className="issuance-seal-construction"
+              data-status="sealed"
+              role="region"
+              aria-label="Ấn triện cấp phát thẩm quyền"
+            >
+              <div className="seal-construction-stage" aria-hidden="true">
+                <div className="seal-concentric-rings">
+                  <span className="seal-ring ring-outer" />
+                  <span className="seal-ring ring-mid" />
+                  <span className="seal-ring ring-inner" />
+                </div>
+                <CryptographicMotif stage="sealed" size={140} className="seal-stage-motif" />
+                <div className="stamp-seal-lock">
+                  <div className="stamp-seal-badge">
+                    <ShieldCheck size={24} className="stamp-lock-icon" />
+                    <span className="stamp-lock-text">SEALED</span>
+                  </div>
+                </div>
+              </div>
+              <div className="seal-construction-meta">
+                <div className="seal-authoritative-badge">
+                  <span className="seal-beacon-dot" />
+                  <span className="seal-authoritative-title">Ấn triện cấp phát thẩm quyền</span>
+                </div>
+                <h3 className="seal-payoff-headline">Chứng thư số & Thủy vân đã niêm phong</h3>
+                <p className="seal-payoff-description">
+                  Tài liệu đã hoàn tất phân rã dải tần DWT/DCT, nhúng dấu vân tay bảo mật và ký số Ed25519.
+                </p>
+              </div>
+            </section>
+          ) : null}
+
+          <section className="status-board issuance-record">
+            <div className="record-header">
+              <div className="record-icon" aria-hidden="true">
+                <Shield size={22} strokeWidth={2} />
+              </div>
+              <div className="record-meta">
+                <h2>Chứng thư cấp phát cá nhân hóa</h2>
+                <p className="record-sub">Tài liệu đã được ký số Ed25519 và nhúng thủy vân bảo mật.</p>
+              </div>
             </div>
-            <div className="record-meta">
-              <h2>Chứng thư cấp phát cá nhân hóa</h2>
-              <p className="record-sub">Tài liệu đã được ký số Ed25519 và nhúng thủy vân bảo mật.</p>
-            </div>
-          </div>
 
           <dl className="status-details">
             <div>
@@ -142,6 +239,7 @@ export function IssuanceDetailPage() {
             </div>
           )}
         </section>
+        </>
       ) : null}
     </main>
   );
