@@ -32,6 +32,15 @@ function Assert-RepositoryRoot {
     }
 }
 
+function Test-ReparseOrLink($Item) {
+    if ($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+        return $true
+    }
+    $linkType = $Item.PSObject.Properties["LinkType"]
+    return $null -ne $linkType -and
+        -not [string]::IsNullOrWhiteSpace([string]$linkType.Value)
+}
+
 function Assert-ContainedNonReparsePath([string]$Path, [string]$Root) {
     $separatorChars = @(
         [System.IO.Path]::DirectorySeparatorChar,
@@ -51,7 +60,7 @@ function Assert-ContainedNonReparsePath([string]$Path, [string]$Root) {
         throw "Demo path escapes its trusted root: $candidatePath"
     }
     $rootItem = Get-Item -Force -LiteralPath $rootPath -ErrorAction SilentlyContinue
-    if ($null -ne $rootItem -and ($rootItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+    if ($null -ne $rootItem -and (Test-ReparseOrLink $rootItem)) {
         throw "Demo path root cannot be a reparse point: $rootPath"
     }
     $relative = $candidatePath.Substring($rootPath.Length).TrimStart($separatorChars)
@@ -62,7 +71,7 @@ function Assert-ContainedNonReparsePath([string]$Path, [string]$Root) {
         if ($null -eq $item) {
             break
         }
-        if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+        if (Test-ReparseOrLink $item) {
             throw "Demo path cannot traverse a reparse point: $current"
         }
     }
@@ -575,9 +584,18 @@ function Start-DemoProcess(
         foreach ($entry in $childEnvironment.GetEnumerator()) {
             [System.Environment]::SetEnvironmentVariable($entry.Key, $entry.Value, "Process")
         }
-        return Start-Process -FilePath $FilePath -ArgumentList $ArgumentList `
-            -WorkingDirectory $WorkingDirectory -WindowStyle Hidden -PassThru `
-            -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+        $startParameters = @{
+            FilePath = $FilePath
+            ArgumentList = $ArgumentList
+            WorkingDirectory = $WorkingDirectory
+            PassThru = $true
+            RedirectStandardOutput = $stdout
+            RedirectStandardError = $stderr
+        }
+        if ([System.IO.Path]::DirectorySeparatorChar -eq '\') {
+            $startParameters["WindowStyle"] = "Hidden"
+        }
+        return Start-Process @startParameters
     }
     finally {
         foreach ($name in @([System.Environment]::GetEnvironmentVariables().Keys)) {
