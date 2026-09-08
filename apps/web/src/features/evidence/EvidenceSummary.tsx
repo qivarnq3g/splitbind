@@ -63,7 +63,7 @@ export function EvidenceSummary({ status, evidence }: { status: VerificationStat
           { autoAlpha: 1, y: 0, duration: 0.32, ease: "power2.out", clearProps: "all" }
         );
 
-        if (typeof ScrollTrigger !== "undefined") {
+        if (typeof window !== "undefined" && typeof window.matchMedia === "function" && typeof ScrollTrigger !== "undefined") {
           ScrollTrigger.create({
             trigger: rootRef.current,
             start: "top 88%",

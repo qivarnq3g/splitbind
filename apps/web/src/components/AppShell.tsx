@@ -1,5 +1,7 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useGSAP } from "@gsap/react";
 import { useQuery } from "@tanstack/react-query";
+import gsap from "gsap";
 import { FileKey2, LogOut, Menu, ScanSearch, ShieldCheck, X } from "lucide-react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 
@@ -7,12 +9,67 @@ import { canCreateIssuance, canCreateVerification, useLogout, useSession } from 
 import { getDemoCapabilities } from "../features/demo/capabilities";
 import { MotionRoute } from "./MotionRoute";
 
+gsap.registerPlugin(useGSAP);
+
+interface WorkflowStageInfo {
+  stage: 1 | 2 | 3;
+  flowLabel: string;
+  stepLabel: string;
+  terminalLabel: string;
+}
+
+function getWorkflowStageInfo(pathname: string): WorkflowStageInfo | null {
+  if (pathname.startsWith("/issue")) {
+    return {
+      stage: 1,
+      flowLabel: "Cấp phát",
+      stepLabel: "Tiếp nhận tệp",
+      terminalLabel: "Niêm phong",
+    };
+  }
+  if (pathname.startsWith("/verify")) {
+    return {
+      stage: 1,
+      flowLabel: "Xác minh",
+      stepLabel: "Kiểm định tệp",
+      terminalLabel: "Kết quả",
+    };
+  }
+  if (pathname.startsWith("/jobs/")) {
+    return {
+      stage: 2,
+      flowLabel: "Quy trình xử lý",
+      stepLabel: "Xử lý mật mã",
+      terminalLabel: "Kết quả",
+    };
+  }
+  if (pathname.startsWith("/issuances/")) {
+    return {
+      stage: 3,
+      flowLabel: "Cấp phát",
+      stepLabel: "Ấn triện niêm phong",
+      terminalLabel: "Niêm phong",
+    };
+  }
+  if (pathname.startsWith("/verifications/")) {
+    return {
+      stage: 3,
+      flowLabel: "Xác minh",
+      stepLabel: "Bằng chứng toàn vẹn",
+      terminalLabel: "Kiểm định",
+    };
+  }
+  return null;
+}
+
 export function AppShell() {
   const session = useSession();
   const logout = useLogout();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const pipelineIndicatorRef = useRef<HTMLDivElement>(null);
   const user = session.data?.user;
+  const stageInfo = getWorkflowStageInfo(location.pathname);
   const demoCapabilities = useQuery({
     queryKey: ["demo-capabilities"],
     queryFn: ({ signal }) => getDemoCapabilities(signal),
@@ -26,6 +83,38 @@ export function AppShell() {
     setMobileOpen(false);
   }, [location.pathname]);
 
+  useGSAP(
+    () => {
+      if (typeof window === "undefined" || typeof window.matchMedia !== "function" || !pipelineIndicatorRef.current || !stageInfo) {
+        return;
+      }
+
+      const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (prefersReduced) {
+        gsap.set(".stage-node-dot, .stage-segment-beam", { clearProps: "all" });
+        return;
+      }
+
+      const tl = gsap.timeline({ defaults: { ease: "power2.out" } });
+
+      tl.fromTo(
+        `.stage-node[data-step="${stageInfo.stage}"] .stage-node-dot`,
+        { scale: 0.65, opacity: 0.7 },
+        { scale: 1, opacity: 1, duration: 0.32, ease: "back.out(2)", clearProps: "transform,opacity" }
+      );
+
+      if (stageInfo.stage >= 2) {
+        tl.fromTo(
+          ".stage-segment.is-filled .stage-segment-beam",
+          { scaleX: 0, transformOrigin: "left center" },
+          { scaleX: 1, duration: 0.35, ease: "power2.out", clearProps: "transform" },
+          "-=0.2"
+        );
+      }
+    },
+    { scope: pipelineIndicatorRef, dependencies: [stageInfo?.stage], revertOnUpdate: true }
+  );
+
   return (
     <div className={`app-shell ${mobileOpen ? "mobile-drawer-open" : ""}`.trim()}>
       <header className="app-header" aria-label="Thanh ứng dụng SplitBind">
@@ -35,6 +124,14 @@ export function AppShell() {
             <span className="brand-title">SplitBind</span>
             <span className="brand-tag">v0.1</span>
           </NavLink>
+          {user && stageInfo ? (
+            <div className="header-breadcrumb" aria-label="Đường dẫn quy trình mật mã">
+              <span className="breadcrumb-separator" aria-hidden="true">/</span>
+              <span className="breadcrumb-flow">{stageInfo.flowLabel}</span>
+              <span className="breadcrumb-separator" aria-hidden="true">/</span>
+              <span className="breadcrumb-current">{stageInfo.stepLabel}</span>
+            </div>
+          ) : null}
         </div>
 
         {user ? (
@@ -55,6 +152,37 @@ export function AppShell() {
               <span className="nav-readonly">Chỉ đọc</span>
             ) : null}
           </nav>
+        ) : null}
+
+        {user && stageInfo ? (
+          <div
+            ref={pipelineIndicatorRef}
+            className="header-pipeline-indicator"
+            role="group"
+            aria-label="Tiến trình quy trình mật mã"
+            data-active-stage={stageInfo.stage}
+          >
+            <div className="stage-track">
+              <div className={`stage-node ${stageInfo.stage >= 1 ? "is-active" : ""}`} data-step="1">
+                <span className="stage-node-dot" />
+                <span className="stage-node-label">Tiếp nhận</span>
+              </div>
+              <span className={`stage-segment ${stageInfo.stage >= 2 ? "is-filled" : ""}`}>
+                <span className="stage-segment-beam" />
+              </span>
+              <div className={`stage-node ${stageInfo.stage >= 2 ? "is-active" : ""}`} data-step="2">
+                <span className="stage-node-dot" />
+                <span className="stage-node-label">Xử lý</span>
+              </div>
+              <span className={`stage-segment ${stageInfo.stage >= 3 ? "is-filled" : ""}`}>
+                <span className="stage-segment-beam" />
+              </span>
+              <div className={`stage-node ${stageInfo.stage >= 3 ? "is-active" : ""}`} data-step="3">
+                <span className="stage-node-dot" />
+                <span className="stage-node-label">{stageInfo.terminalLabel}</span>
+              </div>
+            </div>
+          </div>
         ) : null}
 
         <div className="header-right-slot">

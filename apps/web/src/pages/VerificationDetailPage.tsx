@@ -79,13 +79,13 @@ export function VerificationDetailPage() {
         .fromTo(
           ".seal-authoritative-badge",
           { opacity: 0, y: 8 },
-          { opacity: 1, y: 0, duration: 0.35 },
+          { opacity: 1, y: 0, duration: 0.35, clearProps: "transform,opacity" },
           "-=0.2"
         )
         .fromTo(
           ".seal-readout-item",
           { opacity: 0, y: 6 },
-          { opacity: 1, y: 0, duration: 0.3, stagger: 0.08 },
+          { opacity: 1, y: 0, duration: 0.3, stagger: 0.08, clearProps: "transform,opacity" },
           "-=0.15"
         );
       } else {
@@ -110,7 +110,7 @@ export function VerificationDetailPage() {
         .fromTo(
           ".tamper-metric",
           { opacity: 0, x: -6 },
-          { opacity: 1, x: 0, duration: 0.25, stagger: 0.06 },
+          { opacity: 1, x: 0, duration: 0.25, stagger: 0.06, clearProps: "transform,opacity" },
           "-=0.1"
         );
 
