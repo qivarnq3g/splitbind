@@ -329,6 +329,16 @@ raise SystemExit(
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("TOOL_EXIT:node:7", self._combined_output(result))
 
+    def test_toolchain_check_ignores_probe_diagnostics_before_version(self):
+        result, _ = self._run_toolchain(
+            stderr_outputs={
+                "rustc": "info: syncing channel updates for 1.97.1-x86_64-unknown-linux-gnu"
+            }
+        )
+
+        self.assertEqual(result.returncode, 0, self._combined_output(result))
+        self.assertIn("TOOLCHAIN_OK", result.stdout)
+
     @staticmethod
     def _combined_output(result):
         return f"{result.stdout}\n{result.stderr}"
@@ -352,6 +362,7 @@ raise SystemExit(
         omitted=frozenset(),
         versions=None,
         exit_codes=None,
+        stderr_outputs=None,
     ):
         powershell = shutil.which("pwsh") or shutil.which("powershell")
         self.assertIsNotNone(powershell, "PowerShell is required to exercise the script")
@@ -374,6 +385,7 @@ raise SystemExit(
                         name,
                         output=version,
                         exit_code=tool_exit_codes.get(name, 0),
+                        stderr_output=(stderr_outputs or {}).get(name),
                     )
             self._write_fake_tool(
                 fake_bin,
@@ -420,6 +432,7 @@ raise SystemExit(
         output=None,
         exit_code=0,
         sentinel_env=None,
+        stderr_output=None,
         platform=None,
     ):
         platform = platform or os.name
@@ -428,6 +441,8 @@ raise SystemExit(
             lines = ["@echo off"]
             if output is not None:
                 lines.append(f"echo {output}")
+            if stderr_output is not None:
+                lines.append(f"echo {stderr_output} 1>&2")
             if sentinel_env is not None:
                 lines.append(f'> "%{sentinel_env}%" echo invoked')
             lines.append(f"exit /b {exit_code}")
@@ -440,6 +455,8 @@ raise SystemExit(
             lines = ["#!/bin/sh"]
             if output is not None:
                 lines.append(f"printf '%s\\n' {shlex.quote(output)}")
+            if stderr_output is not None:
+                lines.append(f"printf '%s\\n' {shlex.quote(stderr_output)} >&2")
             if sentinel_env is not None:
                 lines.append(f'echo invoked > "${sentinel_env}"')
             lines.append(f"exit {exit_code}")

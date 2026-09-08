@@ -8,8 +8,15 @@ $expected = [ordered]@{
 }
 foreach ($name in $expected.Keys) {
     if (-not (Get-Command $name -ErrorAction SilentlyContinue)) { throw "MISSING_TOOL:$name" }
-    $probeOutput = @(& $name --version 2>&1)
-    $probeExit = $LASTEXITCODE
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $probeOutput = @(& $name --version 2>$null)
+        $probeExit = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
     if ($probeExit -ne 0) { throw "TOOL_EXIT:${name}:$probeExit" }
     $actual = ([string]($probeOutput | Select-Object -First 1)).Trim()
     if ($actual -notmatch $expected[$name]) { throw "TOOL_VERSION:${name}:$actual" }
