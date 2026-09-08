@@ -1,7 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 
 import { QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { RouterProvider, createMemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -296,6 +296,43 @@ describe("issuance browser workflow", () => {
       required_headers: { "Content-Type": "application/pdf" },
     }, 201));
     expect(await screen.findByRole("alert")).toHaveTextContent("Không thể tải tệp lên kho lưu trữ");
+  });
+
+  it("orchestrates cryptographic chamber stages and telemetry during intake", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async (input) => {
+      const request = input instanceof Request ? input : new Request(input);
+      const url = new URL(request.url);
+      if (url.pathname === "/api/v1/auth/session") return json(session("issuer"));
+      return json({ detail: "Unexpected request." }, 500);
+    }));
+
+    renderApp();
+
+    const chamber = await screen.findByRole("region", { name: "Khoang ký số mật mã" });
+    expect(chamber).toBeInTheDocument();
+    expect(chamber).toHaveAttribute("data-stage", "intake");
+
+    const motif = chamber.querySelector(".cryptographic-motif");
+    expect(motif).toHaveAttribute("data-stage", "idle");
+    expect(screen.getByText("Tiếp nhận tài liệu")).toBeVisible();
+    expect(screen.getByText("Chờ tệp PDF")).toBeVisible();
+    expect(chamber.querySelector(".chamber-document-ghost")).toHaveAttribute("data-has-file", "false");
+
+    const subbands = chamber.querySelectorAll(".chamber-decomp-band");
+    expect(subbands).toHaveLength(4);
+    expect(chamber.querySelector(".chamber-convergence-svg")).toBeInTheDocument();
+    expect(chamber.querySelectorAll(".chamber-pipeline-node")).toHaveLength(5);
+
+    const fileInput = screen.getByLabelText("Tệp PDF");
+    fireEvent.change(fileInput, {
+      target: { files: [new File(["%PDF-1.4\n%%EOF"], "thesis.pdf", { type: "application/pdf" })] },
+    });
+
+    const scoped = within(chamber);
+    expect(await scoped.findByText("Đã nạp tài liệu")).toBeVisible();
+    expect(scoped.getByText("Đã tiếp nhận")).toBeVisible();
+    expect(scoped.getByText("thesis.pdf")).toBeVisible();
+    expect(chamber.querySelector(".chamber-document-ghost")).toHaveAttribute("data-has-file", "true");
   });
 
   it("keeps the issuance screen read-only for an auditor", async () => {

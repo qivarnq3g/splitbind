@@ -1,8 +1,11 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { FileUp, KeyRound, ShieldAlert, Sparkles } from "lucide-react";
+import { useGSAP } from "@gsap/react";
+import gsap from "gsap";
+import { FileUp, KeyRound, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
+import { CryptographicMotif, CryptographicMotifStage } from "../components/CryptographicMotif";
 import { DocumentFileInput } from "../components/DocumentFileInput";
 import { WorkflowSteps } from "../components/WorkflowSteps";
 import { canCreateIssuance, useSession } from "../features/auth/session";
@@ -10,12 +13,67 @@ import { createIssuance } from "../features/issuances/issuances";
 import { SafeApiError } from "../features/shared/apiError";
 import { UploadStage, uploadIssuancePdf, validatePdf } from "../features/uploads/uploadIssuance";
 
+gsap.registerPlugin(useGSAP);
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export type IssuancePipelineStage = "intake" | "hashing" | "decomposing" | "signing" | "sealed";
+
+interface StageInfo {
+  title: string;
+  badge: string;
+  desc: string;
+}
+
+const STAGE_TELEMETRY: Record<IssuancePipelineStage, StageInfo> = {
+  intake: {
+    title: "Tiếp nhận tài liệu",
+    badge: "Tiếp nhận",
+    desc: "Chuẩn bị nạp tài liệu vào khoang ký mật mã.",
+  },
+  hashing: {
+    title: "Tính toán mã băm SHA-256",
+    badge: "Băm phân đoạn",
+    desc: "Trích xuất chuỗi băm chuẩn tắc từ nội dung nhị phân PDF.",
+  },
+  decomposing: {
+    title: "Phân rã miền tần số DWT / DCT",
+    badge: "Phân rã tín hiệu",
+    desc: "Tách dải tần wavelet LL/LH/HL/HH để nhúng định danh vô hình.",
+  },
+  signing: {
+    title: "Hội tụ nút ký số Ed25519",
+    badge: "Ký chứng thực",
+    desc: "Hội tụ các nút chữ ký số trên bản kê khai bảo toàn chứng cứ.",
+  },
+  sealed: {
+    title: "Niêm phong chứng thư",
+    badge: "Đã niêm phong",
+    desc: "Bản cấp phát đã niêm phong, chuyển giao bộ giám sát tiến trình.",
+  },
+};
+
+const PIPELINE_STEPS = [
+  { id: "intake", label: "Tiếp nhận tệp", code: "01" },
+  { id: "hashing", label: "Mã băm SHA-256", code: "02" },
+  { id: "decomposing", label: "Phân rã DWT", code: "03" },
+  { id: "signing", label: "Ký số Ed25519", code: "04" },
+  { id: "sealed", label: "Niêm phong", code: "05" },
+] as const;
+
+const STAGE_ORDER: Record<IssuancePipelineStage, number> = {
+  intake: 1,
+  hashing: 2,
+  decomposing: 3,
+  signing: 4,
+  sealed: 5,
+};
 
 export function IssueDocumentPage() {
   const session = useSession();
   const navigate = useNavigate();
   const abortRef = useRef<AbortController | null>(null);
+  const chamberRef = useRef<HTMLDivElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [recipientId, setRecipientId] = useState("");
   const [stage, setStage] = useState<UploadStage | null>(null);
@@ -42,6 +100,118 @@ export function IssueDocumentPage() {
     }),
     onSettled: () => setStage(null),
   });
+
+  const pipelineStage: IssuancePipelineStage = (() => {
+    if (issuance.isSuccess) return "sealed";
+    if (issuance.isPending) {
+      if (stage === "hashing") return "hashing";
+      if (stage === "intent" || stage === "uploading") return "decomposing";
+      if (stage === "finalizing" || stage === null) return "signing";
+    }
+    return "intake";
+  })();
+
+  const motifStage: CryptographicMotifStage = (() => {
+    if (issuance.isSuccess) return "sealed";
+    if (issuance.isPending) {
+      if (stage === "hashing") return "hashing";
+      if (stage === "intent" || stage === "uploading") return "decomposing";
+      if (stage === "finalizing" || stage === null) return "signing";
+    }
+    return "idle";
+  })();
+
+  useGSAP(
+    () => {
+      if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+        return;
+      }
+
+      const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (prefersReduced) {
+        gsap.set(
+          ".chamber-document-ghost, .chamber-decomp-band, .chamber-vector-ray, .chamber-convergence-ring, .chamber-beam, .chamber-seal-burst",
+          { clearProps: "all" }
+        );
+        return;
+      }
+
+      if (pipelineStage === "intake") {
+        if (file) {
+          gsap.fromTo(
+            ".chamber-document-ghost",
+            { y: 12, opacity: 0.4, scale: 0.96 },
+            { y: 0, opacity: 1, scale: 1, duration: 0.5, ease: "power2.out" }
+          );
+        } else {
+          gsap.set(".chamber-document-ghost", { clearProps: "all" });
+        }
+        return;
+      }
+
+      if (pipelineStage === "hashing") {
+        const tl = gsap.timeline({ repeat: -1 });
+        tl.fromTo(
+          ".chamber-beam",
+          { y: -50, opacity: 0 },
+          { y: 50, opacity: 0.85, duration: 1.2, ease: "power1.inOut" }
+        ).to(".chamber-beam", { opacity: 0, duration: 0.2 });
+
+        gsap.to(".chamber-document-ghost", {
+          filter: "brightness(1.1)",
+          repeat: -1,
+          yoyo: true,
+          duration: 0.5,
+          ease: "sine.inOut",
+        });
+        return;
+      }
+
+      if (pipelineStage === "decomposing") {
+        gsap.to(".chamber-document-ghost", {
+          scale: 1.04,
+          opacity: 0.5,
+          duration: 0.4,
+          ease: "power2.out",
+        });
+        const tl = gsap.timeline({ repeat: -1, yoyo: true });
+        tl.to(".chamber-decomp-ll", { x: -8, y: -8, opacity: 1, duration: 0.9, ease: "sine.inOut" })
+          .to(".chamber-decomp-hl", { x: 8, y: -8, opacity: 1, duration: 0.9, ease: "sine.inOut" }, "<")
+          .to(".chamber-decomp-lh", { x: -8, y: 8, opacity: 1, duration: 0.9, ease: "sine.inOut" }, "<")
+          .to(".chamber-decomp-hh", { x: 8, y: 8, opacity: 1, duration: 0.9, ease: "sine.inOut" }, "<");
+        return;
+      }
+
+      if (pipelineStage === "signing") {
+        const tl = gsap.timeline({ repeat: -1 });
+        tl.fromTo(
+          ".chamber-vector-ray",
+          { strokeDashoffset: 40, opacity: 0.2 },
+          { strokeDashoffset: 0, opacity: 1, stagger: 0.1, duration: 0.7, ease: "power2.inOut" }
+        ).to(".chamber-vector-ray", { opacity: 0.25, duration: 0.35 });
+
+        gsap.to(".chamber-convergence-ring", {
+          scale: 0.88,
+          repeat: -1,
+          yoyo: true,
+          duration: 0.85,
+          ease: "sine.inOut",
+        });
+        return;
+      }
+
+      if (pipelineStage === "sealed") {
+        const tl = gsap.timeline();
+        tl.fromTo(
+          ".chamber-seal-burst",
+          { scale: 0.6, opacity: 0 },
+          { scale: 1.3, opacity: 0.9, duration: 0.45, ease: "back.out(1.7)" }
+        ).to(".chamber-seal-burst", { opacity: 0, scale: 1.6, duration: 0.3 });
+        return;
+      }
+    },
+    { scope: chamberRef, dependencies: [pipelineStage, Boolean(file)], revertOnUpdate: true }
+  );
 
   const role = session.data?.user?.role;
   if (!canCreateIssuance(role)) {
@@ -77,6 +247,12 @@ export function IssueDocumentPage() {
   }
 
   const error = validationError ?? issuance.error?.message ?? null;
+  const telemetry = STAGE_TELEMETRY[pipelineStage];
+  const displayTitle = file && pipelineStage === "intake" ? "Đã nạp tài liệu" : telemetry.title;
+  const displayBadge = file && pipelineStage === "intake" ? "Đã tiếp nhận" : telemetry.badge;
+  const displayDesc = file && pipelineStage === "intake"
+    ? `Tệp ${file.name} đã nạp vào khoang, sẵn sàng tạo bản cấp phát.`
+    : telemetry.desc;
 
   return (
     <main className="workspace-page">
@@ -153,6 +329,101 @@ export function IssueDocumentPage() {
         </section>
 
         <aside className="workbench-aside" aria-label="Thông tin quy trình">
+          <section className="aside-card issuance-chamber" ref={chamberRef} aria-label="Khoang ký số mật mã" data-stage={pipelineStage}>
+            <div className="chamber-header">
+              <div className="chamber-header-meta">
+                <span className="chamber-badge">Khoang ký mật mã</span>
+                <h3 className="chamber-title">{displayTitle}</h3>
+              </div>
+              <span className="chamber-stage-pill" data-stage={pipelineStage}>
+                {displayBadge}
+              </span>
+            </div>
+
+            <div className="chamber-viewport">
+              <div className="chamber-grid-backdrop" aria-hidden="true" />
+
+              <div className="chamber-document-ghost" aria-hidden="true" data-has-file={Boolean(file)}>
+                <div className="chamber-doc-card">
+                  <div className="chamber-doc-header">
+                    <span className="chamber-doc-tag">PDF</span>
+                    <span className="chamber-doc-status">{file ? `${Math.max(1, Math.ceil(file.size / 1024))} KiB` : "Chờ tệp"}</span>
+                  </div>
+                  <div className="chamber-doc-lines">
+                    <div className="chamber-doc-line" />
+                    <div className="chamber-doc-line chamber-doc-line-short" />
+                    <div className="chamber-doc-line" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="chamber-decomp-layers" aria-hidden="true">
+                <div className="chamber-decomp-band chamber-decomp-ll">
+                  <span>LL</span>
+                  <small>Xấp xỉ</small>
+                </div>
+                <div className="chamber-decomp-band chamber-decomp-hl">
+                  <span>HL</span>
+                  <small>Ngang</small>
+                </div>
+                <div className="chamber-decomp-band chamber-decomp-lh">
+                  <span>LH</span>
+                  <small>Dọc</small>
+                </div>
+                <div className="chamber-decomp-band chamber-decomp-hh">
+                  <span>HH</span>
+                  <small>Chéo</small>
+                </div>
+              </div>
+
+              <svg className="chamber-convergence-svg" viewBox="0 0 200 200" aria-hidden="true">
+                <line x1="20" y1="20" x2="85" y2="85" className="chamber-vector-ray" />
+                <line x1="180" y1="20" x2="115" y2="85" className="chamber-vector-ray" />
+                <line x1="180" y1="180" x2="115" y2="115" className="chamber-vector-ray" />
+                <line x1="20" y1="180" x2="85" y2="115" className="chamber-vector-ray" />
+                <circle cx="100" cy="100" r="42" className="chamber-convergence-ring" />
+              </svg>
+
+              <div className="chamber-beam" aria-hidden="true" />
+              <div className="chamber-seal-burst" aria-hidden="true" />
+
+              <CryptographicMotif stage={motifStage} size={160} className="chamber-motif" />
+            </div>
+
+            <div className="chamber-pipeline-track" aria-label="Các bước xử lý mật mã">
+              {PIPELINE_STEPS.map((step) => {
+                const isCurrent = pipelineStage === step.id;
+                const isPast = STAGE_ORDER[pipelineStage] > STAGE_ORDER[step.id];
+                const stepState = isCurrent ? (step.id === "intake" && !file ? "pending" : "active") : isPast ? "completed" : "pending";
+                return (
+                  <div key={step.id} className="chamber-pipeline-node" data-state={stepState}>
+                    <span className="chamber-node-index">{step.code}</span>
+                    <span className="chamber-node-label">{step.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="chamber-telemetry">
+              <div className="chamber-telemetry-row">
+                <span className="chamber-telemetry-key">Tài liệu</span>
+                <span className="chamber-telemetry-value" title={file?.name ?? "Chờ tệp PDF"}>
+                  {file ? file.name : "Chờ tệp PDF"}
+                </span>
+              </div>
+              <div className="chamber-telemetry-row">
+                <span className="chamber-telemetry-key">Mã người nhận</span>
+                <span className="chamber-telemetry-value" title={recipientId || "Chưa nhập"}>
+                  {recipientId ? (recipientId.length > 16 ? `${recipientId.slice(0, 8)}…${recipientId.slice(-4)}` : recipientId) : "Chưa nhập"}
+                </span>
+              </div>
+              <div className="chamber-telemetry-row">
+                <span className="chamber-telemetry-key">Trạng thái khoang</span>
+                <span className="chamber-telemetry-value chamber-telemetry-desc">{displayDesc}</span>
+              </div>
+            </div>
+          </section>
+
           <div className="aside-card">
             <h3>Quy trình cấp phát</h3>
             <ol className="aside-steps">
