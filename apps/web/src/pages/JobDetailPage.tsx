@@ -14,9 +14,9 @@ gsap.registerPlugin(useGSAP);
 
 const LIFECYCLE_STEPS = [
   { key: "created", label: "Tiếp nhận", hint: "Ghi nhận yêu cầu" },
-  { key: "queued", label: "Hàng đợi", hint: "Điều phối tài nguyên" },
-  { key: "processing", label: "Xử lý thuật toán", hint: "Biến đổi & tính toán" },
-  { key: "succeeded", label: "Hoàn tất", hint: "Niêm phong an toàn" },
+  { key: "queued", label: "Hàng đợi", hint: "Sẵn sàng xử lý" },
+  { key: "processing", label: "Xử lý bảo vệ", hint: "Bảo vệ & Ký số" },
+  { key: "succeeded", label: "Hoàn tất", hint: "Niêm phong thành công" },
 ] as const;
 
 function getStepIndex(status: string | undefined): number {
@@ -43,24 +43,24 @@ function getMotifStage(status: string | undefined, isVerification: boolean): Cry
 function getTelemetryStatusMessage(status: string | undefined, isVerification: boolean): string {
   switch (status) {
     case "created":
-      return "Yêu cầu đã được khởi tạo và ghi nhận an toàn vào sổ nhật ký.";
+      return "Hệ thống đã tiếp nhận yêu cầu và bắt đầu chuẩn bị xử lý.";
     case "queued":
-      return "Đang chờ trong hàng đợi phân phối worker mật mã chuyên dụng.";
+      return "Đang chờ điều phối lượt xử lý trong hệ thống.";
     case "processing":
       return isVerification
-        ? "Đang phân tích cấu trúc tài liệu, quét phổ và đối chiếu chữ ký số mật mã..."
-        : "Đang phân tách ma trận wavelet (DWT/DCT) và tạo lập chữ ký số Ed25519...";
+        ? "Đang kiểm tra từng lớp nội dung và đối chiếu chữ ký bảo vệ..."
+        : "Đang nhúng dấu vết bảo vệ ẩn và tạo chữ ký số cho tài liệu...";
     case "retryable_failed":
-      return "Gặp sự cố tạm thời, hệ thống đang tự động chuẩn bị thử lại.";
+      return "Hệ thống gặp gián đoạn tạm thời và đang tự động thử lại.";
     case "succeeded":
       return isVerification
-        ? "Quá trình kiểm chứng hoàn tất. Bằng chứng toàn vẹn đã được kết xuất."
-        : "Chứng thư mật mã đã được niêm phong thành công vào tài liệu.";
+        ? "Kiểm tra hoàn tất. Bằng chứng toàn vẹn đã sẵn sàng để xem."
+        : "Tài liệu đã được niêm phong bảo mật và tạo thành công.";
     case "failed":
     case "dead_lettered":
-      return "Xử lý gián đoạn do lỗi thuật toán hoặc định dạng tệp không hợp lệ.";
+      return "Xử lý không thành công do tệp không đúng định dạng hoặc bị lỗi.";
     case "cancelled":
-      return "Công việc xử lý đã được hủy theo yêu cầu của người dùng.";
+      return "Quy trình xử lý đã được dừng.";
     default:
       return "Đang theo dõi trạng thái công việc...";
   }

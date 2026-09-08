@@ -227,27 +227,27 @@ export function VerificationDetailPage() {
                     <div className="seal-construction-meta">
                       <div className="seal-authoritative-badge">
                         <span className="seal-beacon-dot" />
-                        <span className="seal-authoritative-title">Trạng thái thẩm quyền: Đã niêm phong mật mã</span>
+                        <span className="seal-authoritative-title">Kết luận: Tài liệu nguyên vẹn</span>
                       </div>
-                      <h3 className="seal-payoff-headline">Chứng thư xác thực toàn vẹn độc lập</h3>
+                      <h3 className="seal-payoff-headline">Tài liệu chính gốc, không bị chỉnh sửa</h3>
                       <p className="seal-payoff-description">
-                        Hệ thống đã hội tụ hình học phân rã và hoàn tất khóa ấn triện Ed25519 cho tài liệu này.
+                        Chữ ký số và dấu vết bảo vệ đều khớp hoàn toàn với bản phát hành gốc do hệ thống cấp phát.
                       </p>
                       <div className="seal-telemetry-readout">
                         <div className="seal-readout-item">
-                          <span className="readout-label">Hội tụ hình học</span>
-                          <span className="readout-value">Khớp tuyệt đối</span>
+                          <span className="readout-label">Dấu vết thủy vân</span>
+                          <span className="readout-value">Khớp bản gốc</span>
                         </div>
                         <div className="seal-readout-item">
-                          <span className="readout-label">Chữ ký phân tán</span>
+                          <span className="readout-label">Chữ ký số</span>
                           <span className="readout-value">
                             {verification.data.evidence.manifest_signature_valid ? "Hợp lệ" : "Đã xác thực"}
                           </span>
                         </div>
                         <div className="seal-readout-item">
-                          <span className="readout-label">Toàn vẹn tệp</span>
+                          <span className="readout-label">Mã kiểm tra tệp</span>
                           <span className="readout-value">
-                            {verification.data.evidence.exact_file_hash_match ? "Khớp bản gốc" : "Đã kiểm định"}
+                            {verification.data.evidence.exact_file_hash_match ? "Khớp tuyệt đối" : "Đã kiểm định"}
                           </span>
                         </div>
                       </div>
@@ -288,16 +288,16 @@ export function VerificationDetailPage() {
                     <div className="seal-construction-meta failure-meta">
                       <div className="tamper-telemetry-badge">
                         <span className="tamper-beacon-dot" />
-                        <span className="tamper-telemetry-title">Cảnh báo sai lệch: Phát hiện biến đổi cấu trúc</span>
+                        <span className="tamper-telemetry-title">Cảnh báo: Phát hiện dấu hiệu chỉnh sửa</span>
                       </div>
-                      <h3 className="tamper-payoff-headline">Cách ly sai lệch & Đo từ xa bất thường</h3>
+                      <h3 className="tamper-payoff-headline">Tài liệu đã bị can thiệp hoặc giả mạo</h3>
                       <p className="tamper-payoff-description">
-                        Hệ thống cách ly phân vùng dị biệt và ghi nhận đo từ xa bất thường thay vì hội tụ ấn triện xác thực.
+                        Hệ thống phát hiện nội dung tài liệu có sự sai khác so với dữ liệu gốc đã được cấp phát.
                       </p>
-                      <div className="tamper-telemetry" role="region" aria-label="Đo từ xa phát hiện bất thường">
+                      <div className="tamper-telemetry" role="region" aria-label="Chi tiết điểm nghi vấn">
                         <div className="tamper-telemetry-header">
                           <ShieldAlert size={18} className="tamper-alert-icon" aria-hidden="true" />
-                          <h4>Dữ liệu đo từ xa sai lệch</h4>
+                          <h4>Chi tiết điểm nghi vấn</h4>
                         </div>
                         <div className="tamper-telemetry-metrics">
                           <div className="tamper-metric">
@@ -307,7 +307,7 @@ export function VerificationDetailPage() {
                             </span>
                           </div>
                           <div className="tamper-metric">
-                            <span className="metric-label">Đối chiếu băm gốc</span>
+                            <span className="metric-label">Đối chiếu bản gốc</span>
                             <span className="metric-value">
                               {verification.data.evidence.exact_file_hash_match === false ? "Không khớp" : "Đã đối soát"}
                             </span>

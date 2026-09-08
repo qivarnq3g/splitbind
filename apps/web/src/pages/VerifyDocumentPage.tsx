@@ -32,27 +32,27 @@ const STAGE_TELEMETRY: Record<VerificationPipelineStage, StageInfo> = {
   intake: {
     title: "Tiếp nhận tài liệu kiểm tra",
     badge: "Tiếp nhận",
-    desc: "Tài liệu nạp vào buồng kiểm định, sẵn sàng quét đa tầng.",
+    desc: "Tài liệu nạp vào buồng kiểm tra, sẵn sàng đối chiếu an toàn.",
   },
   optical_scan: {
-    title: "Quét ma trận quang học",
-    badge: "Quét quang học",
-    desc: "Tia quét laser đa tầng khảo sát ma trận điểm ảnh và mã băm toàn vẹn.",
+    title: "Quét kiểm tra cấu trúc tệp",
+    badge: "Quét cấu trúc",
+    desc: "Kiểm tra cấu trúc điểm ảnh và đối chiếu mã kiểm tra toàn vẹn của tệp.",
   },
   signal_extraction: {
-    title: "Tách dải tần DWT quan sát",
-    badge: "Tách dải tần",
-    desc: "Trích xuất lớp tín hiệu tần số wavelet (LL/LH/HL/HH) từ tài liệu.",
+    title: "Trích xuất dấu vết bảo vệ ẩn",
+    badge: "Trích xuất dấu vết",
+    desc: "Tìm kiếm và trích xuất dấu vết thủy vân bảo vệ ẩn sâu trong tài liệu.",
   },
   signal_comparison: {
-    title: "Đối sánh tín hiệu & sai biệt",
-    badge: "Đối sánh tín hiệu",
-    desc: "So sánh dải tần quan sát với tín hiệu kỳ vọng để phát hiện can thiệp.",
+    title: "Đối chiếu với bản phát hành gốc",
+    badge: "Đối chiếu gốc",
+    desc: "So sánh dấu vết thu được với bản phát hành gốc để phát hiện bất kỳ dấu hiệu sửa đổi nào.",
   },
   resolution_handoff: {
-    title: "Chuyển tiếp lập hồ sơ kiểm định",
-    badge: "Chuyển tiếp",
-    desc: "Hoàn tất thu thập bằng chứng, chuyển tiếp tiến trình lập hồ sơ giám định.",
+    title: "Tổng hợp kết luận giám định",
+    badge: "Tổng hợp kết quả",
+    desc: "Hoàn tất kiểm tra kỹ thuật, chuyển tiếp sang hồ sơ kết luận chi tiết.",
   },
 };
 
@@ -393,25 +393,25 @@ export function VerifyDocumentPage() {
               <div className="verification-frequency-grid" aria-hidden="true">
                 <div className="verification-freq-cell freq-ll">
                   <span>LL</span>
-                  <small>Xấp xỉ</small>
+                  <small>Cấu trúc</small>
                 </div>
                 <div className="verification-freq-cell freq-hl">
                   <span>HL</span>
-                  <small>Ngang</small>
+                  <small>Nét ngang</small>
                 </div>
                 <div className="verification-freq-cell freq-lh">
                   <span>LH</span>
-                  <small>Dọc</small>
+                  <small>Nét dọc</small>
                 </div>
                 <div className="verification-freq-cell freq-hh">
                   <span>HH</span>
-                  <small>Chéo</small>
+                  <small>Vân bảo mật</small>
                 </div>
               </div>
 
               <div className="verification-comparison-tracks" aria-hidden="true">
                 <div className="signal-track-group">
-                  <span className="signal-track-label">Kỳ vọng</span>
+                  <span className="signal-track-label">Bản gốc đối chiếu</span>
                   <div className="signal-bars-row">
                     <div className="verification-signal-bar signal-bar-expected" style={{ height: "14px" }} />
                     <div className="verification-signal-bar signal-bar-expected" style={{ height: "20px" }} />
@@ -421,7 +421,7 @@ export function VerifyDocumentPage() {
                   </div>
                 </div>
                 <div className="signal-track-group">
-                  <span className="signal-track-label">Quan sát</span>
+                  <span className="signal-track-label">Tệp thực tế kiểm tra</span>
                   <div className="signal-bars-row">
                     <div className="verification-signal-bar signal-bar-observed" style={{ height: "16px" }} />
                     <div className="verification-signal-bar signal-bar-observed" style={{ height: "18px" }} />

@@ -29,35 +29,35 @@ const STAGE_TELEMETRY: Record<IssuancePipelineStage, StageInfo> = {
   intake: {
     title: "Tiếp nhận tài liệu",
     badge: "Tiếp nhận",
-    desc: "Chuẩn bị nạp tài liệu vào khoang ký mật mã.",
+    desc: "Chuẩn bị nạp tài liệu vào khoang xử lý bảo vệ.",
   },
   hashing: {
-    title: "Tính toán mã băm SHA-256",
-    badge: "Băm phân đoạn",
-    desc: "Trích xuất chuỗi băm chuẩn tắc từ nội dung nhị phân PDF.",
+    title: "Tạo mã kiểm tra toàn vẹn",
+    badge: "Mã kiểm tra",
+    desc: "Tạo chuỗi mã nhận dạng đặc thù từ tệp PDF để bảo đảm nội dung không bị can thiệp.",
   },
   decomposing: {
-    title: "Phân rã miền tần số DWT / DCT",
-    badge: "Phân rã tín hiệu",
-    desc: "Tách dải tần wavelet LL/LH/HL/HH để nhúng định danh vô hình.",
+    title: "Phân tích cấu trúc & Nhúng dấu vết",
+    badge: "Nhúng dấu vết",
+    desc: "Phân tích cấu trúc tài liệu và nhúng dấu vết bảo vệ vô hình để chống làm giả.",
   },
   signing: {
-    title: "Hội tụ nút ký số Ed25519",
-    badge: "Ký chứng thực",
-    desc: "Hội tụ các nút chữ ký số trên bản kê khai bảo toàn chứng cứ.",
+    title: "Ký số xác thực bản phát hành",
+    badge: "Ký xác thực",
+    desc: "Tạo chữ ký số an toàn chứng thực tài liệu chính thức cho người nhận.",
   },
   sealed: {
-    title: "Niêm phong chứng thư",
+    title: "Hoàn tất niêm phong bảo mật",
     badge: "Đã niêm phong",
-    desc: "Bản cấp phát đã niêm phong, chuyển giao bộ giám sát tiến trình.",
+    desc: "Tài liệu đã được bảo vệ hoàn tất, chuyển sang trang theo dõi tiến trình.",
   },
 };
 
 const PIPELINE_STEPS = [
   { id: "intake", label: "Tiếp nhận tệp", code: "01" },
-  { id: "hashing", label: "Mã băm SHA-256", code: "02" },
-  { id: "decomposing", label: "Phân rã DWT", code: "03" },
-  { id: "signing", label: "Ký số Ed25519", code: "04" },
+  { id: "hashing", label: "Kiểm tra tệp", code: "02" },
+  { id: "decomposing", label: "Nhúng dấu vết", code: "03" },
+  { id: "signing", label: "Ký số bảo vệ", code: "04" },
   { id: "sealed", label: "Niêm phong", code: "05" },
 ] as const;
 
@@ -360,19 +360,19 @@ export function IssueDocumentPage() {
               <div className="chamber-decomp-layers" aria-hidden="true">
                 <div className="chamber-decomp-band chamber-decomp-ll">
                   <span>LL</span>
-                  <small>Xấp xỉ</small>
+                  <small>Cấu trúc</small>
                 </div>
                 <div className="chamber-decomp-band chamber-decomp-hl">
                   <span>HL</span>
-                  <small>Ngang</small>
+                  <small>Nét ngang</small>
                 </div>
                 <div className="chamber-decomp-band chamber-decomp-lh">
                   <span>LH</span>
-                  <small>Dọc</small>
+                  <small>Nét dọc</small>
                 </div>
                 <div className="chamber-decomp-band chamber-decomp-hh">
                   <span>HH</span>
-                  <small>Chéo</small>
+                  <small>Vân bảo mật</small>
                 </div>
               </div>
 

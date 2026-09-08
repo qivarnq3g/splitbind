@@ -24,8 +24,11 @@ export function MotionRoute({ children }: PropsWithChildren) {
         return;
       }
 
+      if (typeof window !== "undefined") {
+        window.scrollTo({ left: 0, top: 0, behavior: "instant" });
+      }
+
       const currentStage = getWorkflowStageRank(location.pathname);
-      const prevStage = previousStageRef.current;
       const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
       if (prefersReduced) {
@@ -41,18 +44,7 @@ export function MotionRoute({ children }: PropsWithChildren) {
       const media = gsap.matchMedia();
 
       media.add("(prefers-reduced-motion: no-preference)", () => {
-        let deltaX = 0;
-        let deltaY = 6;
-
-        if (prevStage !== null && prevStage !== 0 && currentStage !== 0) {
-          if (currentStage > prevStage) {
-            deltaX = 12;
-            deltaY = 0;
-          } else if (currentStage < prevStage) {
-            deltaX = -12;
-            deltaY = 0;
-          }
-        }
+        const deltaY = 6;
 
         const tl = gsap.timeline({
           onComplete: () => {
@@ -64,12 +56,11 @@ export function MotionRoute({ children }: PropsWithChildren) {
 
         tl.fromTo(
           root.current,
-          { autoAlpha: 0, x: deltaX, y: deltaY },
+          { autoAlpha: 0, y: deltaY },
           {
             autoAlpha: 1,
-            x: 0,
             y: 0,
-            duration: 0.28,
+            duration: 0.26,
             ease: "power2.out",
             clearProps: "transform,opacity,visibility",
           }
@@ -79,22 +70,18 @@ export function MotionRoute({ children }: PropsWithChildren) {
           ".page-heading, .workbench, .status-board, .login-panel, .login-intro, .verification-seal-construction, .issuance-chamber"
         );
         if (innerElements && innerElements.length > 0) {
-          const innerX = deltaX !== 0 ? (deltaX > 0 ? 8 : -8) : 0;
-          const innerY = deltaX === 0 ? 4 : 0;
-
           tl.fromTo(
             innerElements,
-            { autoAlpha: 0, x: innerX, y: innerY },
+            { autoAlpha: 0, y: 4 },
             {
               autoAlpha: 1,
-              x: 0,
               y: 0,
-              duration: 0.24,
-              stagger: 0.05,
+              duration: 0.22,
+              stagger: 0.04,
               ease: "power2.out",
               clearProps: "transform,opacity,visibility",
             },
-            "-=0.18"
+            "-=0.16"
           );
         }
       });

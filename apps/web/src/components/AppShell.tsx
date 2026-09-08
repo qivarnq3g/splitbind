@@ -244,7 +244,7 @@ export function AppShell() {
           <div className="foot-line-content">
             <p>SplitBind · Nhóm 9 · ATTT</p>
             <span className="foot-divider" aria-hidden="true">/</span>
-            <p className="foot-sub">Mã hóa DWT-DCT-QIM & Ed25519</p>
+            <p className="foot-sub">Thủy vân số chống giả mạo & Ký số bảo vệ toàn vẹn</p>
           </div>
         </footer>
       </div>

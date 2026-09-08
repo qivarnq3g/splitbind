@@ -155,11 +155,11 @@ export function IssuanceDetailPage() {
               <div className="seal-construction-meta">
                 <div className="seal-authoritative-badge">
                   <span className="seal-beacon-dot" />
-                  <span className="seal-authoritative-title">Ấn triện cấp phát thẩm quyền</span>
+                  <span className="seal-authoritative-title">Ấn triện bảo vệ tài liệu</span>
                 </div>
-                <h3 className="seal-payoff-headline">Chứng thư số & Thủy vân đã niêm phong</h3>
+                <h3 className="seal-payoff-headline">Tài liệu đã được cấp phát an toàn</h3>
                 <p className="seal-payoff-description">
-                  Tài liệu đã hoàn tất phân rã dải tần DWT/DCT, nhúng dấu vân tay bảo mật và ký số Ed25519.
+                  Đã nhúng dấu vết bảo vệ ẩn và ký số xác thực bản phát hành cho người nhận.
                 </p>
               </div>
             </section>
@@ -172,7 +172,7 @@ export function IssuanceDetailPage() {
               </div>
               <div className="record-meta">
                 <h2>Chứng thư cấp phát cá nhân hóa</h2>
-                <p className="record-sub">Tài liệu đã được ký số Ed25519 và nhúng thủy vân bảo mật.</p>
+                <p className="record-sub">Tài liệu đã được bảo vệ bằng dấu vết ẩn và chữ ký số an toàn.</p>
               </div>
             </div>
 
