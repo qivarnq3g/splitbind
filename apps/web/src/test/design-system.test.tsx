@@ -302,7 +302,7 @@ describe("SplitBind design system", () => {
     }));
 
     renderApp("/issue");
-    const motionPage = await screen.findByTestId ? document.querySelector("[data-motion-page]") : document.querySelector("[data-motion-page]");
+    const motionPage = document.querySelector("[data-motion-page]");
     expect(motionPage).toBeInTheDocument();
     expect(motionPage).toHaveAttribute("data-stage-rank", "1");
   });
