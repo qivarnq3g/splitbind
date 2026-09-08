@@ -4,6 +4,7 @@ import pathlib
 import shutil
 import subprocess
 import tempfile
+import tomllib
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -12,6 +13,8 @@ COMPOSE = ROOT / "infra" / "compose" / "compose.local.yaml"
 CONFIG_ENV = ROOT / "infra" / "compose" / "config-test.env"
 VITE_CONFIG = ROOT / "apps" / "web" / "vite.config.ts"
 HARNESS = ROOT / "tests" / "platform" / "demo_runner_harness.ps1"
+API_PYPROJECT = ROOT / "services" / "api" / "pyproject.toml"
+API_CONSTRAINTS = ROOT / "services" / "api" / "constraints-py311.txt"
 
 
 def run_harness(scenario, scratch, *, dump_environment_script=None):
@@ -89,6 +92,10 @@ class DemoRunnerContractTest(unittest.TestCase):
         self.assertTrue(service["image"].startswith("minio/minio:RELEASE."))
         self.assertEqual(published_ports(service), {9000})
         self.assertEqual(service["ports"][0].get("host_ip"), "127.0.0.1")
+        self.assertEqual(
+            service["environment"]["MINIO_API_CORS_ALLOW_ORIGIN"],
+            "http://127.0.0.1:5173,http://localhost:5173",
+        )
         self.assertEqual(len(service.get("volumes", [])), 1)
         self.assertEqual(service["volumes"][0]["type"], "bind")
         self.assertEqual(service["volumes"][0]["target"], "/data")
@@ -130,7 +137,6 @@ class DemoRunnerContractTest(unittest.TestCase):
             "wait-localhttp",
             "test-trackedprocessidentity",
             "rollback-startup",
-            "put_bucket_cors",
             "docker image inspect",
             "docker info",
             "--pull never",
@@ -150,6 +156,7 @@ class DemoRunnerContractTest(unittest.TestCase):
             "docker pull",
             "az login",
             "deploy",
+            "put_bucket_cors",
         ):
             self.assertNotIn(forbidden, source)
 
@@ -159,6 +166,12 @@ class DemoRunnerContractTest(unittest.TestCase):
         self.assertIn('"/health"', source)
         self.assertGreaterEqual(source.count('target: "http://127.0.0.1:8000"'), 2)
         self.assertNotIn("changeOrigin: true", source)
+
+    def test_runner_starts_vite_from_the_web_application_root(self):
+        source = RUNNER.read_text(encoding="utf-8")
+
+        self.assertIn('$WebRoot = Join-Path $RepoRoot "apps\\web"', source)
+        self.assertIn('-WorkingDirectory $WebRoot -Environment (Get-ViteChildEnvironment)', source)
 
     def test_runner_prints_an_exact_stop_command_only_after_readiness(self):
         source = RUNNER.read_text(encoding="utf-8")
@@ -227,6 +240,30 @@ class DemoRunnerContractTest(unittest.TestCase):
         self.assertIn("Node.js is missing", observed["error"])
         self.assertIn("Node 24", observed["error"])
         self.assertFalse(observed["demo_created"])
+
+    def test_demo_extra_closes_the_reference_fingerprint_runtime_dependency(self):
+        with API_PYPROJECT.open("rb") as project_file:
+            project = tomllib.load(project_file)
+
+        self.assertIn(
+            "reedsolo==1.7.0",
+            project["project"]["optional-dependencies"]["demo"],
+        )
+        self.assertIn(
+            "reedsolo==1.7.0",
+            API_CONSTRAINTS.read_text(encoding="utf-8").splitlines(),
+        )
+
+    def test_python_preflight_imports_the_actual_fingerprint_module(self):
+        observed = run_harness("python-dependency-probe", self.scratch)
+
+        self.assertTrue(observed["accepted"])
+        self.assertIn("splitbind_ref.fingerprint_v2", observed["arguments"])
+
+    def test_embedded_python_is_sent_over_stdin_without_losing_quotes(self):
+        observed = run_harness("python-stdin", self.scratch)
+
+        self.assertEqual(observed, {"exit_code": 0, "output": "NoSuchBucket"})
 
     @unittest.skipUnless(os.name == "nt", "Windows reparse-point contract")
     def test_reparse_chain_and_leaf_are_rejected_before_external_write(self):

@@ -4,7 +4,7 @@
 
 SplitBind là hệ thống truy vết toàn vẹn văn bản dành cho bài tập lớn môn An toàn thông tin của Nhóm 9. Hệ thống cấp một dấu vân tay riêng cho từng bản PDF gửi tới người nhận, sau đó hỗ trợ xác minh nguồn phát hành và dấu hiệu chỉnh sửa trên tài liệu nghi vấn.
 
-> Trạng thái: MVP đang được triển khai. Repository đã có reference implementation, Django control plane, OpenAPI/typed TypeScript client và giao diện React cho đăng nhập, cấp phát, kiểm chứng, theo dõi job và đọc bằng chứng kỹ thuật. Luồng trình bày cục bộ dùng Python demo worker thử nghiệm và chưa có runtime end-to-end evidence trên host kiểm thử; Rust worker cùng processing/deployment production vẫn chưa hoàn thành.
+> Trạng thái: MVP đang được triển khai. Repository đã có reference implementation, Django control plane, OpenAPI/typed TypeScript client và giao diện React cho đăng nhập, cấp phát, kiểm chứng, theo dõi job và đọc bằng chứng kỹ thuật. Luồng trình bày cục bộ dùng Python demo worker thử nghiệm đã được chạy end-to-end trên host Windows với MinIO; Rust worker cùng processing/deployment production vẫn chưa hoàn thành.
 
 ## Demo trình bày cục bộ
 

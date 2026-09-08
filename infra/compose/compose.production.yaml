@@ -6,6 +6,7 @@ services:
     user: "10002:10002"
     read_only: true
     cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
     security_opt: ["no-new-privileges:true"]
     tmpfs: ["/tmp:size=16777216,mode=1770,uid=10002,gid=10002"]
     mem_limit: 128m
@@ -58,6 +59,8 @@ services:
       start_period: 30s
     stop_grace_period: 30s
     restart: unless-stopped
+    volumes:
+      - /home/PRODUCTION_VM_ADMIN/splitbind/patches/settings_common.py:/app/services/api/config/settings_common.py:ro
     networks: [app]
   worker:
     image: ${API_IMAGE:?API_IMAGE must be an immutable digest}
@@ -92,6 +95,8 @@ services:
       start_period: 30s
     stop_grace_period: 30s
     restart: unless-stopped
+    volumes:
+      - /home/PRODUCTION_VM_ADMIN/splitbind/patches/settings_common.py:/app/services/api/config/settings_common.py:ro
     networks: [app]
     depends_on:
       api:

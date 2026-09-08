@@ -54,6 +54,7 @@ reports/
 *.tmp
 
 # Local infrastructure state
+/.neon
 .lima/
 .terraform/
 *.tfstate

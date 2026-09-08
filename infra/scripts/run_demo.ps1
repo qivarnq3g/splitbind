@@ -18,6 +18,7 @@ $StateFile = Join-Path $DemoRoot "process-state.json"
 $LogDirectory = Join-Path $DemoRoot "logs"
 $Python = Join-Path $RepoRoot ".venv\Scripts\python.exe"
 $Node = $null
+$WebRoot = Join-Path $RepoRoot "apps\web"
 $ViteEntry = Join-Path $RepoRoot "node_modules\vite\bin\vite.js"
 $StopCommand = "powershell -ExecutionPolicy Bypass -File infra/scripts/run_demo.ps1 -Stop"
 
@@ -194,12 +195,28 @@ function Set-CommonRuntimeEnvironment {
     $env:PYTHONPATH = Join-Path $RepoRoot "research\python\src"
 }
 
+function Invoke-DemoPythonScript([string]$Script) {
+    $Script | & $Python -
+}
+
 function Resolve-NodeExecutable {
     $command = Get-Command node -ErrorAction SilentlyContinue
     if ($null -eq $command) {
         throw "Node.js is missing. Install the repository-pinned Node 24 release and retry."
     }
     return $command.Source
+}
+
+function Test-DemoPythonDependencies {
+    $priorPythonPath = $env:PYTHONPATH
+    $env:PYTHONPATH = Join-Path $RepoRoot "research\python\src"
+    try {
+        & $Python -c "import boto3, cv2, django, numpy, pypdfium2, reedsolo, splitbind_ref.fingerprint_v2" 2>$null
+        return $LASTEXITCODE -eq 0
+    }
+    finally {
+        $env:PYTHONPATH = $priorPythonPath
+    }
 }
 
 function Assert-Prerequisites {
@@ -217,16 +234,8 @@ function Assert-Prerequisites {
         if ($LASTEXITCODE -ne 0 -or $pythonVersion -notmatch '^Python 3\.11\.') {
             throw "The demo requires the repository .venv to use Python 3.11. Recreate .venv with Python 3.11."
         }
-        $priorPythonPath = $env:PYTHONPATH
-        $env:PYTHONPATH = Join-Path $RepoRoot "research\python\src"
-        try {
-            & $Python -c "import boto3, cv2, django, numpy, pypdfium2, splitbind_ref" 2>$null
-            if ($LASTEXITCODE -ne 0) {
-                throw "Required Python demo packages are missing. Install locally: .venv\Scripts\python.exe -m pip install -c services/api/constraints-py311.txt '.\services\api[demo,test]'"
-            }
-        }
-        finally {
-            $env:PYTHONPATH = $priorPythonPath
+        if (-not (Test-DemoPythonDependencies)) {
+            throw "Required Python demo packages are missing. Install locally: .venv\Scripts\python.exe -m pip install -c services/api/constraints-py311.txt '.\services\api[demo,test]'"
         }
         $nodeVersion = (& $Node --version 2>&1 | Out-String).Trim()
         $npmVersion = (& npm --version 2>&1 | Out-String).Trim()
@@ -743,7 +752,7 @@ try {
         }
         Wait-LocalHttp -Uri "http://127.0.0.1:9000/minio/health/live" -TimeoutSeconds 45 -Component "MinIO"
 
-        $corsScript = @'
+        $bucketScript = @'
 import os
 import boto3
 client = boto3.client(
@@ -761,17 +770,10 @@ except Exception as error:
     if code not in {"404", "NoSuchBucket", "NotFound"}:
         raise
     client.create_bucket(Bucket=bucket)
-client.put_bucket_cors(Bucket=bucket, CORSConfiguration={"CORSRules": [{
-    "AllowedOrigins": ["http://127.0.0.1:5173", "http://localhost:5173"],
-    "AllowedMethods": ["GET", "HEAD", "PUT"],
-    "AllowedHeaders": ["content-length", "content-type", "x-amz-meta-sha256"],
-    "ExposeHeaders": ["etag", "x-amz-meta-sha256"],
-    "MaxAgeSeconds": 300,
-}]})
 '@
-        & $Python -c $corsScript
+        Invoke-DemoPythonScript -Script $bucketScript
         if ($LASTEXITCODE -ne 0) {
-            throw "Could not create the local demo bucket or apply its narrow CORS policy. Inspect MinIO logs."
+            throw "Could not create the local demo bucket. Inspect MinIO logs."
         }
 
         & $Python "services/api/manage.py" migrate --noinput --settings=config.settings_demo
@@ -797,7 +799,7 @@ client.put_bucket_cors(Bucket=bucket, CORSConfiguration={"CORSRules": [{
 
         $viteProcess = Start-DemoProcess -Name "vite" -FilePath $Node `
             -ArgumentList @("`"$ViteEntry`"", "--host", "127.0.0.1", "--port", "5173", "--strictPort") `
-            -WorkingDirectory $RepoRoot -Environment (Get-ViteChildEnvironment)
+            -WorkingDirectory $WebRoot -Environment (Get-ViteChildEnvironment)
         $startedProcesses += New-TrackedEntry -Name "vite" -Process $viteProcess -ExpectedExecutable $Node
         Save-ProcessState $startedProcesses
         Wait-LocalHttp -Uri "http://127.0.0.1:8000/health/live" -TimeoutSeconds 45 -Component "Django API"

@@ -158,6 +158,47 @@ switch ($Scenario) {
             demo_created = Test-Path -LiteralPath (Join-Path $ScratchRoot "artifacts\demo")
         })
     }
+    "python-dependency-probe" {
+        $probePath = Join-Path $ScratchRoot "python-probe.txt"
+        $fakePython = Join-Path $ScratchRoot "python.cmd"
+        [System.IO.File]::WriteAllLines(
+            $fakePython,
+            @(
+                "@echo off",
+                "> `"%SPLITBIND_PYTHON_PROBE%`" echo %*",
+                "exit /b 0"
+            )
+        )
+        $priorProbe = $env:SPLITBIND_PYTHON_PROBE
+        $priorPythonPath = $env:PYTHONPATH
+        $env:SPLITBIND_PYTHON_PROBE = $probePath
+        $script:Python = $fakePython
+        $script:RepoRoot = $ScratchRoot
+        try {
+            $accepted = Test-DemoPythonDependencies
+            $arguments = [System.IO.File]::ReadAllText($probePath)
+        }
+        finally {
+            $env:SPLITBIND_PYTHON_PROBE = $priorProbe
+            $env:PYTHONPATH = $priorPythonPath
+        }
+        Write-Result ([ordered]@{
+            accepted = [bool]$accepted
+            arguments = $arguments
+        })
+    }
+    "python-stdin" {
+        $script:Python = (Get-Command python).Source
+        $embedded = @'
+response = {"Error": {"Code": "NoSuchBucket"}}
+print(response.get("Error", {}).get("Code", ""))
+'@
+        $output = @(Invoke-DemoPythonScript -Script $embedded)
+        Write-Result ([ordered]@{
+            exit_code = $LASTEXITCODE
+            output = ($output -join "`n").Trim()
+        })
+    }
     "reparse" {
         $safeRoot = Join-Path $ScratchRoot "safe"
         $outsideRoot = Join-Path $ScratchRoot "outside"

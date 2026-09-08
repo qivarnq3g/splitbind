@@ -84,6 +84,26 @@ SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SECURE = True
 CSRF_FAILURE_VIEW = "splitbind.access.csrf.csrf_failure"
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("SPLITBIND_CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+if not CSRF_TRUSTED_ORIGINS:
+    CSRF_TRUSTED_ORIGINS = [
+        f"https://{host.strip()}"
+        for host in ALLOWED_HOSTS
+        if host.strip() and host.strip() not in ("*", "localhost", "127.0.0.1", "api")
+    ]
+    if os.environ.get("ENVIRONMENT") != "production":
+        CSRF_TRUSTED_ORIGINS.extend([
+            "http://localhost:8080",
+            "http://127.0.0.1:8080",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+        ])
 
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "production")
 
