@@ -221,6 +221,7 @@ describe("SplitBind design system", () => {
     expect(motif.tagName.toLowerCase()).toBe("svg");
     expect(motif.closest(".cryptographic-motif")).toHaveAttribute("data-stage", "idle");
 
+    expect(motif.querySelector(".motif-backdrop")).toBeInTheDocument();
     expect(motif.querySelector(".motif-axes")).toBeInTheDocument();
     expect(motif.querySelector(".motif-wavelets")).toBeInTheDocument();
     expect(motif.querySelector(".motif-hash-fragments")).toBeInTheDocument();

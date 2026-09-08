@@ -50,6 +50,12 @@ export function CryptographicMotif({
       }
 
       if (stage === "hashing") {
+        gsap.to(".motif-core", {
+          rotate: 360,
+          duration: 3.6,
+          ease: "none",
+          repeat: -1,
+        });
         const tl = gsap.timeline({ repeat: -1 });
         tl.to(".motif-hash-pip", {
           opacity: 1,
@@ -58,7 +64,6 @@ export function CryptographicMotif({
           duration: 0.35,
           ease: "power1.inOut",
         });
-        tl.to(".motif-core", { rotate: 360, duration: 3.6, ease: "none", repeat: -1 }, 0);
         return;
       }
 
@@ -154,6 +159,7 @@ export function CryptographicMotif({
         width={size}
         height={size}
       >
+        <rect x="24" y="24" width="152" height="152" rx="8" className="motif-backdrop" />
         <rect x="24" y="24" width="152" height="152" rx="8" className="motif-document" />
 
         <circle cx="100" cy="100" r="76" className="motif-grid-ring" />
