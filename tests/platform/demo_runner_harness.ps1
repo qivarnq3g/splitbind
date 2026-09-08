@@ -72,6 +72,7 @@ switch ($Scenario) {
     "cleanup" {
         $script:stopRequests = @()
         $script:composeStops = 0
+        $script:retainedEntries = @()
         function Get-TrackedProcessStatus($Entry) {
             if ($Entry.pid -eq 3) {
                 return [pscustomobject]@{ Status = "mismatch"; Process = [pscustomobject]@{ Id = 3 } }
@@ -86,6 +87,9 @@ switch ($Scenario) {
         }
         function Stop-DemoCompose {
             $script:composeStops += 1
+        }
+        function Save-RemainingProcessState([object[]]$Entries) {
+            $script:retainedEntries = @($Entries)
         }
         $script:RepoRoot = (Resolve-Path (Join-Path $ScratchRoot "..\..")).Path
         $script:DemoRoot = $ScratchRoot
@@ -103,10 +107,7 @@ switch ($Scenario) {
         catch {
             $message = $_.Exception.Message
         }
-        $retained = @()
-        if (Test-Path -LiteralPath $script:StateFile) {
-            $retained = @((Get-Content -Raw -LiteralPath $script:StateFile | ConvertFrom-Json).processes | ForEach-Object { $_.pid })
-        }
+        $retained = @($script:retainedEntries | ForEach-Object { $_.pid })
         Write-Result ([ordered]@{
             stop_requests = @($script:stopRequests)
             compose_stops = $script:composeStops
@@ -119,7 +120,7 @@ switch ($Scenario) {
         New-Item -ItemType Directory -Force -Path $ScratchRoot | Out-Null
         $env:VITE_SENTINEL_SECRET = "must-not-leak"
         $env:AZURE_SENTINEL_SECRET = "must-not-leak"
-        $shell = (Get-Command powershell).Source
+        $shell = (Get-Process -Id $PID).Path
         $process = Start-DemoProcess -Name "environment" -FilePath $shell `
             -ArgumentList @("-NoProfile", "-File", $DumpEnvironmentScript) `
             -WorkingDirectory $ScratchRoot `

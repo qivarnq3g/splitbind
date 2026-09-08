@@ -41,6 +41,16 @@ def render_compose(
         ]
     )
     environment = os.environ.copy()
+    environment.update(
+        {
+            "API_ENV_FILE": str(COMPOSE_DIR / "config-test-api.env"),
+            "WORKER_ENV_FILE": str(COMPOSE_DIR / "config-test-worker.env"),
+            "MANIFEST_SIGNING_KEY_FILE": str(COMPOSE_DIR / "config-test-secret.bin"),
+            "MANIFEST_SIGNING_KEY_PASSPHRASE_FILE": str(
+                COMPOSE_DIR / "config-test-secret.bin"
+            ),
+        }
+    )
     if not use_config_env:
         environment.update(
             {
@@ -52,10 +62,6 @@ def render_compose(
                 "ACME_EMAIL": "compose-test@example.invalid",
                 "NEON_DATABASE_HOST": "ep-synthetic.neon.tech.invalid",
                 "R2_ENDPOINT": "https://synthetic-account.r2.cloudflarestorage.com.invalid",
-                "API_ENV_FILE": "./config-test-api.env",
-                "WORKER_ENV_FILE": "./config-test-worker.env",
-                "MANIFEST_SIGNING_KEY_FILE": "./config-test-secret.bin",
-                "MANIFEST_SIGNING_KEY_PASSPHRASE_FILE": "./config-test-secret.bin",
             }
         )
     environment.update(environment_overrides or {})
@@ -202,8 +208,10 @@ class ComposeTopologyTest(unittest.TestCase):
         self.assertEqual(
             {name: definition["file"] for name, definition in production["secrets"].items()},
             {
-                "manifest_signing_key": "./config-test-secret.bin",
-                "manifest_signing_key_passphrase": "./config-test-secret.bin",
+                "manifest_signing_key": str(COMPOSE_DIR / "config-test-secret.bin"),
+                "manifest_signing_key_passphrase": str(
+                    COMPOSE_DIR / "config-test-secret.bin"
+                ),
             },
         )
         self.assertEqual(
