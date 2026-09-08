@@ -48,10 +48,16 @@
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-subtle: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --dur-micro: 120ms;
   --dur-short: 220ms;
   --dur-long: 420ms;
   --dur-status: 280ms;
+  --dur-pulse: 2400ms;
+  --dur-scan: 3000ms;
+  --dur-decompose: 1800ms;
+  --motif-node-size: 4px;
 
   --rule-hair: 1px;
   --rule-fine: 2px;

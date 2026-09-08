@@ -1923,3 +1923,210 @@ progress {
     transform: none;
   }
 }
+
+.cryptographic-motif {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  pointer-events: none;
+}
+
+.cryptographic-motif-svg {
+  display: block;
+  overflow: visible;
+}
+
+.motif-backdrop {
+  fill: var(--color-paper-2);
+  fill-opacity: 0.15;
+}
+
+.motif-document {
+  stroke: var(--color-rule);
+  stroke-width: var(--rule-thin);
+  stroke-dasharray: 4 4;
+  fill: none;
+  opacity: 0.4;
+  transition: stroke var(--dur-status) var(--ease-out), opacity var(--dur-status) var(--ease-out);
+}
+
+.motif-axes {
+  stroke: var(--color-rule-2);
+  stroke-width: var(--rule-thin);
+  opacity: 0.5;
+  transition: stroke var(--dur-status) var(--ease-out), opacity var(--dur-status) var(--ease-out);
+}
+
+.motif-axis-line {
+  stroke: inherit;
+  stroke-width: inherit;
+}
+
+.motif-grid-ring {
+  fill: none;
+  stroke: var(--color-rule-soft);
+  stroke-width: var(--rule-thin);
+  stroke-dasharray: 3 3;
+  opacity: 0.35;
+}
+
+.motif-wavelets {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.6;
+  transition: stroke var(--dur-status) var(--ease-out), opacity var(--dur-status) var(--ease-out);
+}
+
+.motif-wavelet-path {
+  fill: none;
+  stroke: inherit;
+  stroke-width: inherit;
+}
+
+.motif-hash-fragments {
+  fill: var(--color-muted);
+  opacity: 0.5;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  transition: fill var(--dur-status) var(--ease-out), opacity var(--dur-status) var(--ease-out);
+}
+
+.motif-hash-pip {
+  fill: var(--color-muted);
+  transition: fill var(--dur-status) var(--ease-out), transform var(--dur-status) var(--ease-out);
+}
+
+.motif-nodes {
+  fill: var(--color-accent);
+  stroke: var(--color-surface);
+  stroke-width: 1.5;
+  transition: fill var(--dur-status) var(--ease-out);
+}
+
+.motif-node {
+  transform-origin: center;
+  transition: fill var(--dur-status) var(--ease-out), transform var(--dur-status) var(--ease-out);
+}
+
+.motif-seal {
+  fill: none;
+  stroke: var(--color-ink);
+  stroke-width: var(--rule-fine);
+  opacity: 0.7;
+  transition: stroke var(--dur-status) var(--ease-out), opacity var(--dur-status) var(--ease-out), transform var(--dur-status) var(--ease-out);
+}
+
+.motif-seal-geometry,
+.motif-seal-inner-ring {
+  fill: none;
+  stroke: inherit;
+  stroke-width: inherit;
+}
+
+.motif-scan-trace {
+  stroke: var(--color-focus);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  opacity: 0;
+}
+
+.motif-core {
+  fill: var(--color-accent);
+  stroke: var(--color-surface);
+  stroke-width: 2;
+  transform-origin: 100px 100px;
+  transition: fill var(--dur-status) var(--ease-out), transform var(--dur-status) var(--ease-out);
+}
+
+.cryptographic-motif[data-stage="hashing"] .motif-hash-pip {
+  fill: var(--color-focus);
+  opacity: 0.9;
+}
+
+.cryptographic-motif[data-stage="hashing"] .motif-hash-fragments {
+  fill: var(--color-focus);
+  opacity: 0.85;
+}
+
+.cryptographic-motif[data-stage="decomposing"] .motif-wavelets {
+  stroke: var(--color-focus);
+  opacity: 0.9;
+  stroke-width: 2;
+}
+
+.cryptographic-motif[data-stage="decomposing"] .motif-axes {
+  stroke: var(--color-accent);
+  opacity: 0.75;
+}
+
+.cryptographic-motif[data-stage="signing"] .motif-nodes {
+  fill: var(--color-accent);
+}
+
+.cryptographic-motif[data-stage="signing"] .motif-core {
+  fill: var(--color-accent);
+}
+
+.cryptographic-motif[data-stage="verifying"] .motif-scan-trace {
+  opacity: 0.85;
+}
+
+.cryptographic-motif[data-stage="verifying"] .motif-wavelets {
+  stroke: var(--color-focus);
+  opacity: 0.8;
+}
+
+.cryptographic-motif[data-stage="sealed"] .motif-seal {
+  stroke: var(--color-success);
+  opacity: 1;
+}
+
+.cryptographic-motif[data-stage="sealed"] .motif-core {
+  fill: var(--color-success);
+}
+
+.cryptographic-motif[data-stage="sealed"] .motif-nodes {
+  fill: var(--color-success);
+}
+
+.cryptographic-motif[data-stage="sealed"] .motif-wavelets {
+  stroke: var(--color-success);
+  opacity: 0.7;
+}
+
+.cryptographic-motif[data-stage="tampered"] .motif-seal {
+  stroke: var(--color-error);
+  opacity: 1;
+}
+
+.cryptographic-motif[data-stage="tampered"] .motif-core {
+  fill: var(--color-error);
+}
+
+.cryptographic-motif[data-stage="tampered"] .motif-nodes {
+  fill: var(--color-error);
+}
+
+.cryptographic-motif[data-stage="tampered"] .motif-wavelets {
+  stroke: var(--color-error);
+  opacity: 0.85;
+}
+
+.cryptographic-motif[data-stage="tampered"] .motif-axes {
+  stroke: var(--color-error);
+  opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cryptographic-motif *,
+  .cryptographic-motif *::before,
+  .cryptographic-motif *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

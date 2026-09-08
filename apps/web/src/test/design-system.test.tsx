@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { appRoutes } from "../app/router";
 import { createQueryClient } from "../app/queryClient";
+import { CryptographicMotif } from "../components/CryptographicMotif";
 
 const ORGANIZATION_ID = "00000000-0000-4000-8000-000000000002";
 const USER_ID = "00000000-0000-4000-8000-000000000001";
@@ -210,5 +211,29 @@ describe("SplitBind design system", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sao chép mã công việc" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Đã sao chép mã công việc" })).toBeVisible());
     expect(writeText).toHaveBeenCalledWith(JOB_ID);
+  });
+
+  it("renders CryptographicMotif with semantic SVG and updates visual elements by stage", () => {
+    const { rerender } = render(<CryptographicMotif stage="idle" size={200} />);
+
+    const motif = screen.getByRole("img", { name: /cryptographic motif/i });
+    expect(motif).toBeInTheDocument();
+    expect(motif.tagName.toLowerCase()).toBe("svg");
+    expect(motif.closest(".cryptographic-motif")).toHaveAttribute("data-stage", "idle");
+
+    expect(motif.querySelector(".motif-axes")).toBeInTheDocument();
+    expect(motif.querySelector(".motif-wavelets")).toBeInTheDocument();
+    expect(motif.querySelector(".motif-hash-fragments")).toBeInTheDocument();
+    expect(motif.querySelectorAll(".motif-node").length).toBeGreaterThanOrEqual(4);
+    expect(motif.querySelector(".motif-seal")).toBeInTheDocument();
+
+    rerender(<CryptographicMotif stage="decomposing" />);
+    expect(motif.closest(".cryptographic-motif")).toHaveAttribute("data-stage", "decomposing");
+
+    rerender(<CryptographicMotif stage="sealed" />);
+    expect(motif.closest(".cryptographic-motif")).toHaveAttribute("data-stage", "sealed");
+
+    rerender(<CryptographicMotif stage="tampered" />);
+    expect(motif.closest(".cryptographic-motif")).toHaveAttribute("data-stage", "tampered");
   });
 });
