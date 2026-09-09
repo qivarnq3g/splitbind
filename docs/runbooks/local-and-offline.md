@@ -32,7 +32,7 @@ powershell -ExecutionPolicy Bypass -File infra/scripts/run_demo.ps1 -Stop
 
 Lệnh dừng revalidate executable identity và start time trước khi dừng từng PID, thử dừng hết các PID độc lập, rồi luôn thử hạ đúng Compose project `splitbind-demo` mà không dùng `--volumes`. PID timeout hoặc mismatch không bị xóa khỏi state để người vận hành xử lý an toàn. SQLite, dữ liệu MinIO và secret tổng hợp được giữ lại để restart có thể lặp lại; xóa chúng chỉ khi đã xác minh đích chính xác và chấp nhận mất state demo. Nếu startup thất bại, runner rollback chỉ các process/service do lần gọi đó tạo và giữ log cùng PID chưa dừng được để chẩn đoán.
 
-Tại lần xác minh Task 7, Docker CLI và Compose có mặt nhưng daemon không hoạt động. Vì vậy parser/static contract và đường lỗi prerequisite đã được quan sát, còn startup runtime MinIO/API/worker/Vite end-to-end chưa được xác minh trên host đó.
+Ngày 2026-09-04, runner một lệnh đã được quan sát khởi động thành công MinIO, API, worker và Vite trên host Windows. Một E2E trình duyệt thật đã đăng nhập, cấp phát PDF tổng hợp, tải kết quả và tải lại chính kết quả đó để nhận trạng thái `VERIFIED_INTACT` mà không có lỗi console. Bằng chứng này chỉ xác nhận runtime demo cục bộ; nó không thay thế các gate PostgreSQL, RabbitMQ, Rust worker, R2 hoặc production.
 
 ## Local profiles
 

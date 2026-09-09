@@ -5,6 +5,7 @@ const ORGANIZATION_ID = "00000000-0000-4000-8000-000000000002";
 const VERIFICATION_ID = "00000000-0000-4000-8000-000000000007";
 
 async function sessionAs(page: Page, role: "administrator" | "issuer" | "verifier" | "auditor") {
+  await page.route("**/api/v1/demo/capabilities", route => route.fulfill({ json: { enabled: false } }));
   await page.route("**/api/v1/auth/session", (route) => route.fulfill({
     contentType: "application/json",
     body: JSON.stringify({ authenticated: true, csrf_token: "csrf-token", user: {
@@ -51,6 +52,7 @@ for (const role of ["administrator", "auditor", "verifier"] as const) {
     }));
     await page.goto(`/verifications/${VERIFICATION_ID}`);
     await expect(page.getByRole("heading", { name: "Không phát hiện watermark" })).toBeVisible();
+    await page.getByText("Xem chi tiết kỹ thuật", { exact: true }).click();
     await expect(page.getByText("không có nghĩa tài liệu chắc chắn không thuộc hệ thống", { exact: false })).toBeVisible();
   });
 }

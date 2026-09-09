@@ -4,36 +4,48 @@ import gsap from "gsap";
 import { useLocation } from "react-router-dom";
 
 gsap.registerPlugin(useGSAP);
-
 export function MotionRoute({ children }: PropsWithChildren) {
   const root = useRef<HTMLDivElement>(null);
   const location = useLocation();
-
   useGSAP(
     () => {
-      if (typeof window.matchMedia !== "function") {
-        gsap.set(root.current, { autoAlpha: 1 });
-        return;
+      if (typeof window.matchMedia !== "function") return;
+      window.scrollTo({ top: 0, behavior: "instant" });
+      const heading = root.current?.querySelector<HTMLElement>("h1");
+      if (heading) {
+        heading.tabIndex = -1;
+        heading.focus({ preventScroll: true });
       }
-
       const media = gsap.matchMedia();
-
       media.add("(prefers-reduced-motion: no-preference)", () => {
         gsap.fromTo(
           root.current,
-          { autoAlpha: 0, y: 10 },
-          { autoAlpha: 1, y: 0, duration: 0.38, ease: "power2.out", clearProps: "transform,opacity,visibility" },
+          { opacity: 0.6 },
+          {
+            opacity: 1,
+            duration: 0.18,
+            ease: "power2.out",
+            clearProps: "opacity",
+          },
         );
       });
-
-      media.add("(prefers-reduced-motion: reduce)", () => {
-        gsap.fromTo(root.current, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.12, clearProps: "opacity,visibility" });
-      });
-
       return () => media.revert();
     },
     { scope: root, dependencies: [location.pathname], revertOnUpdate: true },
   );
-
-  return <div ref={root} className="route-stage" data-motion-page>{children}</div>;
+  const rank = location.pathname.startsWith("/jobs/")
+    ? 2
+    : /^\/(issuances|verifications)\//.test(location.pathname)
+      ? 3
+      : 1;
+  return (
+    <div
+      ref={root}
+      className="route-stage"
+      data-motion-page
+      data-stage-rank={rank}
+    >
+      {children}
+    </div>
+  );
 }

@@ -1,7 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 
 import { QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { RouterProvider, createMemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -298,6 +298,22 @@ describe("issuance browser workflow", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Không thể tải tệp lên kho lưu trữ");
   });
 
+  it("lets the issuer remove a local selection without starting a job", async () => {
+    const requests: string[] = [];
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async input => {
+      const request = input instanceof Request ? input : new Request(input);
+      requests.push(request.method);
+      return json(session("issuer"));
+    }));
+    renderApp();
+    const fileInput = await screen.findByLabelText("Tệp PDF");
+    fireEvent.change(fileInput, { target: { files: [new File(["%PDF-1.4"], "thesis.pdf", { type: "application/pdf" })] } });
+    expect(screen.getByText("thesis.pdf")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Bỏ tệp đã chọn" }));
+    expect(screen.queryByText("thesis.pdf")).not.toBeInTheDocument();
+    expect(fileInput).toBeRequired();
+    expect(requests).not.toContain("POST");
+  });
   it("keeps the issuance screen read-only for an auditor", async () => {
     vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async () => json(session("auditor"))));
     renderApp();
@@ -401,7 +417,8 @@ describe("issuance browser workflow", () => {
     }));
     renderApp(`/issuances/${ISSUANCE_ID}`);
 
-    expect(await screen.findByText("Kết quả PDF hiện không có sẵn. Hãy kiểm tra trạng thái công việc hoặc chạy lại quy trình demo.")).toBeVisible();
+    expect(await screen.findByText("Kết quả PDF hiện không có sẵn. Hãy kiểm tra trạng thái công việc hoặc tạo bản cấp phát mới.")).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Bản cấp phát đã sẵn sàng" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Tải PDF kết quả" })).not.toBeInTheDocument();
   });
 
@@ -443,7 +460,7 @@ describe("issuance browser workflow", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Tải PDF kết quả" }));
 
-    expect(await screen.findByText("Kết quả PDF hiện không có sẵn. Hãy kiểm tra trạng thái công việc hoặc chạy lại quy trình demo.")).toBeVisible();
+    expect(await screen.findByText("Kết quả PDF hiện không có sẵn. Hãy kiểm tra trạng thái công việc hoặc tạo bản cấp phát mới.")).toBeVisible();
     await waitFor(() => expect(detailReads).toBe(2));
     expect(screen.queryByRole("button", { name: /tải/i })).not.toBeInTheDocument();
     expect(screen.queryByText("Hãy thử lại.")).not.toBeInTheDocument();

@@ -93,7 +93,7 @@ test("issuance browser contract journey", async ({ page }) => {
   await mockIssuerContract(page);
   page.on("request", (request) => {
     const path = new URL(request.url()).pathname;
-    if (path !== "/api/v1/auth/session" && (path.startsWith("/api/v1/") || path === "/direct-upload")) {
+    if (!["/api/v1/auth/session", "/api/v1/demo/capabilities"].includes(path) && (path.startsWith("/api/v1/") || path === "/direct-upload")) {
       workflow.push(path);
     }
   });

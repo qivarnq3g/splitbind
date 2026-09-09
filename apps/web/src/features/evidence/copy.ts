@@ -60,6 +60,7 @@ export function verificationCopy(
   algorithmLabel: AlgorithmLabel,
   exactFileHashMatch: boolean | null | undefined,
 ) {
+  if (status === "PROCESSING_FAILED" || status === "INVALID_MANIFEST") return STATUS_COPY[status];
   return isIntegrityNonExact(algorithmLabel, exactFileHashMatch) ? INTEGRITY_NON_EXACT_COPY : STATUS_COPY[status];
 }
 

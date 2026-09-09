@@ -23,6 +23,7 @@ services:
     environment:
       MINIO_ROOT_USER: ${DEMO_MINIO_ROOT_USER:?DEMO_MINIO_ROOT_USER is required}
       MINIO_ROOT_PASSWORD: ${DEMO_MINIO_ROOT_PASSWORD:?DEMO_MINIO_ROOT_PASSWORD is required}
+      MINIO_API_CORS_ALLOW_ORIGIN: "http://127.0.0.1:5173,http://localhost:5173"
     volumes:
       - type: bind
         source: ${DEMO_MINIO_DATA_PATH:?DEMO_MINIO_DATA_PATH must be a contained demo path}

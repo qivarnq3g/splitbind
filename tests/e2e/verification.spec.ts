@@ -55,12 +55,37 @@ async function mockVerifier(page: Page) {
   await page.route("**/api/v1/**", verificationApi);
 }
 
+test("route motion settles and reduced motion remains immediately readable", async ({ page }, testInfo) => {
+  await mockVerifier(page);
+  await page.addInitScript(() => {
+    const samples: string[] = [];
+    Object.assign(window, { routeMotionSamples: samples });
+    new MutationObserver(records => {
+      for (const record of records) {
+        const element = record.target;
+        if (element instanceof HTMLElement && element.classList.contains("route-stage")) samples.push(element.style.opacity);
+      }
+    }).observe(document, { subtree: true, attributes: true, attributeFilter: ["style"] });
+  });
+  await page.goto("/verify");
+  await expect(page.getByRole("heading", { name: "Xác minh tài liệu", exact: true })).toBeVisible();
+  await expect(page.locator(".route-stage")).toHaveCSS("opacity", "1");
+  const samples = await page.evaluate(() => (window as Window & { routeMotionSamples: string[] }).routeMotionSamples);
+  expect(samples.some(value => Number(value) > 0 && Number(value) < 1)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("motion-settled.png"), fullPage: true });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/verify");
+  await expect(page.getByRole("heading", { name: "Xác minh tài liệu", exact: true })).toBeVisible();
+  expect(await page.locator(".route-stage").evaluate(element => element.getAttribute("style") ?? "")).not.toContain("opacity");
+  await page.screenshot({ path: testInfo.outputPath("motion-reduced.png"), fullPage: true });
+});
+
 test("verification browser contract journey supports keyboard submission", async ({ page }) => {
   const workflow: string[] = [];
   await mockVerifier(page);
   page.on("request", (request) => {
     const path = new URL(request.url()).pathname;
-    if (path !== "/api/v1/auth/session" && (path.startsWith("/api/v1/") || path === "/direct-upload")) workflow.push(path);
+    if (!["/api/v1/auth/session", "/api/v1/demo/capabilities"].includes(path) && (path.startsWith("/api/v1/") || path === "/direct-upload")) workflow.push(path);
   });
   await page.route("https://storage.example.test/direct-upload", async (route) => {
     expect(route.request().headers()["x-amz-meta-sha256"]).toBe(PDF_SHA256);
@@ -82,7 +107,8 @@ test("verification browser contract journey supports keyboard submission", async
 test("verification evidence keeps facts, confidence, limits, and inference separate", async ({ page }) => {
   await mockVerifier(page);
   await page.goto(`/verifications/${VERIFICATION_ID}`);
-  for (const heading of ["Sự kiện", "Độ tin cậy", "Giới hạn", "Suy luận thận trọng"]) {
+  await page.getByText("Xem chi tiết kỹ thuật", { exact: true }).click();
+  for (const heading of ["Dữ liệu kỹ thuật", "Giới hạn của kết quả"]) {
     await expect(page.getByRole("heading", { name: heading })).toBeVisible();
   }
   await expect(page.getByText("API chưa cung cấp trang tương ứng và hình học từng trang", { exact: false })).toBeVisible();

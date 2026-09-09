@@ -117,6 +117,18 @@ describe("verification browser workflow", () => {
     expect(await screen.findByLabelText("Tệp cần kiểm chứng")).toBeVisible();
   });
 
+  it("makes a selected verification file replaceable before upload", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async () => json(session("verifier"))));
+    renderApp();
+    const fileInput = await screen.findByLabelText("Tệp cần kiểm chứng");
+    fireEvent.change(fileInput, { target: { files: [new File(["%PDF-1.4"], "suspect.pdf", { type: "application/pdf" })] } });
+    expect(screen.getByText("suspect.pdf")).toBeVisible();
+    expect(screen.getByText("Tệp được chọn trên thiết bị")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Bỏ tệp đã chọn" }));
+    expect(screen.queryByText("suspect.pdf")).not.toBeInTheDocument();
+    expect(screen.getByText("Chưa chọn tệp")).toBeVisible();
+  });
+
   it("accepts PDF, PNG, and JPEG verification inputs without weakening issuance validation", () => {
     expect(() => validateVerificationFile(new File(["pdf"], "sample.pdf", { type: "application/pdf" }))).not.toThrow();
     expect(() => validateVerificationFile(new File(["png"], "sample.png", { type: "image/png" }))).not.toThrow();

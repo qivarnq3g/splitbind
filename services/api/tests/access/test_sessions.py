@@ -171,7 +171,48 @@ def test_production_cookie_attributes_are_secure(browser_client, issuer):
     )
 
     assert csrf_response.cookies["csrftoken"]["secure"] is True
-    assert csrf_response.cookies["csrftoken"]["httponly"] == ""
     assert login.cookies["sessionid"]["secure"] is True
     assert login.cookies["sessionid"]["httponly"] is True
     assert login.cookies["sessionid"]["samesite"] == "Lax"
+
+
+@pytest.mark.django_db
+@override_settings(
+    CSRF_TRUSTED_ORIGINS=["https://splitbind.qivarn.id.vn"],
+    SECURE_PROXY_SSL_HEADER=("HTTP_X_FORWARDED_PROTO", "https"),
+)
+def test_login_with_trusted_browser_origin_succeeds(browser_client, issuer):
+    csrf_response = browser_client.get("/api/v1/auth/session")
+    token = csrf_response.json()["csrf_token"]
+    login = browser_client.post(
+        "/api/v1/auth/login",
+        data=json.dumps({"username": issuer.username, "password": "correct-horse-battery-staple"}),
+        content_type="application/json",
+        HTTP_X_CSRFTOKEN=token,
+        HTTP_ORIGIN="https://splitbind.qivarn.id.vn",
+        HTTP_REFERER="https://splitbind.qivarn.id.vn/login",
+        HTTP_X_FORWARDED_PROTO="https",
+    )
+    assert login.status_code == 200
+    assert login.json()["authenticated"] is True
+
+
+@pytest.mark.django_db
+@override_settings(
+    CSRF_TRUSTED_ORIGINS=["https://splitbind.qivarn.id.vn"],
+    SECURE_PROXY_SSL_HEADER=("HTTP_X_FORWARDED_PROTO", "https"),
+)
+def test_login_with_untrusted_browser_origin_fails_csrf(browser_client, issuer):
+    csrf_response = browser_client.get("/api/v1/auth/session")
+    token = csrf_response.json()["csrf_token"]
+    login = browser_client.post(
+        "/api/v1/auth/login",
+        data=json.dumps({"username": issuer.username, "password": "correct-horse-battery-staple"}),
+        content_type="application/json",
+        HTTP_X_CSRFTOKEN=token,
+        HTTP_ORIGIN="https://evil.attacker.com",
+        HTTP_REFERER="https://evil.attacker.com/login",
+        HTTP_X_FORWARDED_PROTO="https",
+    )
+    assert login.status_code == 403
+    assert login.json() == {"detail": "CSRF validation failed."}

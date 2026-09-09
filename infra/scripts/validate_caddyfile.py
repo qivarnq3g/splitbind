@@ -152,7 +152,9 @@ def validate_caddyfile(text: str) -> dict[str, object]:
         ("Permissions-Policy", "camera=(), microphone=(), geolocation=()"),
         (
             "Content-Security-Policy",
-            "default-src 'self'; object-src 'none'; base-uri 'self'; "
+            "default-src 'self'; connect-src 'self' "
+            "https://*.r2.cloudflarestorage.com; font-src 'self' data:; "
+            "img-src 'self' data: blob:; object-src 'none'; base-uri 'self'; "
             "frame-ancestors 'none'",
         ),
     )

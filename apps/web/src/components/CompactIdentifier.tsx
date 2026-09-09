@@ -1,9 +1,15 @@
-import { Check, Copy } from "lucide-react";
-import { useState } from "react";
+﻿import { Check, Copy } from "lucide-react";
+import { useEffect, useState } from "react";
 
 export function CompactIdentifier({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);
   const compact = value.length > 13 ? `${value.slice(0, 8)}…${value.slice(-4)}` : value;
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 2500);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
 
   async function copy() {
     try {

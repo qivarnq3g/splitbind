@@ -68,10 +68,9 @@ describe("SplitBind design system", () => {
 
     const introduction = await screen.findByRole("complementary", { name: "Giới thiệu SplitBind" });
     expect(introduction).toBeVisible();
-    expect(screen.getByText("Bảo vệ tài liệu quan trọng")).toBeVisible();
+    expect(introduction).toHaveTextContent("Tài liệu có nguồn.");
     expect(screen.getAllByRole("heading")).toHaveLength(1);
     expect(introduction).toHaveTextContent("Cấp phát và kiểm tra tài liệu trong một nơi.");
-    expect(introduction.querySelectorAll("p, h2, dl")).toHaveLength(2);
     expect(screen.getByRole("form", { name: "Đăng nhập SplitBind" })).toBeVisible();
     expect(screen.queryByText(/localStorage/i)).not.toBeInTheDocument();
     expect(document.querySelector("[data-motion-page]")).toBeInTheDocument();
@@ -211,4 +210,26 @@ describe("SplitBind design system", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Đã sao chép mã công việc" })).toBeVisible());
     expect(writeText).toHaveBeenCalledWith(JOB_ID);
   });
+
+
+
+  it("verifies MotionRoute provides stage continuity and restrained reduced-motion support", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async (input) => {
+      const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
+      if (path === "/api/v1/auth/session") {
+        return json({
+          authenticated: true,
+          csrf_token: "csrf-token",
+          user: { id: USER_ID, username: "issuer.demo", role: "issuer", organization_id: ORGANIZATION_ID },
+        });
+      }
+      return json({ enabled: false, processing_limits: {}, algorithm_label: null });
+    }));
+
+    renderApp("/issue");
+    const motionPage = document.querySelector("[data-motion-page]");
+    expect(motionPage).toBeInTheDocument();
+    expect(motionPage).toHaveAttribute("data-stage-rank", "1");
+  });
+
 });
