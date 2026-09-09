@@ -16,6 +16,7 @@ export function LoginPage() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!session.isSuccess || login.isPending) return;
     try {
       await login.mutateAsync({ username, password });
       const destination =
@@ -58,7 +59,7 @@ export function LoginPage() {
           className="form-stack"
           aria-label="Đăng nhập SplitBind"
           onSubmit={(event) => void submit(event)}
-          aria-busy={login.isPending}
+          aria-busy={session.isPending || login.isPending}
         >
           <div className="field">
             <label htmlFor="username">Tên đăng nhập</label>
@@ -97,7 +98,16 @@ export function LoginPage() {
               />
             </div>
           </div>
-          {login.error ? (
+          {session.isPending ? (
+            <p className="form-error" role="status">Đang chuẩn bị đăng nhập…</p>
+          ) : session.error ? (
+            <div>
+              <p className="form-error" role="alert">Không thể chuẩn bị phiên đăng nhập. Vui lòng thử lại.</p>
+              <button className="button button-secondary" type="button" disabled={session.isFetching} onClick={() => void session.refetch()}>
+                Thử lại kết nối
+              </button>
+            </div>
+          ) : login.error ? (
             <p className="form-error" role="alert">
               {login.error.message}
             </p>
@@ -109,7 +119,7 @@ export function LoginPage() {
           <button
             className="button button-primary login-button"
             type="submit"
-            disabled={login.isPending}
+            disabled={!session.isSuccess || login.isPending}
             data-state={login.isPending ? "loading" : "default"}
           >
             <span>{login.isPending ? "Đang đăng nhập" : "Đăng nhập"}</span>
