@@ -6,7 +6,7 @@ import { canViewVerification, useSession } from "../features/auth/session";
 import { EvidenceSummary } from "../features/evidence/EvidenceSummary";
 import {
   verificationCopy,
-  isIntegrityNonExact,
+  integrityVerdict,
 } from "../features/evidence/copy";
 import { JOB_LABELS } from "../features/jobs/useJob";
 import { getVerification } from "../features/verifications/verifications";
@@ -17,7 +17,7 @@ function missingEvidenceCopy(status: string | null): string {
   if (status === "cancelled")
     return "Công việc đã bị hủy nên không có kết quả kiểm chứng.";
   if (status === "succeeded")
-    return "Công việc đã hoàn tất nhưng API chưa cung cấp kết quả kiểm chứng; giao diện không tự suy luận kết quả.";
+    return "Công việc đã hoàn tất nhưng chưa có kết quả kiểm chứng. Thử tải lại hồ sơ hoặc liên hệ quản trị viên với mã kiểm chứng.";
   return "Bằng chứng chưa sẵn sàng trong khi công việc đang được xử lý.";
 }
 export function VerificationDetailPage() {
@@ -47,22 +47,18 @@ export function VerificationDetailPage() {
         data.status,
         data.evidence.algorithm_label,
         data.evidence.exact_file_hash_match,
+        data.evidence.manifest_signature_valid,
       )
     : null;
-  const nonExact =
-    data &&
-    isIntegrityNonExact(
-      data.evidence.algorithm_label,
-      data.evidence.exact_file_hash_match,
-    );
+  const integrity = data?.status && data.evidence.algorithm_label === "integrity_release_v1"
+    ? integrityVerdict(data.status, data.evidence.exact_file_hash_match, data.evidence.manifest_signature_valid)
+    : null;
   const tone =
-    data?.status === "PROCESSING_FAILED" || data?.status === "INVALID_MANIFEST"
+    integrity?.tone ?? (data?.status === "PROCESSING_FAILED" || data?.status === "INVALID_MANIFEST"
       ? "error"
-      : nonExact
-        ? "warning"
-        : data?.status === "VERIFIED_INTACT"
+      : data?.status === "VERIFIED_INTACT"
           ? "success"
-          : "warning";
+          : "warning");
   return (
     <main className="workspace-page result-page">
       <header className="page-heading">
@@ -121,7 +117,7 @@ export function VerificationDetailPage() {
                   <ArrowRight size={16} aria-hidden="true" />
                 </Link>
                 <p>
-                  Kết quả không xác định ai đã chỉnh sửa hoặc phát tán tài liệu.
+                  {integrity?.next ?? "Kết quả không xác định ai đã chỉnh sửa hoặc phát tán tài liệu."}
                 </p>
               </div>
               <EvidenceSummary

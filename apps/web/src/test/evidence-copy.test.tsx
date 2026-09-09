@@ -95,8 +95,8 @@ describe("verification evidence language", () => {
       }}
     />);
 
-    expect(screen.getByText("Tệp không khớp chính xác với bản đã cấp phát.")).toBeVisible();
-    expect(screen.getByText("Nhận diện fingerprint sau biến đổi chưa khả dụng.")).toBeInTheDocument();
+    expect(screen.getByText(/Không tìm thấy bản cấp phát có mã SHA-256 trùng/)).toBeVisible();
+    expect(screen.getByText(/Không định vị vùng chỉnh sửa/)).toBeInTheDocument();
     expect(screen.queryByText(STATUS_COPY.NO_WATERMARK.inference)).not.toBeInTheDocument();
   });
 

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { FileKey2, LogOut, ScanSearch } from "lucide-react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   canCreateIssuance,
   canCreateVerification,
@@ -11,6 +11,7 @@ import { getDemoCapabilities } from "../features/demo/capabilities";
 import { MotionRoute } from "./MotionRoute";
 
 export function AppShell() {
+  const location = useLocation();
   const session = useSession();
   const logout = useLogout();
   const user = session.data?.user;
@@ -89,13 +90,13 @@ export function AppShell() {
         <MotionRoute>
           <Outlet />
         </MotionRoute>
-        {user &&
+        {user && !location.pathname.startsWith("/verifications/") &&
         capabilities.data?.algorithm_label === "integrity_release_v1" ? (
           <aside className="capability-note" aria-label="Khả năng xác minh">
             <strong>Xác minh chính xác file đã cấp phát.</strong> Nhận diện
             fingerprint sau biến đổi chưa khả dụng.
           </aside>
-        ) : capabilities.data?.enabled ? (
+        ) : capabilities.data?.enabled && !location.pathname.startsWith("/verifications/") ? (
           <aside className="capability-note" aria-label="Giới hạn chế độ demo">
             <p>
               <strong>Bản demo.</strong> Kết quả chỉ mang tính kỹ thuật, không

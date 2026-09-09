@@ -618,6 +618,19 @@ code {
 .evidence-facts dd {
   margin: 0;
 }
+.integrity-evidence .technical-details-body p {
+  max-width: 65ch;
+  margin-top: var(--space-xs);
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+@media (max-width: 30rem) {
+  .integrity-evidence .evidence-facts > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-2xs);
+    padding-block: var(--space-sm);
+  }
+}
 .evidence-absence,
 .limitation-list,
 .map-unavailable,

@@ -74,7 +74,7 @@ it.each(["PROCESSING_FAILED", "INVALID_MANIFEST"] as const)(
     expect(copy.label).toBe(
       status === "PROCESSING_FAILED"
         ? "Xử lý thất bại"
-        : "Manifest không hợp lệ",
+        : "Hồ sơ cấp phát không hợp lệ",
     );
   },
 );

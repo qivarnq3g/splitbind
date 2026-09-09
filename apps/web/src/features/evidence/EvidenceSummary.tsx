@@ -1,9 +1,9 @@
 import type { components } from "../../api/generated/schema";
 import { IntegrityMap } from "./IntegrityMap";
+import { IntegrityEvidence } from "./IntegrityEvidence";
 import {
   LIMITATION_COPY,
   STATUS_LIMITATIONS,
-  isIntegrityNonExact,
   verificationCopy,
   type VerificationStatus,
 } from "./copy";
@@ -37,18 +37,14 @@ export function EvidenceSummary({
   evidence: Evidence;
   showConclusion?: boolean;
 }) {
+  if (evidence.algorithm_label === "integrity_release_v1") {
+    return <IntegrityEvidence status={status} evidence={evidence} showConclusion={showConclusion} />;
+  }
   const knownLimitations = (evidence.limitations ?? []).filter(
     (id) => id in LIMITATION_COPY,
   );
-  const integrityNonExact = isIntegrityNonExact(
-    evidence.algorithm_label,
-    evidence.exact_file_hash_match,
-  );
-  const defaultLimitations = integrityNonExact
-    ? ["fingerprint.transformed_attribution_unavailable", "technical_not_legal"]
-    : STATUS_LIMITATIONS[status];
   const limitationIds = Array.from(
-    new Set([...defaultLimitations, ...knownLimitations]),
+    new Set([...STATUS_LIMITATIONS[status], ...knownLimitations]),
   );
   const unknownLimitationCount =
     (evidence.limitations?.length ?? 0) - knownLimitations.length;

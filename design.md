@@ -22,6 +22,8 @@ Verify: document and action, then scope explanation. Distinct task heading and i
 Job: real status, explanation, four server lifecycle steps, next action, record metadata. Never invent percentage or time remaining.
 Results: verdict first, actionable downloads/next steps, evidence disclosure, metadata last. Each verdict has its own semantic tone. Missing data stays explicit.
 
+Integrity reports use a dedicated algorithm-aware presentation: SHA-256 lookup and issuance-record signature only, plus page count when supplied. Success requires an intact status, an exact match and a valid signature together. A missing source is not evidence that a known document was edited. No-match signature checks are not performed; other missing signature evidence stays unresolved. Research scores, vote counts and region maps do not belong in integrity reports. Show one scope explanation and actionable next steps, without duplicate shell warnings. Stack evidence labels above values at narrow mobile widths.
+
 ## Motion and accessibility
 
 One 180ms route opacity transition; one 220ms state resolution via scoped useGSAP with revertOnUpdate. No repeat loops except an indeterminate processing indicator. No ScrollTrigger. Reduced motion immediately shows final state. Errors/focus are instant. Native file controls support keyboard and drop, visible labels, local file selection is distinct from server upload. Mobile navigation stays directly available; no hidden drawer for two destinations. Long values wrap at source.

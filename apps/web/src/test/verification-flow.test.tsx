@@ -162,7 +162,7 @@ describe("verification browser workflow", () => {
     expect(document.body).not.toHaveTextContent(/mã người nhận:\s*[0-9a-f-]{36}/i);
   });
 
-  it("labels a non-exact integrity result as an exact-file mismatch", async () => {
+  it("reports no matching issuance without asserting a known source was edited", async () => {
     vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async (input) => {
       const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
       if (path === "/api/v1/auth/session") return json(session("verifier"));
@@ -180,10 +180,10 @@ describe("verification browser workflow", () => {
 
     renderApp(`/verifications/${VERIFICATION_ID}`);
 
-    expect(await screen.findByRole("heading", { name: "Không khớp file đã cấp phát" })).toBeVisible();
-    expect(screen.getByText("Tệp không khớp chính xác với bản đã cấp phát.")).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Chưa tìm thấy bản cấp phát khớp" })).toBeVisible();
+    expect(screen.getByText(/Không tìm thấy bản cấp phát có mã SHA-256 trùng/)).toBeVisible();
     fireEvent.click(screen.getByText("Xem chi tiết kỹ thuật"));
-    expect(screen.getByText("Nhận diện fingerprint sau biến đổi chưa khả dụng.")).toBeVisible();
+    expect(screen.getByText(/Không định vị vùng chỉnh sửa/)).toBeVisible();
   });
 
   it("shows a safe scoped denial for a foreign verification", async () => {
