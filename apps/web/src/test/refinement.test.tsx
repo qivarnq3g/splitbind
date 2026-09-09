@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, fireEvent } from "@testing-library/react";
+import { cleanup, render, screen, fireEvent, act, waitFor } from "@testing-library/react";
 import { DocumentFileInput } from "../components/DocumentFileInput";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, expect, it, vi } from "vitest";
@@ -11,6 +11,40 @@ import { verificationCopy } from "../features/evidence/copy";
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+});
+it("blocks login submission until session initialization has completed", async () => {
+  let resolveSession!: (response: Response) => void;
+  const pendingSession = new Promise<Response>((resolve) => { resolveSession = resolve; });
+  const fetchRequest = vi.fn(() => pendingSession);
+  vi.stubGlobal("fetch", fetchRequest);
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <RouterProvider router={createMemoryRouter(appRoutes, { initialEntries: ["/login"] })} />
+    </QueryClientProvider>,
+  );
+  const submit = screen.getByRole("button", { name: "Đăng nhập" });
+  expect(submit).toBeDisabled();
+  await waitFor(() => expect(fetchRequest).toHaveBeenCalledTimes(1));
+  fireEvent.submit(screen.getByRole("form", { name: "Đăng nhập SplitBind" }));
+  await act(async () => {});
+  expect(fetchRequest).toHaveBeenCalledTimes(1);
+  await act(async () => resolveSession(new Response(JSON.stringify({ authenticated: false, user: null }), {
+    headers: { "Content-Type": "application/json" },
+  })));
+  await waitFor(() => expect(submit).toBeEnabled());
+});
+it("keeps login blocked after session failure and allows connection retry", async () => {
+  const fetchRequest = vi.fn()
+    .mockResolvedValueOnce(new Response("{}", { status: 503, headers: { "Content-Type": "application/json" } }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ authenticated: false, user: null }), { headers: { "Content-Type": "application/json" } }));
+  vi.stubGlobal("fetch", fetchRequest);
+  const client = createQueryClient();
+  client.setDefaultOptions({ queries: { retry: false } });
+  render(<QueryClientProvider client={client}><RouterProvider router={createMemoryRouter(appRoutes, { initialEntries: ["/login"] })} /></QueryClientProvider>);
+  await screen.findByRole("alert");
+  expect(screen.getByRole("button", { name: "Đăng nhập" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Thử lại kết nối" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Đăng nhập" })).toBeEnabled());
 });
 it("sends an authenticated verifier to verification instead of the forbidden issuance page", async () => {
   vi.stubGlobal(
