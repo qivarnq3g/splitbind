@@ -1,290 +1,200 @@
 import { useRef } from "react";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
-import { Activity, ArrowRight, Check, CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { ArrowRight, Check, Clock3 } from "lucide-react";
 import { Link, useLocation, useParams } from "react-router-dom";
-
 import { CompactIdentifier } from "../components/CompactIdentifier";
-import { CryptographicMotif, type CryptographicMotifStage } from "../components/CryptographicMotif";
-import { EmptyState } from "../components/EmptyState";
 import { StatusBadge } from "../components/StatusBadge";
-import { JOB_LABELS, useJob } from "../features/jobs/useJob";
-
+import {
+  JOB_LABELS,
+  TERMINAL_JOB_STATUSES,
+  useJob,
+} from "../features/jobs/useJob";
 gsap.registerPlugin(useGSAP);
-
-const LIFECYCLE_STEPS = [
-  { key: "created", label: "Tiếp nhận", hint: "Ghi nhận yêu cầu" },
-  { key: "queued", label: "Hàng đợi", hint: "Sẵn sàng xử lý" },
-  { key: "processing", label: "Xử lý bảo vệ", hint: "Bảo vệ & Ký số" },
-  { key: "succeeded", label: "Hoàn tất", hint: "Niêm phong thành công" },
-] as const;
-
-function getStepIndex(status: string | undefined): number {
-  if (!status) return 0;
-  if (status === "created") return 0;
-  if (status === "queued") return 1;
-  if (status === "processing") return 2;
-  if (status === "succeeded") return 3;
-  if (status === "failed" || status === "dead_lettered" || status === "cancelled") return 2;
-  return 1;
-}
-
-function getMotifStage(status: string | undefined, isVerification: boolean): CryptographicMotifStage {
-  if (!status) return "idle";
-  if (status === "succeeded") return "sealed";
-  if (status === "failed" || status === "dead_lettered" || status === "cancelled") return "tampered";
-  if (status === "processing") return isVerification ? "verifying" : "decomposing";
-  if (status === "queued") return "hashing";
-  if (status === "created") return "idle";
-  if (status === "retryable_failed") return "tampered";
-  return "idle";
-}
-
-function getTelemetryStatusMessage(status: string | undefined, isVerification: boolean): string {
-  switch (status) {
-    case "created":
-      return "Hệ thống đã tiếp nhận yêu cầu và bắt đầu chuẩn bị xử lý.";
-    case "queued":
-      return "Đang chờ điều phối lượt xử lý trong hệ thống.";
-    case "processing":
-      return isVerification
-        ? "Đang kiểm tra từng lớp nội dung và đối chiếu chữ ký bảo vệ..."
-        : "Đang nhúng dấu vết bảo vệ ẩn và tạo chữ ký số cho tài liệu...";
-    case "retryable_failed":
-      return "Hệ thống gặp gián đoạn tạm thời và đang tự động thử lại.";
-    case "succeeded":
-      return isVerification
-        ? "Kiểm tra hoàn tất. Bằng chứng toàn vẹn đã sẵn sàng để xem."
-        : "Tài liệu đã được niêm phong bảo mật và tạo thành công.";
-    case "failed":
-    case "dead_lettered":
-      return "Xử lý không thành công do tệp không đúng định dạng hoặc bị lỗi.";
-    case "cancelled":
-      return "Quy trình xử lý đã được dừng.";
-    default:
-      return "Đang theo dõi trạng thái công việc...";
-  }
-}
-
 export function JobDetailPage() {
   const { id } = useParams();
   const location = useLocation();
-  const containerRef = useRef<HTMLElement>(null);
-  const workflowState = location.state as { issuanceId?: string; verificationId?: string } | null;
-  const issuanceId = workflowState?.issuanceId;
-  const verificationId = workflowState?.verificationId;
+  const root = useRef<HTMLElement>(null);
+  const state = location.state as {
+    issuanceId?: string;
+    verificationId?: string;
+  } | null;
   const job = useJob(id ?? null);
-
-  const isCompleted = job.data?.status === "succeeded";
-  const isFailed = job.data?.status === "failed" || job.data?.status === "dead_lettered" || job.data?.status === "cancelled";
-  const isProcessing = job.data?.status === "processing" || job.data?.status === "queued";
-  const isVerification = job.data?.kind === "verification" || Boolean(verificationId ?? job.data?.verification_id);
-  const currentStep = getStepIndex(job.data?.status);
-  const motifStage = getMotifStage(job.data?.status, isVerification);
-
+  const data = job.data;
+  const done = data?.status === "succeeded";
+  const terminal = Boolean(data && TERMINAL_JOB_STATUSES.has(data.status));
+  const failed = terminal && !done;
+  const verification =
+    data?.kind === "verification" ||
+    Boolean(state?.verificationId ?? data?.verification_id);
+  const resultId = verification
+    ? (state?.verificationId ?? data?.verification_id)
+    : (state?.issuanceId ?? data?.issuance_id);
+  const stage =
+    data?.status === "created"
+      ? 0
+      : data?.status === "queued" || data?.status === "retryable_failed"
+        ? 1
+        : done
+          ? 3
+          : 2;
   useGSAP(
     () => {
-      if (typeof window === "undefined" || typeof window.matchMedia !== "function" || !job.data) {
-        return;
-      }
-
-      const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      if (prefersReduced) {
-        gsap.set(
-          ".lifecycle-step, .pipeline-flow-beam, .node-active-ring, .telemetry-pulse-dot",
-          { clearProps: "all" }
+      if (typeof window.matchMedia !== "function" || !data) return;
+      const media = gsap.matchMedia();
+      media.add("(prefers-reduced-motion: no-preference)", () => {
+        gsap.fromTo(
+          ".job-current",
+          { opacity: 0.5, y: 3 },
+          {
+            opacity: 1,
+            y: 0,
+            duration: 0.22,
+            clearProps: "all",
+            ease: "power2.out",
+          },
         );
-        return;
-      }
-
-      gsap.fromTo(
-        ".lifecycle-step",
-        { autoAlpha: 0.7, y: 4 },
-        { autoAlpha: 1, y: 0, duration: 0.35, stagger: 0.06, ease: "power2.out", clearProps: "transform,opacity,visibility" }
-      );
-
-      if (job.data.status === "processing" || job.data.status === "queued") {
-        gsap.to(".pipeline-flow-beam", {
-          xPercent: 120,
-          duration: 1.6,
-          ease: "power1.inOut",
-          repeat: -1,
-        });
-
-        gsap.to(".node-active-ring", {
-          scale: 1.3,
-          opacity: 0.25,
-          duration: 1.4,
-          ease: "sine.inOut",
-          repeat: -1,
-          yoyo: true,
-        });
-
-        gsap.to(".telemetry-pulse-dot", {
-          opacity: 0.3,
-          scale: 0.8,
-          duration: 0.9,
-          ease: "sine.inOut",
-          repeat: -1,
-          yoyo: true,
-        });
-      } else {
-        gsap.set(".pipeline-flow-beam, .node-active-ring, .telemetry-pulse-dot", { clearProps: "all" });
-      }
+      });
+      return () => media.revert();
     },
-    { scope: containerRef, dependencies: [job.data?.status] }
+    { scope: root, dependencies: [data?.status], revertOnUpdate: true },
   );
-
+  const explanation = done
+    ? "Kết quả đã sẵn sàng. Mở hồ sơ để xem và tiếp tục."
+    : failed
+      ? data?.status === "cancelled"
+        ? "Công việc đã bị hủy. Chưa có kết luận về tài liệu."
+        : "Hệ thống chưa hoàn tất xử lý. Xem mã lỗi bên dưới hoặc thử lại với tệp nguồn."
+      : data?.status === "retryable_failed"
+        ? "Có gián đoạn tạm thời. Hệ thống sẽ tự động thử lại; bạn không cần gửi thêm yêu cầu."
+        : data?.status === "processing"
+          ? verification
+            ? "Đang kiểm tra tài liệu và tổng hợp bằng chứng."
+            : "Đang tạo bản PDF và hồ sơ cấp phát có chữ ký."
+          : "Yêu cầu đã được tiếp nhận và đang chờ xử lý.";
   return (
-    <main ref={containerRef} className="workspace-page">
+    <main ref={root} className="workspace-page result-page">
       <header className="page-heading">
-        <div className="page-heading-badge">
-          <Activity size={14} aria-hidden="true" />
-          <span>Hàng đợi hệ thống</span>
-        </div>
+        <p className="page-context">
+          {verification ? "Xác minh tài liệu" : "Cấp phát tài liệu"}
+        </p>
         <h1>Tiến độ xử lý</h1>
         <p>Trạng thái sẽ tự động cập nhật cho đến khi hoàn tất.</p>
       </header>
-
       {job.isPending ? (
-        <section className="status-board" aria-busy="true">
-          <div className="board-loading">
-            <Loader2 className="spinner" size={24} aria-hidden="true" />
-            <p>Đang tải trạng thái</p>
-          </div>
-        </section>
+        <p className="loading-state" role="status">
+          Đang tải trạng thái
+        </p>
       ) : job.error ? (
-        <section className="status-board">
-          <EmptyState
-            icon={<XCircle size={32} className="text-error" />}
-            title="Không thể tải thông tin công việc"
-            description={job.error.message}
-          />
-        </section>
-      ) : job.data ? (
-        <section className="status-board job-record" aria-live="polite">
-          <div className="job-record-top">
-            <StatusBadge
-              label="Trạng thái công việc"
-              status={job.data.status}
-              title={JOB_LABELS[job.data.status] ?? job.data.status}
-            />
-            <div className="job-pulse-indicator" data-status={job.data.status} aria-hidden="true">
-              {isProcessing ? <span className="pulse-ring" /> : null}
-              {isCompleted ? <CheckCircle2 size={24} className="icon-success" /> : null}
-              {isFailed ? <XCircle size={24} className="icon-error" /> : null}
+        <div className="error-callout" role="alert">
+          <h2>Không thể tải thông tin công việc</h2>
+          <p>{job.error.message}</p>
+          <button
+            className="button button-secondary"
+            onClick={() => void job.refetch()}
+          >
+            Thử lại
+          </button>
+        </div>
+      ) : data ? (
+        <>
+          <section className="status-board job-record">
+            <div className="job-current" aria-live="polite">
+              <StatusBadge
+                label="Trạng thái công việc"
+                status={data.status}
+                title={JOB_LABELS[data.status] ?? data.status}
+              />
+              <p>{explanation}</p>
             </div>
-          </div>
-
-          <div className="job-spatial-pipeline">
-            <div className="job-chamber">
-              <div className="job-chamber-stage" data-stage={motifStage}>
-                <CryptographicMotif stage={motifStage} size={120} className="job-stage-motif" />
-                <div className="job-chamber-reticle" aria-hidden="true">
-                  <span className="chamber-reticle-corner corner-tl" />
-                  <span className="chamber-reticle-corner corner-tr" />
-                  <span className="chamber-reticle-corner corner-bl" />
-                  <span className="chamber-reticle-corner corner-br" />
-                </div>
-              </div>
-              <div className="job-chamber-telemetry">
-                <div className="job-telemetry-badge">
-                  <span className="telemetry-badge-dot" data-status={job.data.status} />
-                  <span className="telemetry-badge-type">
-                    {isVerification ? "Kênh kiểm chứng tài liệu" : "Kênh cấp phát tài liệu"}
+            <ol className="job-steps" aria-label="Tiến trình các bước">
+              {[
+                "Tiếp nhận",
+                "Hàng đợi",
+                verification ? "Kiểm tra" : "Tạo bản cấp phát",
+                "Hoàn tất",
+              ].map((label, index) => (
+                <li
+                  key={label}
+                  data-state={
+                    done || index < stage
+                      ? "done"
+                      : index === stage
+                        ? failed
+                          ? "failed"
+                          : "current"
+                        : "waiting"
+                  }
+                  aria-current={index === stage ? "step" : undefined}
+                >
+                  <span className="step-marker" aria-hidden="true">
+                    {done || index < stage ? <Check size={15} /> : index + 1}
                   </span>
-                </div>
-                <p className="job-telemetry-description">
-                  {getTelemetryStatusMessage(job.data.status, isVerification)}
-                </p>
-                {isProcessing ? (
-                  <div className="job-telemetry-live" aria-hidden="true">
-                    <span className="telemetry-pulse-dot" />
-                    <span className="telemetry-live-text">Luồng telemetry trực tiếp</span>
-                    <span className="telemetry-live-attempt">Lần thử {job.data.attempt + 1}</span>
-                  </div>
-                ) : null}
+                  <span>{label}</span>
+                </li>
+              ))}
+            </ol>
+            {!terminal ? (
+              <p className="waiting-note">
+                <Clock3 size={18} aria-hidden="true" />
+                Thời gian xử lý phụ thuộc kích thước tệp và hàng đợi. Chưa có
+                ước tính thời gian còn lại.
+              </p>
+            ) : null}
+            {data.safe_error_code ? (
+              <p className="form-error" role="alert">
+                Mã lỗi an toàn: {data.safe_error_code}
+              </p>
+            ) : null}
+            <div className="job-actions">
+              {resultId ? (
+                <Link
+                  className={
+                    done ? "button button-primary" : "button button-secondary"
+                  }
+                  to={`/${verification ? "verifications" : "issuances"}/${resultId}`}
+                >
+                  {verification ? "Mở hồ sơ kiểm chứng" : "Mở hồ sơ cấp phát"}
+                  <ArrowRight size={16} aria-hidden="true" />
+                </Link>
+              ) : null}
+              {failed ? (
+                <Link
+                  className="button button-secondary"
+                  to={verification ? "/verify" : "/issue"}
+                >
+                  Chọn tệp và thử lại
+                </Link>
+              ) : null}
+            </div>
+          </section>
+          <section className="record-metadata">
+            <h2>Thông tin công việc</h2>
+            <dl className="status-details">
+              <div>
+                <dt>Mã công việc</dt>
+                <dd>
+                  <CompactIdentifier label="Mã công việc" value={data.id} />
+                </dd>
               </div>
-            </div>
-
-            <div className="job-lifecycle-track" aria-label="Tiến trình các bước" role="list">
-              {LIFECYCLE_STEPS.map((step, idx) => {
-                const isDone = isCompleted || idx < currentStep;
-                const isCurrent = idx === currentStep && !isCompleted && !isFailed;
-                const isStepFailed = isFailed && idx === currentStep;
-
-                return (
-                  <div
-                    key={step.key}
-                    className={`lifecycle-step ${isDone ? "is-done" : ""} ${isCurrent ? "is-active" : ""} ${isStepFailed ? "is-failed" : ""}`.trim()}
-                    role="listitem"
-                  >
-                    <div className="step-marker-wrapper">
-                      <div className="step-marker" aria-hidden="true">
-                        {isDone ? <Check size={14} strokeWidth={2.5} /> : <span>{idx + 1}</span>}
-                      </div>
-                      {isCurrent ? <span className="node-active-ring" aria-hidden="true" /> : null}
-                      {idx < LIFECYCLE_STEPS.length - 1 ? (
-                        <div
-                          className={`step-connector ${idx < currentStep || isCompleted ? "is-passed" : ""} ${idx === currentStep && isProcessing ? "is-flowing" : ""}`.trim()}
-                          aria-hidden="true"
-                        >
-                          <span className="pipeline-flow-beam" />
-                        </div>
-                      ) : null}
-                    </div>
-                    <div className="step-meta">
-                      <span className="step-label">{step.label}</span>
-                      <span className="step-hint">{step.hint}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <dl className="status-details">
-            <div>
-              <dt>Mã công việc</dt>
-              <dd><CompactIdentifier label="Mã công việc" value={job.data.id} /></dd>
-            </div>
-            <div>
-              <dt>Lần xử lý</dt>
-              <dd>
-                <span className="attempt-badge">Lần {job.data.attempt + 1}</span>
-              </dd>
-            </div>
-            <div>
-              <dt>Cập nhật</dt>
-              <dd>
-                <time dateTime={job.data.updated_at}>
-                  {new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(job.data.updated_at))}
-                </time>
-              </dd>
-            </div>
-          </dl>
-
-          {job.data.safe_error_code ? (
-            <div className="error-callout" role="alert">
-              <p className="form-error">Mã lỗi an toàn: {job.data.safe_error_code}</p>
-            </div>
-          ) : null}
-
-          <div className="job-actions">
-            {(issuanceId ?? job.data.issuance_id) ? (
-              <Link className="button button-secondary" to={`/issuances/${issuanceId ?? job.data.issuance_id}`}>
-                <span>Mở hồ sơ cấp phát</span>
-                <ArrowRight size={16} aria-hidden="true" />
-              </Link>
-            ) : null}
-            {(verificationId ?? job.data.verification_id) ? (
-              <Link className="button button-secondary" to={`/verifications/${verificationId ?? job.data.verification_id}`}>
-                <span>Mở hồ sơ kiểm chứng</span>
-                <ArrowRight size={16} aria-hidden="true" />
-              </Link>
-            ) : null}
-          </div>
-        </section>
+              <div>
+                <dt>Lần xử lý</dt>
+                <dd>Lần {data.attempt + 1}</dd>
+              </div>
+              <div>
+                <dt>Cập nhật từ hệ thống</dt>
+                <dd>
+                  <time dateTime={data.updated_at}>
+                    {new Intl.DateTimeFormat("vi-VN", {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    }).format(new Date(data.updated_at))}
+                  </time>
+                </dd>
+              </div>
+            </dl>
+          </section>
+        </>
       ) : null}
     </main>
   );

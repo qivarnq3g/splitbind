@@ -298,43 +298,22 @@ describe("issuance browser workflow", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Không thể tải tệp lên kho lưu trữ");
   });
 
-  it("orchestrates cryptographic chamber stages and telemetry during intake", async () => {
-    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async (input) => {
+  it("lets the issuer remove a local selection without starting a job", async () => {
+    const requests: string[] = [];
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async input => {
       const request = input instanceof Request ? input : new Request(input);
-      const url = new URL(request.url);
-      if (url.pathname === "/api/v1/auth/session") return json(session("issuer"));
-      return json({ detail: "Unexpected request." }, 500);
+      requests.push(request.method);
+      return json(session("issuer"));
     }));
-
     renderApp();
-
-    const chamber = await screen.findByRole("region", { name: "Khoang ký số mật mã" });
-    expect(chamber).toBeInTheDocument();
-    expect(chamber).toHaveAttribute("data-stage", "intake");
-
-    const motif = chamber.querySelector(".cryptographic-motif");
-    expect(motif).toHaveAttribute("data-stage", "idle");
-    expect(screen.getByText("Tiếp nhận tài liệu")).toBeVisible();
-    expect(screen.getByText("Chờ tệp PDF")).toBeVisible();
-    expect(chamber.querySelector(".chamber-document-ghost")).toHaveAttribute("data-has-file", "false");
-
-    const subbands = chamber.querySelectorAll(".chamber-decomp-band");
-    expect(subbands).toHaveLength(4);
-    expect(chamber.querySelector(".chamber-convergence-svg")).toBeInTheDocument();
-    expect(chamber.querySelectorAll(".chamber-pipeline-node")).toHaveLength(5);
-
-    const fileInput = screen.getByLabelText("Tệp PDF");
-    fireEvent.change(fileInput, {
-      target: { files: [new File(["%PDF-1.4\n%%EOF"], "thesis.pdf", { type: "application/pdf" })] },
-    });
-
-    const scoped = within(chamber);
-    expect(await scoped.findByText("Đã nạp tài liệu")).toBeVisible();
-    expect(scoped.getByText("Đã tiếp nhận")).toBeVisible();
-    expect(scoped.getByText("thesis.pdf")).toBeVisible();
-    expect(chamber.querySelector(".chamber-document-ghost")).toHaveAttribute("data-has-file", "true");
+    const fileInput = await screen.findByLabelText("Tệp PDF");
+    fireEvent.change(fileInput, { target: { files: [new File(["%PDF-1.4"], "thesis.pdf", { type: "application/pdf" })] } });
+    expect(screen.getByText("thesis.pdf")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Bỏ tệp đã chọn" }));
+    expect(screen.queryByText("thesis.pdf")).not.toBeInTheDocument();
+    expect(fileInput).toBeRequired();
+    expect(requests).not.toContain("POST");
   });
-
   it("keeps the issuance screen read-only for an auditor", async () => {
     vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async () => json(session("auditor"))));
     renderApp();
@@ -438,7 +417,8 @@ describe("issuance browser workflow", () => {
     }));
     renderApp(`/issuances/${ISSUANCE_ID}`);
 
-    expect(await screen.findByText("Kết quả PDF hiện không có sẵn. Hãy kiểm tra trạng thái công việc hoặc chạy lại quy trình demo.")).toBeVisible();
+    expect(await screen.findByText("Kết quả PDF hiện không có sẵn. Hãy kiểm tra trạng thái công việc hoặc tạo bản cấp phát mới.")).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Bản cấp phát đã sẵn sàng" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Tải PDF kết quả" })).not.toBeInTheDocument();
   });
 
@@ -480,7 +460,7 @@ describe("issuance browser workflow", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Tải PDF kết quả" }));
 
-    expect(await screen.findByText("Kết quả PDF hiện không có sẵn. Hãy kiểm tra trạng thái công việc hoặc chạy lại quy trình demo.")).toBeVisible();
+    expect(await screen.findByText("Kết quả PDF hiện không có sẵn. Hãy kiểm tra trạng thái công việc hoặc tạo bản cấp phát mới.")).toBeVisible();
     await waitFor(() => expect(detailReads).toBe(2));
     expect(screen.queryByRole("button", { name: /tải/i })).not.toBeInTheDocument();
     expect(screen.queryByText("Hãy thử lại.")).not.toBeInTheDocument();

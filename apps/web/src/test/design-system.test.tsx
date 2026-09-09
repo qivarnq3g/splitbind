@@ -9,7 +9,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { appRoutes } from "../app/router";
 import { createQueryClient } from "../app/queryClient";
-import { CryptographicMotif } from "../components/CryptographicMotif";
 
 const ORGANIZATION_ID = "00000000-0000-4000-8000-000000000002";
 const USER_ID = "00000000-0000-4000-8000-000000000001";
@@ -69,10 +68,9 @@ describe("SplitBind design system", () => {
 
     const introduction = await screen.findByRole("complementary", { name: "Giới thiệu SplitBind" });
     expect(introduction).toBeVisible();
-    expect(screen.getByText("Bảo vệ tài liệu quan trọng")).toBeVisible();
+    expect(introduction).toHaveTextContent("Tài liệu có nguồn.");
     expect(screen.getAllByRole("heading")).toHaveLength(1);
     expect(introduction).toHaveTextContent("Cấp phát và kiểm tra tài liệu trong một nơi.");
-    expect(introduction.querySelectorAll("p, h2, dl")).toHaveLength(2);
     expect(screen.getByRole("form", { name: "Đăng nhập SplitBind" })).toBeVisible();
     expect(screen.queryByText(/localStorage/i)).not.toBeInTheDocument();
     expect(document.querySelector("[data-motion-page]")).toBeInTheDocument();
@@ -213,80 +211,7 @@ describe("SplitBind design system", () => {
     expect(writeText).toHaveBeenCalledWith(JOB_ID);
   });
 
-  it("renders CryptographicMotif with semantic SVG and updates visual elements by stage", () => {
-    const { rerender } = render(<CryptographicMotif stage="idle" size={200} />);
 
-    const motif = screen.getByRole("img", { name: /cryptographic motif/i });
-    expect(motif).toBeInTheDocument();
-    expect(motif.tagName.toLowerCase()).toBe("svg");
-    expect(motif.closest(".cryptographic-motif")).toHaveAttribute("data-stage", "idle");
-
-    expect(motif.querySelector(".motif-backdrop")).toBeInTheDocument();
-    expect(motif.querySelector(".motif-axes")).toBeInTheDocument();
-    expect(motif.querySelector(".motif-wavelets")).toBeInTheDocument();
-    expect(motif.querySelector(".motif-hash-fragments")).toBeInTheDocument();
-    expect(motif.querySelectorAll(".motif-node").length).toBeGreaterThanOrEqual(4);
-    expect(motif.querySelector(".motif-seal")).toBeInTheDocument();
-
-    rerender(<CryptographicMotif stage="decomposing" />);
-    expect(motif.closest(".cryptographic-motif")).toHaveAttribute("data-stage", "decomposing");
-
-    rerender(<CryptographicMotif stage="sealed" />);
-    expect(motif.closest(".cryptographic-motif")).toHaveAttribute("data-stage", "sealed");
-
-    rerender(<CryptographicMotif stage="tampered" />);
-    expect(motif.closest(".cryptographic-motif")).toHaveAttribute("data-stage", "tampered");
-  });
-
-  it("reflects cryptographic breadcrumb and pipeline stage indicator smoothly across workflow routes", async () => {
-    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async (input) => {
-      const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
-      if (path === "/api/v1/auth/session") {
-        return json({
-          authenticated: true,
-          csrf_token: "csrf-token",
-          user: { id: USER_ID, username: "issuer.demo", role: "issuer", organization_id: ORGANIZATION_ID },
-        });
-      }
-      if (path === `/api/v1/jobs/${JOB_ID}`) {
-        return json({
-          id: JOB_ID,
-          kind: "issuance",
-          status: "processing",
-          attempt: 1,
-          issuance_id: null,
-          verification_id: null,
-          deadline_at: "2026-08-30T12:11:00Z",
-          cancel_requested_at: null,
-          safe_error_code: null,
-          created_at: "2026-08-30T12:01:00Z",
-          updated_at: "2026-08-30T12:03:00Z",
-        });
-      }
-      return json({ enabled: false, processing_limits: {}, algorithm_label: null });
-    }));
-
-    const { unmount } = renderApp("/issue");
-    const breadcrumbIssue = await screen.findByRole("generic", { name: "Đường dẫn quy trình mật mã" });
-    expect(breadcrumbIssue).toHaveTextContent("Cấp phát");
-    expect(breadcrumbIssue).toHaveTextContent("Tiếp nhận tệp");
-
-    const stageIndicatorIssue = screen.getByRole("group", { name: "Tiến trình quy trình mật mã" });
-    expect(stageIndicatorIssue).toHaveAttribute("data-active-stage", "1");
-    expect(stageIndicatorIssue).toHaveTextContent("Tiếp nhận");
-    expect(stageIndicatorIssue).toHaveTextContent("Xử lý");
-    expect(stageIndicatorIssue).toHaveTextContent("Niêm phong");
-
-    unmount();
-
-    renderApp(`/jobs/${JOB_ID}`);
-    const breadcrumbJob = await screen.findByRole("generic", { name: "Đường dẫn quy trình mật mã" });
-    expect(breadcrumbJob).toHaveTextContent("Quy trình xử lý");
-    expect(breadcrumbJob).toHaveTextContent("Xử lý mật mã");
-
-    const stageIndicatorJob = screen.getByRole("group", { name: "Tiến trình quy trình mật mã" });
-    expect(stageIndicatorJob).toHaveAttribute("data-active-stage", "2");
-  });
 
   it("verifies MotionRoute provides stage continuity and restrained reduced-motion support", async () => {
     vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async (input) => {
@@ -307,18 +232,4 @@ describe("SplitBind design system", () => {
     expect(motionPage).toHaveAttribute("data-stage-rank", "1");
   });
 
-  it("audits ScrollTrigger usage to ensure single restrained surface and JSDOM guards", () => {
-    const evidenceSummarySource = readFileSync(
-      resolve(process.cwd(), "src/features/evidence/EvidenceSummary.tsx"),
-      "utf8"
-    );
-
-    // Guard on plugin registration
-    expect(evidenceSummarySource).toMatch(/typeof window !== "undefined" && typeof window\.matchMedia === "function"/);
-    // Guard on ScrollTrigger.create
-    expect(evidenceSummarySource).toMatch(/typeof ScrollTrigger !== "undefined"/);
-    // Reduced-motion bypass
-    expect(evidenceSummarySource).toMatch(/prefers-reduced-motion: reduce/);
-    expect(evidenceSummarySource).toMatch(/prefers-reduced-motion: no-preference/);
-  });
 });

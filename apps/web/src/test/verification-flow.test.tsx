@@ -117,32 +117,16 @@ describe("verification browser workflow", () => {
     expect(await screen.findByLabelText("Tệp cần kiểm chứng")).toBeVisible();
   });
 
-  it("renders the verification inspection chamber with synchronized telemetry steps and motif", async () => {
+  it("makes a selected verification file replaceable before upload", async () => {
     vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async () => json(session("verifier"))));
     renderApp();
-
-    const chamber = await screen.findByRole("region", { name: "Buồng kiểm định mật mã" });
-    expect(chamber).toBeInTheDocument();
-    expect(chamber).toHaveAttribute("data-stage", "intake");
-
-    expect(screen.getByText("Tiếp nhận tài liệu kiểm tra")).toBeVisible();
-    expect(screen.getByText("Tiếp nhận tệp")).toBeVisible();
-    expect(screen.getByText("Quét quang học")).toBeVisible();
-    expect(screen.getByText("Tách dải tần")).toBeVisible();
-    expect(screen.getByText("Đối sánh tín hiệu")).toBeVisible();
-    expect(screen.getByText("Chuyển tiếp")).toBeVisible();
-
-    const motif = chamber.querySelector(".cryptographic-motif");
-    expect(motif).toBeInTheDocument();
-    expect(motif).toHaveAttribute("data-stage", "idle");
-
-    const fileInput = screen.getByLabelText("Tệp cần kiểm chứng");
-    fireEvent.change(fileInput, {
-      target: { files: [new File(["%PDF-1.4\n%%EOF"], "suspect.pdf", { type: "application/pdf" })] },
-    });
-
-    expect(await screen.findByText("Đã nạp tài liệu")).toBeVisible();
-    expect(chamber.querySelector(".chamber-telemetry-value")).toHaveTextContent("suspect.pdf");
+    const fileInput = await screen.findByLabelText("Tệp cần kiểm chứng");
+    fireEvent.change(fileInput, { target: { files: [new File(["%PDF-1.4"], "suspect.pdf", { type: "application/pdf" })] } });
+    expect(screen.getByText("suspect.pdf")).toBeVisible();
+    expect(screen.getByText("Tệp được chọn trên thiết bị")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Bỏ tệp đã chọn" }));
+    expect(screen.queryByText("suspect.pdf")).not.toBeInTheDocument();
+    expect(screen.getByText("Chưa chọn tệp")).toBeVisible();
   });
 
   it("accepts PDF, PNG, and JPEG verification inputs without weakening issuance validation", () => {

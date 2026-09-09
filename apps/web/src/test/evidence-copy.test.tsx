@@ -119,7 +119,7 @@ describe("authoritative result payoff and seal construction", () => {
     vi.unstubAllGlobals();
   });
 
-  it("constructs authentic seal with concentric rings and stamp lock for VERIFIED_INTACT", async () => {
+  it("presents an intact verdict before technical evidence", async () => {
     vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async (input) => {
       const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
       if (path === "/api/v1/auth/session") return jsonResponse(mockSession("verifier"));
@@ -151,20 +151,14 @@ describe("authoritative result payoff and seal construction", () => {
 
     renderAppPath(`/verifications/${VERIFICATION_ID}`);
 
-    const sealSection = await screen.findByRole("region", { name: "Ấn triện mật mã xác thực" });
-    expect(sealSection).toHaveClass("verification-seal-construction");
-    expect(sealSection).toHaveAttribute("data-status", "intact");
+    const verdict = await screen.findByRole("region", { name: "Kết luận kiểm chứng" });
+    expect(verdict).toHaveTextContent("Đã xác minh toàn vẹn");
+    expect(verdict).toHaveAttribute("data-tone", "success");
+    expect(screen.getByText("Xem chi tiết kỹ thuật").closest("details")).not.toHaveAttribute("open");
 
-    expect(sealSection.querySelector(".seal-concentric-rings")).toBeInTheDocument();
-    expect(sealSection.querySelectorAll(".seal-ring").length).toBeGreaterThanOrEqual(3);
-    expect(sealSection.querySelector(".stamp-seal-lock")).toBeInTheDocument();
-
-    const motif = sealSection.querySelector(".cryptographic-motif");
-    expect(motif).toBeInTheDocument();
-    expect(motif).toHaveAttribute("data-stage", "sealed");
   });
 
-  it("activates discrepancy isolation with fractured geometry and anomaly beacon for tampered verification", async () => {
+  it("distinguishes modified source evidence from a legal accusation", async () => {
     vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async (input) => {
       const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
       if (path === "/api/v1/auth/session") return jsonResponse(mockSession("verifier"));
@@ -196,22 +190,14 @@ describe("authoritative result payoff and seal construction", () => {
 
     renderAppPath(`/verifications/${VERIFICATION_ID}`);
 
-    const isolationSection = await screen.findByRole("region", { name: "Cách ly sai lệch và cảnh báo bất thường" });
-    expect(isolationSection).toHaveClass("verification-seal-construction");
-    expect(isolationSection).toHaveAttribute("data-status", "tampered");
+    const verdict = await screen.findByRole("region", { name: "Kết luận kiểm chứng" });
+    expect(verdict).toHaveTextContent("Khớp nguồn, có dấu hiệu thay đổi");
+    expect(verdict).toHaveAttribute("data-tone", "warning");
+    expect(verdict).toHaveTextContent("không xác định người thực hiện");
 
-    expect(isolationSection.querySelector(".fractured-geometry")).toBeInTheDocument();
-    expect(isolationSection.querySelector(".discrepancy-reticle")).toBeInTheDocument();
-    expect(isolationSection.querySelector(".evidence-anomaly-beacon")).toBeInTheDocument();
-    expect(isolationSection.querySelector(".tamper-telemetry")).toBeInTheDocument();
-    expect(isolationSection.querySelector(".stamp-seal-lock")).not.toBeInTheDocument();
-
-    const motif = isolationSection.querySelector(".cryptographic-motif");
-    expect(motif).toBeInTheDocument();
-    expect(motif).toHaveAttribute("data-stage", "tampered");
   });
 
-  it("renders authentic seal payoff on completed issuance detail record", async () => {
+  it("makes the completed issuance artifact available as the primary action", async () => {
     vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async (input) => {
       const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
       if (path === "/api/v1/auth/session") return jsonResponse(mockSession("issuer"));
@@ -230,15 +216,9 @@ describe("authoritative result payoff and seal construction", () => {
 
     renderAppPath(`/issuances/${ISSUANCE_ID}`);
 
-    const sealSection = await screen.findByRole("region", { name: "Ấn triện cấp phát thẩm quyền" });
-    expect(sealSection).toHaveClass("issuance-seal-construction");
-    expect(sealSection).toHaveAttribute("data-status", "sealed");
+    expect(await screen.findByRole("heading", { name: "Bản cấp phát đã sẵn sàng" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Tải PDF kết quả" })).toBeEnabled();
+    expect(screen.getByText("Thử nghiệm — chưa phát hành")).toBeVisible();
 
-    expect(sealSection.querySelector(".seal-concentric-rings")).toBeInTheDocument();
-    expect(sealSection.querySelector(".stamp-seal-lock")).toBeInTheDocument();
-
-    const motif = sealSection.querySelector(".cryptographic-motif");
-    expect(motif).toBeInTheDocument();
-    expect(motif).toHaveAttribute("data-stage", "sealed");
   });
 });
