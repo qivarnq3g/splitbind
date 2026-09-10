@@ -222,6 +222,7 @@ describe("issuance browser workflow", () => {
     fireEvent.submit(screen.getByRole("button", { name: "Tạo bản cấp phát" }).closest("form")!);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Tệp vượt quá giới hạn 10 MiB");
+    expect(screen.getByRole("button", { name: "Tạo bản cấp phát" })).toBeDisabled();
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
   });
 

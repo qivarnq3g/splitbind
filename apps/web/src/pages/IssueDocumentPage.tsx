@@ -73,6 +73,7 @@ export function IssueDocumentPage() {
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (validationError) return;
     issuance.mutate();
   }
 
@@ -180,7 +181,7 @@ export function IssueDocumentPage() {
               <button
                 className="button button-primary"
                 type="submit"
-                disabled={issuance.isPending}
+                disabled={issuance.isPending || Boolean(validationError)}
                 data-state={
                   issuance.isPending ? "loading" : error ? "error" : "default"
                 }

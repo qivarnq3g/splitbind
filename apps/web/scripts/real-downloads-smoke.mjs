@@ -27,6 +27,7 @@ try {
   const oversizedPath = "C:/Users/Qivarn/Downloads/Bài tập thuyết trình - Nhóm 10.pdf";
   await page.getByLabel("Tệp PDF", { exact: true }).setInputFiles(oversizedPath);
   await expect(page.locator(".field-help-error")).toContainText("vượt quá giới hạn 10 MiB");
+  await expect(page.getByRole("button", { name: "Tạo bản cấp phát", exact: true })).toBeDisabled();
   await page.screenshot({ path: `${output}/01_oversized_rejected.png`, fullPage: true });
   console.log("OVERSIZED_PDF_REJECTED_AS_EXPECTED");
 
@@ -34,6 +35,7 @@ try {
   const samplePngPath = resolve(output, "transcript_sample.png");
   await page.getByLabel("Tệp PDF", { exact: true }).setInputFiles(samplePngPath);
   await expect(page.locator(".field-help-error")).toContainText("không phải PDF");
+  await expect(page.getByRole("button", { name: "Tạo bản cấp phát", exact: true })).toBeDisabled();
   await page.screenshot({ path: `${output}/02_issue_png_rejected.png`, fullPage: true });
   console.log("ISSUE_PAGE_REJECTS_IMAGE_AS_EXPECTED");
 

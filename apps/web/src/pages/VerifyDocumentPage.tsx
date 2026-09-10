@@ -66,6 +66,7 @@ export function VerifyDocumentPage() {
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (validationError) return;
     verification.mutate();
   }
 
@@ -139,7 +140,7 @@ export function VerifyDocumentPage() {
               <button
                 className="button button-primary"
                 type="submit"
-                disabled={verification.isPending}
+                disabled={verification.isPending || Boolean(validationError)}
                 data-state={
                   verification.isPending
                     ? "loading"
