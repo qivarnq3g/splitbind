@@ -204,7 +204,7 @@ describe("SplitBind design system", () => {
 
     renderApp(`/jobs/${JOB_ID}`);
 
-    expect(await screen.findByText("00000000…0006")).toBeVisible();
+    expect(await screen.findByText(JOB_ID)).toBeVisible();
     expect(screen.getByRole("status", { name: "Trạng thái công việc: Hoàn tất" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Sao chép mã công việc" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Đã sao chép mã công việc" })).toBeVisible());

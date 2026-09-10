@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 import { ArrowRight, Check, Clock3 } from "lucide-react";
@@ -24,6 +24,38 @@ export function JobDetailPage() {
   const done = data?.status === "succeeded";
   const terminal = Boolean(data && TERMINAL_JOB_STATUSES.has(data.status));
   const failed = terminal && !done;
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (data?.created_at && !terminal) {
+      const diff = Math.floor(
+        (Date.now() - new Date(data.created_at).getTime()) / 1000,
+      );
+      if (diff > 0 && diff < 3600) {
+        setElapsed(diff);
+      }
+    }
+  }, [data?.created_at, terminal]);
+
+  useEffect(() => {
+    if (terminal) return;
+    const timer = setInterval(() => {
+      setElapsed((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [terminal]);
+
+  const durationSeconds =
+    data?.created_at && data?.updated_at
+      ? Math.max(
+          1,
+          Math.round(
+            (new Date(data.updated_at).getTime() -
+              new Date(data.created_at).getTime()) /
+              1000,
+          ),
+        )
+      : null;
   const verification =
     data?.kind === "verification" ||
     Boolean(state?.verificationId ?? data?.verification_id);
@@ -135,10 +167,16 @@ export function JobDetailPage() {
               ))}
             </ol>
             {!terminal ? (
-              <p className="waiting-note">
+              <p className="waiting-note" aria-live="polite">
                 <Clock3 size={18} aria-hidden="true" />
-                Thời gian xử lý phụ thuộc kích thước tệp và hàng đợi. Chưa có
-                ước tính thời gian còn lại.
+                {elapsed <= 15
+                  ? `Thời gian ước tính: ~5 – 15 giây · Đã xử lý: ${elapsed}s`
+                  : `Đang xử lý trong hàng đợi (${elapsed}s) · Vui lòng giữ nguyên trang...`}
+              </p>
+            ) : done && durationSeconds !== null ? (
+              <p className="waiting-note success-note">
+                <Clock3 size={18} aria-hidden="true" />
+                Đã hoàn tất sau {durationSeconds} giây.
               </p>
             ) : null}
             {data.safe_error_code ? (
@@ -174,13 +212,19 @@ export function JobDetailPage() {
               <div>
                 <dt>Mã công việc</dt>
                 <dd>
-                  <CompactIdentifier label="Mã công việc" value={data.id} />
+                  <CompactIdentifier label="Mã công việc" value={data.id} full />
                 </dd>
               </div>
               <div>
                 <dt>Lần xử lý</dt>
                 <dd>Lần {data.attempt + 1}</dd>
               </div>
+              {durationSeconds !== null ? (
+                <div>
+                  <dt>Thời gian xử lý</dt>
+                  <dd>{durationSeconds} giây</dd>
+                </div>
+              ) : null}
               <div>
                 <dt>Cập nhật từ hệ thống</dt>
                 <dd>

@@ -154,3 +154,69 @@ it.each([
   );
   expect(document.body).not.toHaveTextContent("Đã đối soát");
 });
+
+it("displays dynamic ETA for pending job and total duration for completed job on JobDetailPage", async () => {
+  vi.stubGlobal("fetch", async (input: Request) => {
+    const path = new URL(input.url).pathname;
+    if (path.endsWith("/session")) {
+      return new Response(JSON.stringify({
+        authenticated: true,
+        user: { username: "review", role: "verifier" },
+      }), { headers: { "Content-Type": "application/json" } });
+    }
+    if (path === "/api/v1/jobs/job-pending") {
+      return new Response(JSON.stringify({
+        id: "00000000-0000-4000-8000-000000000005",
+        kind: "issuance",
+        status: "processing",
+        attempt: 0,
+        issuance_id: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deadline_at: new Date(Date.now() + 600000).toISOString(),
+        cancel_requested_at: null,
+        safe_error_code: null,
+      }), { headers: { "Content-Type": "application/json" } });
+    }
+    if (path === "/api/v1/jobs/job-done") {
+      return new Response(JSON.stringify({
+        id: "00000000-0000-4000-8000-000000000006",
+        kind: "verification",
+        status: "succeeded",
+        attempt: 0,
+        verification_id: "00000000-0000-4000-8000-000000000007",
+        created_at: "2026-09-08T10:00:00Z",
+        updated_at: "2026-09-08T10:00:08Z",
+        deadline_at: "2026-09-08T10:10:00Z",
+        cancel_requested_at: null,
+        safe_error_code: null,
+      }), { headers: { "Content-Type": "application/json" } });
+    }
+    return new Response(JSON.stringify({ enabled: false }), { headers: { "Content-Type": "application/json" } });
+  });
+
+  const { unmount } = render(
+    <QueryClientProvider client={createQueryClient()}>
+      <RouterProvider
+        router={createMemoryRouter(appRoutes, {
+          initialEntries: ["/jobs/job-pending"],
+        })}
+      />
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByText(/Thời gian ước tính: ~5 – 15 giây/)).toBeVisible();
+  unmount();
+
+  render(
+    <QueryClientProvider client={createQueryClient()}>
+      <RouterProvider
+        router={createMemoryRouter(appRoutes, {
+          initialEntries: ["/jobs/job-done"],
+        })}
+      />
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByText(/Đã hoàn tất sau 8 giây/)).toBeVisible();
+});

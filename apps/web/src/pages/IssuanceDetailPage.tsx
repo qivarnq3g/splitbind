@@ -140,6 +140,7 @@ export function IssuanceDetailPage() {
                   <CompactIdentifier
                     label="Mã hồ sơ"
                     value={issuance.data.id}
+                    full
                   />
                 </dd>
               </div>

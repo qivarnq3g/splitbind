@@ -138,7 +138,7 @@ export function VerificationDetailPage() {
               <div>
                 <dt>Mã kiểm chứng</dt>
                 <dd>
-                  <CompactIdentifier label="Mã kiểm chứng" value={data.id} />
+                  <CompactIdentifier label="Mã kiểm chứng" value={data.id} full />
                 </dd>
               </div>
               <div>
