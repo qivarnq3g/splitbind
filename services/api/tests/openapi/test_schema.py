@@ -20,6 +20,7 @@ def test_schema_publishes_every_current_browser_facing_route(schema):
         "/api/v1/issuances",
         "/api/v1/issuances/{id}",
         "/api/v1/issuances/{id}/result",
+        "/api/v1/jobs",
         "/api/v1/jobs/{id}",
         "/api/v1/jobs/{id}/cancel",
         "/api/v1/uploads",
@@ -46,6 +47,7 @@ def test_schema_publishes_every_current_browser_facing_route(schema):
         ("/api/v1/issuances/{id}/result", "get", {"200", "403", "404", "409", "429", "503"}),
         ("/api/v1/verifications", "post", {"201", "400", "403", "404", "409", "429"}),
         ("/api/v1/verifications/{id}", "get", {"200", "403", "404"}),
+        ("/api/v1/jobs", "get", {"200", "403"}),
         ("/api/v1/jobs/{id}", "get", {"200", "403", "404"}),
         ("/api/v1/jobs/{id}/cancel", "post", {"200", "400", "403", "404", "409", "429"}),
         ("/health/live", "get", {"200"}),
@@ -64,6 +66,7 @@ def test_schema_describes_session_cookie_and_csrf_boundaries(schema):
 
     protected = schema["paths"]["/api/v1/jobs/{id}"]["get"]
     assert {"cookieAuth": []} in protected["security"]
+    assert {"cookieAuth": []} in schema["paths"]["/api/v1/jobs"]["get"]["security"]
 
     mutation = schema["paths"]["/api/v1/jobs/{id}/cancel"]["post"]
     csrf = next(parameter for parameter in mutation["parameters"] if parameter["name"] == "X-CSRFToken")
