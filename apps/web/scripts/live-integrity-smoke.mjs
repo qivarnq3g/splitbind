@@ -2,9 +2,9 @@ import { chromium, expect } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 
-const required = ["SMOKE_ORIGIN", "SMOKE_USERNAME", "SMOKE_PASSWORD", "SMOKE_RECIPIENT_ID"];
+const required = ["SMOKE_ORIGIN", "SMOKE_USERNAME", "SMOKE_PASSWORD"];
 if (process.env.SMOKE_ALLOW_WRITES !== "1" || required.some(key => !process.env[key])) {
-  throw new Error("Set SMOKE_ALLOW_WRITES=1 and all SMOKE_ORIGIN/USERNAME/PASSWORD/RECIPIENT_ID variables. This creates synthetic issuance and verification records.");
+  throw new Error("Set SMOKE_ALLOW_WRITES=1 and all SMOKE_ORIGIN/USERNAME/PASSWORD variables. This creates synthetic issuance and verification records.");
 }
 const origin = new URL(process.env.SMOKE_ORIGIN).origin;
 if (!origin.startsWith("https://")) throw new Error("Live smoke requires HTTPS.");
@@ -39,11 +39,17 @@ try {
   });
   const xref = Buffer.byteLength(pdf);
   pdf += `xref\n0 6\n0000000000 65535 f \n${offsets.map(offset => `${String(offset).padStart(10, "0")} 00000 n \n`).join("")}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  
+  // 1. Verify "Mã người nhận" is gone and fill "Email người nhận"
+  await expect(page.getByLabel("Mã người nhận")).toHaveCount(0);
   await page.getByLabel("Tệp PDF", { exact: true }).setInputFiles({ name: "synthetic-smoke.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdf) });
-  await page.getByLabel("Mã người nhận", { exact: true }).fill(process.env.SMOKE_RECIPIENT_ID);
+  const testEmail = process.env.SMOKE_RECIPIENT_EMAIL ?? `smoke.qa.${Date.now()}@example.com`;
+  await page.getByLabel("Email người nhận", { exact: true }).fill(testEmail);
+  // Intentionally leave "Họ và tên người nhận" empty to test email-only issuance!
   const issuanceResponse = page.waitForResponse(response => response.url() === `${origin}/api/v1/issuances` && response.request().method() === "POST");
   await page.getByRole("button", { name: "Tạo bản cấp phát", exact: true }).click();
   const created = await issuanceResponse;
+  expect(created.status()).toBe(201);
   expect(created.status()).toBe(201);
   const issuance = await created.json();
   await expect(page.getByRole("heading", { name: "Hoàn tất", exact: true })).toBeVisible({ timeout: 120000 });
@@ -99,6 +105,20 @@ try {
     console.log(JSON.stringify({ case: modified ? "unmatched" : "intact", status: result.status }));
     await page.setViewportSize({ width: 1280, height: 800 });
   }
+
+  // 3. Test mixed-case email reuse on second issuance
+  await page.goto(`${origin}/issue`);
+  await page.getByLabel("Tệp PDF", { exact: true }).setInputFiles({ name: "synthetic-smoke-casing.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdf) });
+  await page.getByLabel("Email người nhận", { exact: true }).fill(testEmail.toUpperCase());
+  await page.getByLabel("Họ và tên", { exact: true }).fill("Recipient Casing Test");
+  const secondIssuanceResponse = page.waitForResponse(response => response.url() === `${origin}/api/v1/issuances` && response.request().method() === "POST");
+  await page.getByRole("button", { name: "Tạo bản cấp phát", exact: true }).click();
+  const secondCreated = await secondIssuanceResponse;
+  expect(secondCreated.status()).toBe(201);
+  const secondIssuance = await secondCreated.json();
+  await expect(page.getByRole("heading", { name: "Hoàn tất", exact: true })).toBeVisible({ timeout: 120000 });
+  console.log(JSON.stringify({ case: "second_issuance_casing", status: "completed", email: testEmail.toUpperCase() }));
+
   await page.getByRole("button", { name: "Đăng xuất khỏi SplitBind" }).click();
   await expect(page.getByRole("heading", { name: "Đăng nhập SplitBind" })).toBeVisible();
   expect(errors).toEqual([]);
