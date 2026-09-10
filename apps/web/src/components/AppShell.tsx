@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { FileKey2, LogOut, ScanSearch } from "lucide-react";
+import { FileKey2, History, LogOut, ScanSearch } from "lucide-react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   canCreateIssuance,
@@ -78,6 +78,10 @@ export function AppShell() {
               Xác minh
             </NavLink>
           ) : null}
+          <NavLink to="/history" className="nav-item">
+            <History size={18} aria-hidden="true" />
+            Lịch sử
+          </NavLink>
           {!canCreateIssuance(user.role) &&
           !canCreateVerification(user.role) ? (
             <span className="nav-readonly">

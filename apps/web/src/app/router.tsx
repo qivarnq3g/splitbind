@@ -2,6 +2,7 @@ import { Navigate, Outlet, RouteObject, createBrowserRouter, useLocation } from 
 
 import { AppShell } from "../components/AppShell";
 import { canCreateIssuance, useSession } from "../features/auth/session";
+import { HistoryPage } from "../pages/HistoryPage";
 import { IssueDocumentPage } from "../pages/IssueDocumentPage";
 import { IssuanceDetailPage } from "../pages/IssuanceDetailPage";
 import { JobDetailPage } from "../pages/JobDetailPage";
@@ -35,6 +36,7 @@ export const appRoutes: RouteObject[] = [
           { index: true, element: <RoleHome /> },
           { path: "/issue", element: <IssueDocumentPage /> },
           { path: "/verify", element: <VerifyDocumentPage /> },
+          { path: "/history", element: <HistoryPage /> },
           { path: "/jobs/:id", element: <JobDetailPage /> },
           { path: "/issuances/:id", element: <IssuanceDetailPage /> },
           { path: "/verifications/:id", element: <VerificationDetailPage /> },
