@@ -480,6 +480,58 @@
                 }
             }
         },
+        "/api/v1/jobs": {
+            "get": {
+                "operationId": "job_list",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "kind",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "issuance",
+                                "verification"
+                            ]
+                        },
+                        "description": "Filter jobs by kind (issuance or verification)"
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/Job"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Authentication, permission, or CSRF denied."
+                    }
+                }
+            }
+        },
         "/api/v1/jobs/{id}": {
             "get": {
                 "operationId": "job_retrieve",
@@ -1445,6 +1497,18 @@
                     "updated_at": {
                         "type": "string",
                         "format": "date-time"
+                    },
+                    "recipient_email": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "recipient_name": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "verification_status": {
+                        "type": "string",
+                        "nullable": true
                     }
                 },
                 "required": [

@@ -6,7 +6,7 @@ class CancelJobSerializer(serializers.Serializer):
 
 
 def serialize_job(job):
-    return {
+    data = {
         "id": str(job.id),
         "kind": job.kind,
         "status": job.status,
@@ -18,4 +18,22 @@ def serialize_job(job):
         "safe_error_code": job.safe_error_code,
         "created_at": job.created_at.isoformat(),
         "updated_at": job.updated_at.isoformat(),
+        "recipient_email": None,
+        "recipient_name": None,
+        "verification_status": None,
     }
+    if job.issuance_id:
+        try:
+            recipient = getattr(job.issuance, "recipient", None)
+            if recipient:
+                data["recipient_email"] = recipient.external_reference
+                data["recipient_name"] = recipient.display_name
+        except Exception:
+            pass
+    if job.verification_id:
+        try:
+            if hasattr(job, "verification") and job.verification:
+                data["verification_status"] = job.verification.status
+        except Exception:
+            pass
+    return data
