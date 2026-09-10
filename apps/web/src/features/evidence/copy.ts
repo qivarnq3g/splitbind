@@ -43,25 +43,51 @@ export type VerificationStatus = keyof typeof STATUS_COPY;
 
 type AlgorithmLabel = components["schemas"]["AlgorithmLabelEnum"] | components["schemas"]["NullEnum"] | null | undefined;
 
-const INTEGRITY_NON_EXACT_COPY = {
-  label: "Không khớp file đã cấp phát",
-  inference: "Tệp không khớp chính xác với bản đã cấp phát.",
-} as const;
+export const INTEGRITY_SCOPE = "Kiểm tra này đối chiếu toàn bộ tệp bằng SHA-256 và xác minh chữ ký của hồ sơ cấp phát trong tổ chức. Không định vị vùng chỉnh sửa hay xác định người chỉnh sửa, làm lộ hoặc phát tán tài liệu.";
 
-export function isIntegrityNonExact(
-  algorithmLabel: AlgorithmLabel,
-  exactFileHashMatch: boolean | null | undefined,
-): boolean {
-  return algorithmLabel === "integrity_release_v1" && exactFileHashMatch === false;
+export function integrityVerdict(
+  status: VerificationStatus,
+  exactMatch: boolean | null | undefined,
+  signatureValid: boolean | null | undefined,
+) {
+  if (status === "PROCESSING_FAILED") return {
+    ...STATUS_COPY.PROCESSING_FAILED, tone: "error" as const,
+    next: "Thử lại với tệp PDF nguồn. Nếu lỗi lặp lại, gửi mã kiểm chứng cho quản trị viên.",
+  };
+  if (status === "INVALID_MANIFEST" || signatureValid === false) return {
+    label: "Hồ sơ cấp phát không hợp lệ",
+    inference: "Hồ sơ cấp phát không vượt qua kiểm tra xác thực. Chưa thể xác nhận tính toàn vẹn của tệp.",
+    tone: "error" as const,
+    next: "Liên hệ đơn vị cấp phát để kiểm tra hồ sơ trước khi sử dụng tài liệu.",
+  };
+  if (status === "VERIFIED_INTACT" && exactMatch === true && signatureValid === true) return {
+    label: "Tệp khớp bản cấp phát",
+    inference: "Mã SHA-256 khớp chính xác với bản cấp phát và chữ ký hồ sơ hợp lệ. Tệp không thay đổi so với bản đã cấp phát.",
+    tone: "success" as const,
+    next: "Giữ nguyên tệp này để đối chiếu khi cần. Lưu mã kiểm chứng cùng hồ sơ tài liệu.",
+  };
+  if (status === "NO_WATERMARK" && exactMatch === false && signatureValid == null) return {
+    label: "Chưa tìm thấy bản cấp phát khớp",
+    inference: "Không tìm thấy bản cấp phát có mã SHA-256 trùng với tệp trong tổ chức. Kết quả này chưa đủ để kết luận tệp đã bị chỉnh sửa.",
+    tone: "warning" as const,
+    next: "Chọn đúng PDF đã tải từ SplitBind, chưa lưu lại hoặc chuyển đổi. Nếu vẫn không khớp, kiểm tra với đơn vị cấp phát.",
+  };
+  return {
+    label: "Chưa đủ bằng chứng xác minh",
+    inference: "Chưa xác nhận đồng thời được bản cấp phát khớp và chữ ký hợp lệ. Không thể kết luận tính toàn vẹn của tệp.",
+    tone: "warning" as const,
+    next: "Kiểm tra các bằng chứng bên dưới và liên hệ đơn vị cấp phát với mã kiểm chứng này.",
+  };
 }
 
 export function verificationCopy(
   status: VerificationStatus,
   algorithmLabel: AlgorithmLabel,
   exactFileHashMatch: boolean | null | undefined,
+  signatureValid?: boolean | null,
 ) {
-  if (status === "PROCESSING_FAILED" || status === "INVALID_MANIFEST") return STATUS_COPY[status];
-  return isIntegrityNonExact(algorithmLabel, exactFileHashMatch) ? INTEGRITY_NON_EXACT_COPY : STATUS_COPY[status];
+  if (algorithmLabel === "integrity_release_v1") return integrityVerdict(status, exactFileHashMatch, signatureValid);
+  return STATUS_COPY[status];
 }
 
 export const STATUS_LIMITATIONS: Record<VerificationStatus, string[]> = {
