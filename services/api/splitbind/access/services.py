@@ -11,7 +11,7 @@ def resolve_recipient_for_issue(
     recipient_email: str,
     recipient_name: str | None = None,
 ) -> Recipient:
-    email = recipient_email.strip()
+    email = recipient_email.strip().lower()
     validate_email(email)
     name = (recipient_name or "").strip()
 

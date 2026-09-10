@@ -253,7 +253,7 @@ def test_create_issuance_with_new_recipient_email_creates_recipient_and_issues()
         response = client.post(
             "/api/v1/issuances",
             data=json.dumps({
-                "recipient_email": "new.person@example.com",
+                "recipient_email": "New.Person@Example.COM",
                 "recipient_name": "Nguyễn Văn A",
                 "upload_id": str(upload.id),
                 "correlation_id": str(uuid.uuid4()),
@@ -265,12 +265,53 @@ def test_create_issuance_with_new_recipient_email_creates_recipient_and_issues()
     assert response.status_code == 201
     recipient = Recipient.objects.get(
         organization=org,
-        external_reference__iexact="new.person@example.com",
+        external_reference="new.person@example.com",
     )
     assert recipient.display_name == "Nguyễn Văn A"
     issuance_id = response.json()["id"]
     issuance = Issuance.objects.get(pk=issuance_id)
     assert issuance.recipient_id == recipient.id
+
+
+@pytest.mark.django_db
+def test_resolve_recipient_concurrent_race_integrity_error_recovery(monkeypatch):
+    from django.db import IntegrityError
+    from splitbind.access.services import resolve_recipient_for_issue
+
+    org = Organization.objects.create(name="RaceOrg", slug=f"race-org-{uuid.uuid4().hex[:8]}")
+    existing = Recipient.objects.create(
+        organization=org,
+        external_reference="race.user@example.com",
+        display_name="Created By Concurrent Thread",
+    )
+
+    original_filter = Recipient.objects.filter
+    first_call = True
+
+    def mock_filter(*args, **kwargs):
+        nonlocal first_call
+        qs = original_filter(*args, **kwargs)
+        if first_call:
+            first_call = False
+            return qs.none()
+        return qs
+
+    monkeypatch.setattr(Recipient.objects, "filter", mock_filter)
+
+    def simulated_race_create(**kwargs):
+        raise IntegrityError("simulated duplicate key race")
+
+    monkeypatch.setattr(Recipient.objects, "create", simulated_race_create)
+
+    recipient = resolve_recipient_for_issue(
+        organization=org,
+        recipient_email="RACE.USER@example.com",
+        recipient_name="Fallback Name",
+    )
+
+    assert recipient.id == existing.id
+    assert recipient.external_reference == "race.user@example.com"
+    assert recipient.display_name == "Created By Concurrent Thread"
 
 
 @pytest.mark.django_db
