@@ -8,9 +8,28 @@ from splitbind.release.mode import integrity_release_enabled
 
 
 class IssuanceCreateSerializer(serializers.Serializer):
-    recipient_id = serializers.UUIDField()
+    recipient_id = serializers.UUIDField(required=False)
+    recipient_email = serializers.EmailField(required=False, allow_blank=False, max_length=120)
+    recipient_name = serializers.CharField(required=False, allow_blank=True, max_length=200)
     upload_id = serializers.UUIDField()
     correlation_id = serializers.UUIDField()
+
+    def validate(self, attrs):
+        has_id = bool(attrs.get("recipient_id"))
+        has_email = bool(attrs.get("recipient_email"))
+        if has_id and has_email:
+            raise serializers.ValidationError(
+                "Chỉ được cung cấp mã người nhận (recipient_id) hoặc email người nhận (recipient_email), không được cung cấp cả hai."
+            )
+        if not has_id and not has_email:
+            raise serializers.ValidationError(
+                "Cần cung cấp email người nhận (recipient_email) hoặc mã người nhận (recipient_id)."
+            )
+        if has_email:
+            attrs["recipient_email"] = attrs["recipient_email"].strip()
+            if attrs.get("recipient_name") is not None:
+                attrs["recipient_name"] = attrs["recipient_name"].strip()
+        return attrs
 
 
 class VerificationCreateSerializer(serializers.Serializer):

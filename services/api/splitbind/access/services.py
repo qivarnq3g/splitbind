@@ -1,7 +1,49 @@
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.core.validators import validate_email
+from django.db import IntegrityError, transaction
 
-from splitbind.access.models import SigningKey, SigningKeyStatus, _signing_key_lifecycle_write
+from splitbind.access.models import Recipient, SigningKey, SigningKeyStatus, _signing_key_lifecycle_write
+
+
+def resolve_recipient_for_issue(
+    *,
+    organization,
+    recipient_email: str,
+    recipient_name: str | None = None,
+) -> Recipient:
+    email = recipient_email.strip()
+    validate_email(email)
+    name = (recipient_name or "").strip()
+
+    recipient = (
+        Recipient.objects.filter(
+            organization=organization,
+            external_reference__iexact=email,
+        ).first()
+    )
+
+    if recipient is not None:
+        if name and not recipient.display_name.strip():
+            recipient.display_name = name
+            recipient.save(update_fields=["display_name"])
+        return recipient
+
+    try:
+        with transaction.atomic():
+            return Recipient.objects.create(
+                organization=organization,
+                external_reference=email,
+                display_name=name,
+            )
+    except IntegrityError:
+        recipient = Recipient.objects.get(
+            organization=organization,
+            external_reference__iexact=email,
+        )
+        if name and not recipient.display_name.strip():
+            recipient.display_name = name
+            recipient.save(update_fields=["display_name"])
+        return recipient
 
 
 @transaction.atomic

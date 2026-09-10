@@ -7,7 +7,7 @@ from django.test import Client, override_settings
 from django.utils import timezone
 
 from splitbind.access.models import Organization, Recipient, Role, User
-from splitbind.documents.models import Verification
+from splitbind.documents.models import Issuance, Verification
 from splitbind.integrations.storage.fake import FakeObjectStorage
 from splitbind.uploads.models import UploadPurpose, UploadRequest
 from splitbind.release.mode import ReleaseMode
@@ -238,3 +238,245 @@ def test_integrity_release_malformed_legacy_limitations_fail_closed():
         "evidence.not_proof_of_leak_edit_or_distribution",
         "fingerprint.transformed_attribution_unavailable",
     ]
+
+
+@pytest.mark.django_db
+def test_create_issuance_with_new_recipient_email_creates_recipient_and_issues():
+    org = Organization.objects.create(name="EmailOrg", slug=f"email-org-{uuid.uuid4().hex[:8]}")
+    issuer = make_user(org, Role.ISSUER, "issuer")
+    storage = FakeObjectStorage()
+    upload = ready_upload(org, issuer, storage, UploadPurpose.ISSUANCE)
+    client = Client(enforce_csrf_checks=True)
+    headers = login(client, issuer)
+
+    with override_settings(SPLITBIND_OBJECT_STORAGE=storage):
+        response = client.post(
+            "/api/v1/issuances",
+            data=json.dumps({
+                "recipient_email": "new.person@example.com",
+                "recipient_name": "Nguyễn Văn A",
+                "upload_id": str(upload.id),
+                "correlation_id": str(uuid.uuid4()),
+            }),
+            content_type="application/json",
+            **headers,
+        )
+
+    assert response.status_code == 201
+    recipient = Recipient.objects.get(
+        organization=org,
+        external_reference__iexact="new.person@example.com",
+    )
+    assert recipient.display_name == "Nguyễn Văn A"
+    issuance_id = response.json()["id"]
+    issuance = Issuance.objects.get(pk=issuance_id)
+    assert issuance.recipient_id == recipient.id
+
+
+@pytest.mark.django_db
+def test_create_issuance_with_existing_email_reuses_recipient_case_insensitively():
+    org = Organization.objects.create(name="EmailOrg", slug=f"email-org-{uuid.uuid4().hex[:8]}")
+    issuer = make_user(org, Role.ISSUER, "issuer")
+    existing_recipient = Recipient.objects.create(
+        organization=org,
+        external_reference="student@example.com",
+        display_name="Sinh Viên Cũ",
+    )
+    storage = FakeObjectStorage()
+    upload = ready_upload(org, issuer, storage, UploadPurpose.ISSUANCE)
+    client = Client(enforce_csrf_checks=True)
+    headers = login(client, issuer)
+
+    with override_settings(SPLITBIND_OBJECT_STORAGE=storage):
+        response = client.post(
+            "/api/v1/issuances",
+            data=json.dumps({
+                "recipient_email": "  STUDENT@EXAMPLE.COM  ",
+                "recipient_name": "Tên Bỏ Qua",
+                "upload_id": str(upload.id),
+                "correlation_id": str(uuid.uuid4()),
+            }),
+            content_type="application/json",
+            **headers,
+        )
+
+    assert response.status_code == 201
+    assert Recipient.objects.filter(organization=org, external_reference__iexact="student@example.com").count() == 1
+    issuance = Issuance.objects.get(pk=response.json()["id"])
+    assert issuance.recipient_id == existing_recipient.id
+    existing_recipient.refresh_from_db()
+    assert existing_recipient.display_name == "Sinh Viên Cũ"
+
+
+@pytest.mark.django_db
+def test_create_issuance_with_optional_name_fills_blank_name_once():
+    org = Organization.objects.create(name="EmailOrg", slug=f"email-org-{uuid.uuid4().hex[:8]}")
+    issuer = make_user(org, Role.ISSUER, "issuer")
+    existing_recipient = Recipient.objects.create(
+        organization=org,
+        external_reference="blank-name@example.com",
+        display_name="",
+    )
+    storage = FakeObjectStorage()
+    upload = ready_upload(org, issuer, storage, UploadPurpose.ISSUANCE)
+    client = Client(enforce_csrf_checks=True)
+    headers = login(client, issuer)
+
+    with override_settings(SPLITBIND_OBJECT_STORAGE=storage):
+        response = client.post(
+            "/api/v1/issuances",
+            data=json.dumps({
+                "recipient_email": "blank-name@example.com",
+                "recipient_name": "Tên Được Bổ Sung",
+                "upload_id": str(upload.id),
+                "correlation_id": str(uuid.uuid4()),
+            }),
+            content_type="application/json",
+            **headers,
+        )
+
+    assert response.status_code == 201
+    existing_recipient.refresh_from_db()
+    assert existing_recipient.display_name == "Tên Được Bổ Sung"
+
+
+@pytest.mark.django_db
+def test_create_issuance_without_name_succeeds():
+    org = Organization.objects.create(name="EmailOrg", slug=f"email-org-{uuid.uuid4().hex[:8]}")
+    issuer = make_user(org, Role.ISSUER, "issuer")
+    storage = FakeObjectStorage()
+    upload = ready_upload(org, issuer, storage, UploadPurpose.ISSUANCE)
+    client = Client(enforce_csrf_checks=True)
+    headers = login(client, issuer)
+
+    with override_settings(SPLITBIND_OBJECT_STORAGE=storage):
+        response = client.post(
+            "/api/v1/issuances",
+            data=json.dumps({
+                "recipient_email": "noname@example.com",
+                "upload_id": str(upload.id),
+                "correlation_id": str(uuid.uuid4()),
+            }),
+            content_type="application/json",
+            **headers,
+        )
+
+    assert response.status_code == 201
+    recipient = Recipient.objects.get(organization=org, external_reference="noname@example.com")
+    assert recipient.display_name == ""
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("invalid_email", ["", "   ", "abc", "abc@", "@example.com", "plainaddress"])
+def test_create_issuance_with_invalid_email_returns_400(invalid_email):
+    org = Organization.objects.create(name="EmailOrg", slug=f"email-org-{uuid.uuid4().hex[:8]}")
+    issuer = make_user(org, Role.ISSUER, "issuer")
+    storage = FakeObjectStorage()
+    upload = ready_upload(org, issuer, storage, UploadPurpose.ISSUANCE)
+    client = Client(enforce_csrf_checks=True)
+    headers = login(client, issuer)
+
+    with override_settings(SPLITBIND_OBJECT_STORAGE=storage):
+        response = client.post(
+            "/api/v1/issuances",
+            data=json.dumps({
+                "recipient_email": invalid_email,
+                "upload_id": str(upload.id),
+                "correlation_id": str(uuid.uuid4()),
+            }),
+            content_type="application/json",
+            **headers,
+        )
+
+    assert response.status_code == 400
+    assert "recipient_email" in response.json()
+    assert not Recipient.objects.filter(organization=org).exists()
+    assert not Issuance.objects.filter(organization=org).exists()
+
+
+@pytest.mark.django_db
+def test_create_issuance_with_both_email_and_legacy_recipient_id_returns_400():
+    org = Organization.objects.create(name="EmailOrg", slug=f"email-org-{uuid.uuid4().hex[:8]}")
+    issuer = make_user(org, Role.ISSUER, "issuer")
+    recipient = Recipient.objects.create(organization=org, external_reference="ref1", display_name="Name 1")
+    storage = FakeObjectStorage()
+    upload = ready_upload(org, issuer, storage, UploadPurpose.ISSUANCE)
+    client = Client(enforce_csrf_checks=True)
+    headers = login(client, issuer)
+
+    with override_settings(SPLITBIND_OBJECT_STORAGE=storage):
+        response = client.post(
+            "/api/v1/issuances",
+            data=json.dumps({
+                "recipient_id": str(recipient.id),
+                "recipient_email": "test@example.com",
+                "upload_id": str(upload.id),
+                "correlation_id": str(uuid.uuid4()),
+            }),
+            content_type="application/json",
+            **headers,
+        )
+
+    assert response.status_code == 400
+
+
+@pytest.mark.django_db
+def test_create_issuance_with_neither_email_nor_recipient_id_returns_400():
+    org = Organization.objects.create(name="EmailOrg", slug=f"email-org-{uuid.uuid4().hex[:8]}")
+    issuer = make_user(org, Role.ISSUER, "issuer")
+    storage = FakeObjectStorage()
+    upload = ready_upload(org, issuer, storage, UploadPurpose.ISSUANCE)
+    client = Client(enforce_csrf_checks=True)
+    headers = login(client, issuer)
+
+    with override_settings(SPLITBIND_OBJECT_STORAGE=storage):
+        response = client.post(
+            "/api/v1/issuances",
+            data=json.dumps({
+                "upload_id": str(upload.id),
+                "correlation_id": str(uuid.uuid4()),
+            }),
+            content_type="application/json",
+            **headers,
+        )
+
+    assert response.status_code == 400
+
+
+@pytest.mark.django_db
+def test_create_issuance_recipient_email_organization_isolation():
+    org_a = Organization.objects.create(name="OrgA", slug=f"org-a-{uuid.uuid4().hex[:8]}")
+    org_b = Organization.objects.create(name="OrgB", slug=f"org-b-{uuid.uuid4().hex[:8]}")
+    issuer_a = make_user(org_a, Role.ISSUER, "issuer_a")
+    issuer_b = make_user(org_b, Role.ISSUER, "issuer_b")
+
+    recipient_a = Recipient.objects.create(
+        organization=org_a,
+        external_reference="shared@example.com",
+        display_name="User at Org A",
+    )
+
+    storage = FakeObjectStorage()
+    upload_b = ready_upload(org_b, issuer_b, storage, UploadPurpose.ISSUANCE)
+    client = Client(enforce_csrf_checks=True)
+    headers_b = login(client, issuer_b)
+
+    with override_settings(SPLITBIND_OBJECT_STORAGE=storage):
+        response = client.post(
+            "/api/v1/issuances",
+            data=json.dumps({
+                "recipient_email": "shared@example.com",
+                "recipient_name": "User at Org B",
+                "upload_id": str(upload_b.id),
+                "correlation_id": str(uuid.uuid4()),
+            }),
+            content_type="application/json",
+            **headers_b,
+        )
+
+    assert response.status_code == 201
+    recipient_b = Recipient.objects.get(organization=org_b, external_reference__iexact="shared@example.com")
+    assert recipient_b.id != recipient_a.id
+    assert recipient_b.display_name == "User at Org B"
+    issuance_b = Issuance.objects.get(pk=response.json()["id"])
+    assert issuance_b.recipient_id == recipient_b.id

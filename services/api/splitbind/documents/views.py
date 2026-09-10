@@ -10,6 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from splitbind.access.services import resolve_recipient_for_issue
 from splitbind.access.throttles import (
     AccountRateThrottle,
     IssuanceJobRateThrottle,
@@ -86,8 +87,22 @@ class IssuanceCreateView(APIView):
         if not serializer.is_valid():
             _serializer_denial(request.user, "issuance.create_denied")
             return Response(serializer.errors, status=400)
+        data = serializer.validated_data
+        recipient_id = data.get("recipient_id")
+        if not recipient_id and data.get("recipient_email"):
+            recipient = resolve_recipient_for_issue(
+                organization=request.user.organization,
+                recipient_email=data["recipient_email"],
+                recipient_name=data.get("recipient_name"),
+            )
+            recipient_id = recipient.id
         try:
-            issuance, job = create_issuance(request.user, **serializer.validated_data)
+            issuance, job = create_issuance(
+                request.user,
+                recipient_id=recipient_id,
+                upload_id=data["upload_id"],
+                correlation_id=data["correlation_id"],
+            )
         except (WorkflowNotFound, JobConflict, UploadRejected) as error:
             return _error_response(error)
         return Response(serialize_issuance(issuance, job), status=201)

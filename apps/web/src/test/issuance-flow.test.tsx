@@ -168,7 +168,7 @@ describe("issuance browser workflow", () => {
     renderApp();
     const file = new File(["%PDF-1.4\n%%EOF"], "course.pdf", { type: "application/pdf" });
     fireEvent.change(await screen.findByLabelText("Tệp PDF"), { target: { files: [file] } });
-    fireEvent.change(screen.getByLabelText("Mã người nhận"), { target: { value: RECIPIENT_ID } });
+    fireEvent.change(screen.getByLabelText(/Email người nhận/i), { target: { value: "student@example.com" } });
     fireEvent.submit(screen.getByRole("button", { name: "Tạo bản cấp phát" }).closest("form")!);
 
     expect(await screen.findByText("Đang xử lý")).toBeVisible();
@@ -198,7 +198,7 @@ describe("issuance browser workflow", () => {
     });
     expect(workflow[2]?.body).toEqual({ sha256: PDF_SHA256 });
     expect(workflow[3]?.body).toEqual({
-      recipient_id: RECIPIENT_ID,
+      recipient_email: "student@example.com",
       upload_id: UPLOAD_ID,
       correlation_id: expect.stringMatching(/^[0-9a-f-]{36}$/),
     });
@@ -218,7 +218,7 @@ describe("issuance browser workflow", () => {
       type: "application/pdf",
     });
     fireEvent.change(await screen.findByLabelText("Tệp PDF"), { target: { files: [oversized] } });
-    fireEvent.change(screen.getByLabelText("Mã người nhận"), { target: { value: RECIPIENT_ID } });
+    fireEvent.change(screen.getByLabelText(/Email người nhận/i), { target: { value: "student@example.com" } });
     fireEvent.submit(screen.getByRole("button", { name: "Tạo bản cấp phát" }).closest("form")!);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Tệp vượt quá giới hạn 10 MiB");
@@ -251,7 +251,7 @@ describe("issuance browser workflow", () => {
     fireEvent.change(await screen.findByLabelText("Tệp PDF"), {
       target: { files: [new File(["%PDF-1.4\n%%EOF"], "course.pdf", { type: "application/pdf" })] },
     });
-    fireEvent.change(screen.getByLabelText("Mã người nhận"), { target: { value: RECIPIENT_ID } });
+    fireEvent.change(screen.getByLabelText(/Email người nhận/i), { target: { value: "student@example.com" } });
     fireEvent.submit(screen.getByRole("button", { name: "Tạo bản cấp phát" }).closest("form")!);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Không thể tải tệp lên kho lưu trữ");
@@ -275,11 +275,11 @@ describe("issuance browser workflow", () => {
     renderApp();
 
     const fileInput = await screen.findByLabelText("Tệp PDF");
-    const recipientInput = screen.getByLabelText("Mã người nhận");
+    const recipientInput = screen.getByLabelText(/Email người nhận/i);
     fireEvent.change(fileInput, {
       target: { files: [new File(["%PDF-1.4\n%%EOF"], "course.pdf", { type: "application/pdf" })] },
     });
-    fireEvent.change(recipientInput, { target: { value: RECIPIENT_ID } });
+    fireEvent.change(recipientInput, { target: { value: "student@example.com" } });
     fireEvent.submit(screen.getByRole("button", { name: "Tạo bản cấp phát" }).closest("form")!);
 
     await waitFor(() => expect(fileInput).toBeDisabled());
@@ -464,6 +464,111 @@ describe("issuance browser workflow", () => {
     await waitFor(() => expect(detailReads).toBe(2));
     expect(screen.queryByRole("button", { name: /tải/i })).not.toBeInTheDocument();
     expect(screen.queryByText("Hãy thử lại.")).not.toBeInTheDocument();
+  });
+
+  it("renders recipient email and optional full name fields instead of recipient UUID", async () => {
+    const fetchMock = vi.fn<typeof globalThis.fetch>(async (input) => {
+      const request = input instanceof Request ? input : new Request(input);
+      return new URL(request.url).pathname === "/api/v1/auth/session"
+        ? json(session("issuer"))
+        : json({ detail: "Unexpected request." }, 500);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderApp();
+
+    expect(await screen.findByLabelText(/Email người nhận/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Họ và tên/i)).toBeInTheDocument();
+    expect(screen.getByText(/Không bắt buộc/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Mã người nhận")).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Dán mã người nhận được cấp")).not.toBeInTheDocument();
+  });
+
+  it("submits recipient_email and recipient_name to the issuance API without recipient_id", async () => {
+    const observed: ObservedRequest[] = [];
+    const fetchMock = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      const request = input instanceof Request && init === undefined ? input : new Request(input, init);
+      const url = new URL(request.url);
+      const bodyText = request.method === "GET" || request.method === "HEAD" ? "" : await request.clone().text();
+      const body = bodyText && request.headers.get("content-type")?.includes("application/json")
+        ? JSON.parse(bodyText) as unknown
+        : bodyText || null;
+      observed.push({
+        path: url.pathname,
+        method: request.method,
+        credentials: request.credentials,
+        headers: new Headers(request.headers),
+        body,
+      });
+      if (url.pathname === "/api/v1/auth/session") return json(session("issuer"));
+      if (url.pathname === "/api/v1/demo/capabilities") return json(demoCapabilities(true));
+      if (url.pathname === "/api/v1/uploads") {
+        return json({
+          id: UPLOAD_ID,
+          object_key: "uploads/orphan/input.pdf",
+          expected_sha256: PDF_SHA256,
+          size_bytes: 14,
+          expires_at: "2026-08-30T12:15:00Z",
+          finalized_at: null,
+          upload_url: "https://storage.example.test/direct-upload",
+          required_headers: { "Content-Type": "application/pdf" },
+        }, 201);
+      }
+      if (url.hostname === "storage.example.test") return new Response(null, { status: 200 });
+      if (url.pathname === `/api/v1/uploads/${UPLOAD_ID}/complete`) {
+        return json({
+          id: UPLOAD_ID,
+          object_key: "uploads/orphan/input.pdf",
+          expected_sha256: PDF_SHA256,
+          size_bytes: 14,
+          expires_at: "2026-08-30T12:15:00Z",
+          finalized_at: "2026-08-30T12:01:00Z",
+        });
+      }
+      if (url.pathname === "/api/v1/issuances") {
+        return json({
+          id: ISSUANCE_ID,
+          job_id: JOB_ID,
+          status: "created",
+          issued_at: "2026-08-30T12:01:00Z",
+        }, 201);
+      }
+      if (url.pathname === `/api/v1/jobs/${JOB_ID}`) {
+        return json({
+          id: JOB_ID,
+          kind: "issuance",
+          status: "processing",
+          attempt: 0,
+          issuance_id: ISSUANCE_ID,
+          verification_id: null,
+          deadline_at: "2026-08-30T12:11:00Z",
+          cancel_requested_at: null,
+          safe_error_code: null,
+          created_at: "2026-08-30T12:01:00Z",
+          updated_at: "2026-08-30T12:02:00Z",
+        });
+      }
+      return json({ detail: "Not found." }, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderApp();
+    const file = new File(["%PDF-1.4\n%%EOF"], "course.pdf", { type: "application/pdf" });
+    fireEvent.change(await screen.findByLabelText("Tệp PDF"), { target: { files: [file] } });
+    fireEvent.change(screen.getByLabelText(/Email người nhận/i), { target: { value: "student@example.com" } });
+    fireEvent.change(screen.getByLabelText(/Họ và tên/i), { target: { value: "Nguyễn Văn A" } });
+    fireEvent.submit(screen.getByRole("button", { name: "Tạo bản cấp phát" }).closest("form")!);
+
+    expect(await screen.findByText("Đang xử lý")).toBeVisible();
+
+    const issuanceReq = observed.find((r) => r.path === "/api/v1/issuances");
+    expect(issuanceReq).toBeDefined();
+    expect(issuanceReq?.body).toEqual({
+      recipient_email: "student@example.com",
+      recipient_name: "Nguyễn Văn A",
+      upload_id: UPLOAD_ID,
+      correlation_id: expect.stringMatching(/^[0-9a-f-]{36}$/),
+    });
+    expect((issuanceReq?.body as Record<string, unknown>).recipient_id).toBeUndefined();
   });
 });
 

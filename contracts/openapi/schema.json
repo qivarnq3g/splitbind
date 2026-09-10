@@ -1356,6 +1356,16 @@
                         "type": "string",
                         "format": "uuid"
                     },
+                    "recipient_email": {
+                        "type": "string",
+                        "format": "email",
+                        "minLength": 1,
+                        "maxLength": 120
+                    },
+                    "recipient_name": {
+                        "type": "string",
+                        "maxLength": 200
+                    },
                     "upload_id": {
                         "type": "string",
                         "format": "uuid"
@@ -1367,7 +1377,6 @@
                 },
                 "required": [
                     "correlation_id",
-                    "recipient_id",
                     "upload_id"
                 ]
             },

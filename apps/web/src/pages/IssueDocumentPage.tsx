@@ -12,14 +12,13 @@ import {
   validatePdf,
 } from "../features/uploads/uploadIssuance";
 import { createIssuance } from "../features/issuances/issuances";
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function IssueDocumentPage() {
   const session = useSession();
   const navigate = useNavigate();
   const abortRef = useRef<AbortController | null>(null);
   const [file, setFile] = useState<File | null>(null);
-  const [recipientId, setRecipientId] = useState("");
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const [recipientName, setRecipientName] = useState("");
   const [stage, setStage] = useState<UploadStage | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -30,9 +29,10 @@ export function IssueDocumentPage() {
       if (!file)
         throw new SafeApiError("Chưa có tệp PDF. Chọn một tệp rồi thử lại.");
       validatePdf(file);
-      if (!UUID_PATTERN.test(recipientId)) {
+      const trimmedEmail = recipientEmail.trim();
+      if (!trimmedEmail) {
         throw new SafeApiError(
-          "Mã người nhận chưa đúng. Kiểm tra mã rồi thử lại.",
+          "Email người nhận chưa đúng. Kiểm tra email rồi thử lại.",
         );
       }
       abortRef.current?.abort();
@@ -40,7 +40,11 @@ export function IssueDocumentPage() {
       abortRef.current = controller;
       const upload = await uploadIssuancePdf(file, setStage, controller.signal);
       setStage(null);
-      return createIssuance(upload.uploadId, recipientId, controller.signal);
+      return createIssuance(
+        upload.uploadId,
+        { email: trimmedEmail, name: recipientName.trim() || undefined },
+        controller.signal,
+      );
     },
     onSuccess: (created) =>
       navigate(`/jobs/${created.job_id}`, {
@@ -132,20 +136,38 @@ export function IssueDocumentPage() {
               </p>
             </div>
             <div className="field">
-              <label htmlFor="recipient-id">Mã người nhận</label>
+              <label htmlFor="recipient-email">Email người nhận</label>
               <input
-                id="recipient-id"
-                name="recipient-id"
-                autoComplete="off"
+                id="recipient-email"
+                name="recipient-email"
+                type="email"
+                autoComplete="email"
                 required
                 disabled={issuance.isPending}
-                aria-describedby="recipient-help"
-                placeholder="Dán mã người nhận được cấp"
-                value={recipientId}
-                onChange={(event) => setRecipientId(event.target.value.trim())}
+                aria-describedby="recipient-email-help"
+                placeholder="nguyenvana@example.com"
+                value={recipientEmail}
+                onChange={(event) => setRecipientEmail(event.target.value)}
               />
-              <p className="field-help" id="recipient-help">
-                Mã người nhận do quản trị viên cấp, không phải tên đăng nhập.
+              <p className="field-help" id="recipient-email-help">
+                Nhập email của người sẽ nhận bản cấp phát.
+              </p>
+            </div>
+            <div className="field">
+              <label htmlFor="recipient-name">Họ và tên</label>
+              <input
+                id="recipient-name"
+                name="recipient-name"
+                type="text"
+                autoComplete="name"
+                disabled={issuance.isPending}
+                aria-describedby="recipient-name-help"
+                placeholder="Nguyễn Văn A"
+                value={recipientName}
+                onChange={(event) => setRecipientName(event.target.value)}
+              />
+              <p className="field-help" id="recipient-name-help">
+                Không bắt buộc. Dùng để dễ nhận biết người nhận trong hồ sơ.
               </p>
             </div>
             <WorkflowSteps stage={stage} />

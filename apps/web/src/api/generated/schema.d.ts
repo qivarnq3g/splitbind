@@ -334,7 +334,10 @@ export interface components {
         };
         IssuanceCreateRequest: {
             /** Format: uuid */
-            recipient_id: string;
+            recipient_id?: string;
+            /** Format: email */
+            recipient_email?: string;
+            recipient_name?: string;
             /** Format: uuid */
             upload_id: string;
             /** Format: uuid */
