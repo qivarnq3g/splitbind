@@ -169,10 +169,17 @@ input:disabled {
   font-weight: 600;
   border-bottom: 2px solid transparent;
   white-space: nowrap;
+  transition:
+    color var(--dur-hover) var(--ease-out),
+    border-color var(--dur-hover) var(--ease-out);
 }
 .nav-item.active {
   color: var(--color-accent);
   border-color: var(--color-accent);
+}
+.nav-item:hover {
+  color: var(--color-ink);
+  border-color: var(--color-rule);
 }
 .nav-readonly {
   padding-block: var(--space-sm);
@@ -242,6 +249,10 @@ input:disabled {
   background: var(--color-surface);
   color: var(--color-ink);
   padding: var(--space-xs) var(--space-sm);
+  transition: border-color var(--dur-hover) var(--ease-out);
+}
+.field input:not([type="file"]):hover:not(:disabled) {
+  border-color: var(--color-rule-hover);
 }
 input::placeholder {
   color: var(--color-muted);
@@ -605,6 +616,9 @@ code {
   min-height: var(--control-height);
   padding: var(--space-sm) 0;
   font-size: var(--text-sm);
+}
+.technical-details summary:hover {
+  color: var(--color-ink);
 }
 .technical-details-body {
   padding-block: var(--space-sm) var(--space-lg);

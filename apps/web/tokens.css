@@ -43,6 +43,8 @@
   --dur-micro: 120ms;
   --dur-route: 260ms;
   --dur-stagger: 45ms;
+  --dur-hover: 160ms;
+  --color-rule-hover: oklch(48% 0.02 160);
   --radius-input: 6px;
   --container-max: 70rem;
   --control-height: 3rem;

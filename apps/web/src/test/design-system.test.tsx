@@ -238,4 +238,13 @@ describe("SplitBind design system", () => {
     expect(styles).toMatch(/\.result-page\s*\{[^}]*max-width:\s*880px[^}]*margin-inline:\s*auto/s);
   });
 
+  it("eases the interactive states of navigation, inputs and disclosures", () => {
+    const styles = readFileSync(resolve(process.cwd(), "src/styles/app.css"), "utf8");
+
+    expect(styles).toMatch(/\.nav-item\s*\{[^}]*transition:[^}]*color var\(--dur-hover\)/s);
+    expect(styles).toMatch(/\.nav-item:hover\s*\{/);
+    expect(styles).toMatch(/\.field input:not\(\[type="file"\]\)\s*\{[^}]*transition:[^}]*border-color var\(--dur-hover\)/s);
+    expect(styles).toMatch(/\.technical-details summary:hover\s*\{/);
+  });
+
 });
