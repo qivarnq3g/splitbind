@@ -28,16 +28,16 @@ Explicit non-goals, taken from `README.md`:
 
 Looking for application code in the repository root will find nothing. `apps/`, `services/`, `infra/` and `contracts/` exist only on `feat/splitbind-mvp`.
 
-Remote is `https://github.com/qivarnq3g/splitbind.git`, **visibility PRIVATE** (verified 2026-09-11 via `gh repo view`). The publication set therefore reaches collaborators, not the public internet — but it does reach them, so the content boundary below still applies.
+Remote is `https://github.com/qivarnq3g/splitbind.git`, **visibility PRIVATE** (verified 2026-09-11 via `gh repo view`). The publication set therefore reaches collaborators, not the public internet - but it does reach them, so the content boundary below still applies.
 
 Application layout on `feat/splitbind-mvp`:
 
-- `apps/web` — React + TypeScript + Vite frontend, npm workspace `@splitbind/web`.
-- `services/api` — Django REST Framework API and control plane.
-- `contracts/{algorithm,jsonschema,openapi}` — shared contracts. Runtime containers must copy the **entire** tree; partial copies cause runtime `FileNotFoundError`.
-- `infra/{caddy,compose,docker,scripts}` — reverse proxy config, Compose stack, Dockerfiles, and operational PowerShell/Python scripts.
-- `research/`, `fixtures/`, `tests/` — research prototypes, test fixtures, and test suites.
-- `.github/workflows/` — `release-images.yaml` (build and publish images by digest) and `smoke.yaml`.
+- `apps/web` - React + TypeScript + Vite frontend, npm workspace `@splitbind/web`.
+- `services/api` - Django REST Framework API and control plane.
+- `contracts/{algorithm,jsonschema,openapi}` - shared contracts. Runtime containers must copy the **entire** tree; partial copies cause runtime `FileNotFoundError`.
+- `infra/{caddy,compose,docker,scripts}` - reverse proxy config, Compose stack, Dockerfiles, and operational PowerShell/Python scripts.
+- `research/`, `fixtures/`, `tests/` - research prototypes, test fixtures, and test suites.
+- `.github/workflows/` - `release-images.yaml` (build and publish images by digest) and `smoke.yaml`.
 
 Present in the repository root but excluded from Git by design: course PDFs and spreadsheets, `note.txt`, `docs/course/`, `docs/internal/`, `skills/`, `AGENTS.md`, `CLAUDE.md`, and `.claude/`. See `.gitignore` for the exact rules and the reason each exists.
 
@@ -52,7 +52,7 @@ Present in the repository root but excluded from Git by design: course PDFs and 
 | Evidence, experiments, claim calibration | `docs/knowledge/experimental-rigor-and-evidence.md` | Before stating an empirical conclusion or comparing runs |
 | Tool and plugin registry | `docs/knowledge/agent-tools-and-plugins.md` | When a task needs specialized tools or plugins |
 | Full knowledge catalog index | `docs/knowledge/_index.md` | Look up existing knowledge before creating new files |
-| Deploying, CSRF/CORS/CSP boundaries, rollout evidence rules | `docs/knowledge/production-deployment-readiness.md` | Before any deployment or cross-origin debugging |
+| Deploying, CSRF/CORS/CSP boundaries, rollout evidence rules | `docs/knowledge/production-deployment-readiness.md` | Before any deployment or cross-origin debugging, **and before authoring any frontend code that ships** - the deployed CSP has no `style-src` and constrains how motion and assets may be written |
 | Fingerprint V3 geometry and sync states | `docs/knowledge/fingerprint-v3-invariants.md` | When touching geometry search or evidence envelopes |
 | Frontend art direction, motion, and QA | `docs/knowledge/frontend-design-and-motion.md`, `docs/knowledge/frontend-refinement-qa.md` | Before changing UI, motion, or design tokens |
 | Live infrastructure identifiers and rollout evidence | `docs/internal/splitbind-rollout-evidence.md` | Local only, never committed; auditing or rolling back a deployment |
@@ -60,7 +60,7 @@ Present in the repository root but excluded from Git by design: course PDFs and 
 
 ## Content boundary
 
-`docs/knowledge/` is part of the Git publication set and reaches every collaborator. A fact that names a live host, IP address, cloud subscription, storage bucket, account principal, or credential does **not** belong there — it goes to `docs/internal/`, which `.gitignore` excludes. This boundary was established on 2026-09-11 by splitting run-specific evidence out of `docs/knowledge/production-deployment-readiness.md`.
+`docs/knowledge/` is part of the Git publication set and reaches every collaborator. A fact that names a live host, IP address, cloud subscription, storage bucket, account principal, or credential does **not** belong there - it goes to `docs/internal/`, which `.gitignore` excludes. This boundary was established on 2026-09-11 by splitting run-specific evidence out of `docs/knowledge/production-deployment-readiness.md`.
 
 ## Environment and compatibility
 

@@ -28,7 +28,7 @@ Persistence is **non-negotiable** whenever ANY of these 6 conditions occurs duri
 
 ### The Anti-Discursive Admission Rule (Lệnh cấm thừa nhận sai lầm trong chat mà chưa ghi đĩa)
 A chronic operational defect of AI coding agents is treating analytical errors, theoretical fallacies, and conceptual debates as purely "conversational discussion":
-- The agent openly admits in chat that an earlier analysis or hypothesis was flawed, points out mathematical fallacies, and explains the correct theory to the user—**YET FAILS to persist those lessons to disk in the same turn** because "no command failed with an error exit code in the shell".
+- The agent openly admits in chat that an earlier analysis or hypothesis was flawed, points out mathematical fallacies, and explains the correct theory to the user-**YET FAILS to persist those lessons to disk in the same turn** because "no command failed with an error exit code in the shell".
 - **The Rule:** Any conversational turn that concedes a prior analytical error, refutes an architectural hypothesis, or identifies a mathematical impossibility is a **Mandatory Persistence Event**.
 - The agent is **STRICTLY FORBIDDEN** from outputting conversational explanations or admissions of conceptual mistakes until the corrected principle, empirical data, and boundary conditions have been physically written to `docs/knowledge/*.md` (and upstream templates if generic) via a file-write tool call. Emitting an explanation of why you were wrong without saving the corrected truth first is an immediate gate violation.
 
@@ -44,7 +44,7 @@ A chronic cognitive failure mode of AI coding agents is **Partial Knowledge Capt
 
 ### Secondary Residual Knowledge Sweep (Continuous Self-Learning)
 If **NONE** of the 5 primary event triggers fired, the agent is **STILL NOT EXEMPT** from reflection. The agent MUST execute a second-pass review:
-- Ask: *"Is there any micro-pattern, obscure CLI flag, undocumented dependency requirement, performance nuance, configuration detail, or project-specific quirk discovered or reinforced during this task — no matter how small — that would make future turns or new agents faster, safer, or more reliable?"*
+- Ask: *"Is there any micro-pattern, obscure CLI flag, undocumented dependency requirement, performance nuance, configuration detail, or project-specific quirk discovered or reinforced during this task - no matter how small - that would make future turns or new agents faster, safer, or more reliable?"*
 - **The Zero-Discard Axiom:** All knowledge has cumulative value. If any subtle technical insight or operational detail was verified, capture it into the appropriate `docs/knowledge/*.md` file. Never discard a verified technical fact on the assumption that it is "too minor".
 
 
@@ -66,6 +66,19 @@ Before writing, categorize candidate facts to determine destination scope (Local
 | **Ephemeral** | Transient task logs, intermediate test outputs, one-off debugging traces | **Do not persist** |
 
 ---
+
+### Routing triggers must be as wide as the fact's blast radius
+
+A knowledge base fails silently when a fact is filed correctly but its *trigger condition* is narrower than the set of tasks the fact actually governs. The file is never opened, so the fact might as well not exist, and nothing in the system reports the miss.
+
+Observed on 2026-09-11. A routing row read `production-deployment-readiness.md | Before any deployment or cross-origin debugging`. That file also carried the deployed Content Security Policy, which constrains how every line of shipped frontend code may be written. Authoring a new page is neither a deployment nor cross-origin debugging, so the trigger never fired, and a UI design reached approval stage with the CSP unread. The fact was present, indexed, and correct; only the trigger was wrong.
+
+Two rules follow:
+
+1. **Write the trigger from the fact's scope, not from the circumstances in which the fact was discovered.** A CSP discovered while debugging a failed upload still governs all frontend authoring. State the widest task class the fact constrains.
+2. **A routing row in a reference document is not a gate.** When an operating contract distinguishes instruction files from reference files, a row that lives only in the reference layer is advisory. If a fact must be read before acting, its trigger belongs in the contract's own mandatory table, and on platforms that support path-scoped rules, in a rule bound to the paths the fact governs. Prefer the mechanism over prose: a rule that loads itself does not depend on an agent remembering to look.
+
+Audit prompt when adding or reviewing any routing row: *name a task that this fact constrains but this trigger would not fire on.* If such a task exists, the trigger is too narrow.
 
 ## 3. Every-Turn Knowledge Workflow: Pre-Response Self-Audit Gate
 

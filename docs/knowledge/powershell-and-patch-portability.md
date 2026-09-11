@@ -78,11 +78,11 @@ The string is missing the terminator: ".
 Missing closing '}' in statement block or type definition.
 ```
 
-The reported line was correct but the reported *cause* was not — the parser had already lost its place. A cascade of "missing terminator / missing closing brace" errors in a script that looks balanced is the signature of an encoding problem, not a syntax problem.
+The reported line was correct but the reported *cause* was not - the parser had already lost its place. A cascade of "missing terminator / missing closing brace" errors in a script that looks balanced is the signature of an encoding problem, not a syntax problem.
 
 Two fixes, in order of preference:
 
-1. Keep scripts ASCII-only. Use `-` rather than `—`, straight quotes rather than typographic ones. Put non-ASCII in data files, not in code.
+1. Keep scripts ASCII-only. Use `-` rather than `-`, straight quotes rather than typographic ones. Put non-ASCII in data files, not in code.
 2. If a script genuinely needs non-ASCII, save it as UTF-8 **with** BOM so 5.1 decodes it correctly.
 
 Detect before shipping:

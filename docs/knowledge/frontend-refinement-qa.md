@@ -1,16 +1,26 @@
 # Frontend refinement QA
 
-## UX, ETA, Full Identifiers & History Architecture — 2026-09-10
+## Live UI audit of the deployed app - 2026-09-11
+
+Measured against `https://splitbind.qivarn.id.vn` in a real Chrome session at `innerWidth` 1680, authenticated. These are current defects, not historical notes.
+
+- **The route stagger timeline has no targets.** `MotionRoute.tsx` builds a GSAP stagger over `stage.querySelectorAll("[data-motion-block]")`, but `data-motion-block` is present on exactly one element type in the source: the `.history-card` article in `HistoryPage.tsx`. A live `document.querySelectorAll('[data-motion-block]').length` returned `0` on `/issue` and on `/issuances/:id`. Every page except `/history` therefore receives only the single 0.26s whole-stage opacity fade, which is imperceptible on a page that is still fetching. Any claim that the app "has GSAP animation" must name the page: outside `/history` the second half of the timeline is dead code.
+- **`.result-page` is left-aligned inside a wider stage.** `app.css` declares `.result-page { max-width: 880px; }` with no `margin-inline: auto`. At 1680px the shell measures header and nav at 1120px (centred, 273 to 1393) while `.route-stage` is 1056px (305 to 1361) and the result body is 880px starting at 305, so roughly 176px of empty space sits to the right of every verdict, issuance record and job record while the rules above them run the full width. This reads as a broken layout rather than a narrow reading measure.
+- **The stylesheet carries almost no motion.** `app.css` is 1165 lines with zero `@keyframes` and four `transition` declarations, one of which is the `prefers-reduced-motion` kill switch; eight `:hover` rules exist in total. The only `@keyframes` resolvable in the live document was `claude-pulse`, injected by the browser extension, not by the app. Hover, focus and press states are therefore instant steps with no easing, which is the measurable part of the "feels unfinished" complaint.
+- **Session gate flashes an unstyled line.** A hard navigation to `/verify` or `/history` renders `SessionBoundary`'s `<main class="session-loading"><p>Đang kiểm tra phiên đăng nhập</p></main>` with no nav, no skeleton and no brand context, then swaps to the full page. Screenshots taken within roughly 2 seconds of navigation captured this state on both routes.
+- **`resize_window` could not exercise the breakpoints in this session**, so the responsive behaviour recorded on 2026-09-10 was not re-verified here. See `agent-tools-and-plugins.md`.
+
+## UX, ETA, Full Identifiers & History Architecture - 2026-09-10
 
 - **Dynamic ETA and Elapsed Timer Invariant:** On `JobDetailPage.tsx`, static wait notes ("Thời gian xử lý phụ thuộc kích thước tệp và hàng đợi. Chưa có ước tính thời gian còn lại.") are replaced with an active elapsed timer. For jobs in non-terminal states (`created`, `queued`, `processing`, `retryable_failed`):
-  - $\le 15$ seconds: displays `Thời gian ước tính: ~5 – 15 giây · Đã xử lý: {elapsed}s`.
+  - $\le 15$ seconds: displays `Thời gian ước tính: ~5 - 15 giây · Đã xử lý: {elapsed}s`.
   - $> 15$ seconds: dynamically transitions to queue status `Đang xử lý trong hàng đợi ({elapsed}s) · Vui lòng giữ nguyên trang...`.
   - Upon completion (`succeeded`): displays `Đã hoàn tất sau {totalSeconds} giây.` (computed from `data.created_at` to `data.updated_at`), providing immediate quantitative confirmation.
 - **Full UUID Display Invariant:** Component `CompactIdentifier` supports a boolean `full` prop. On record and detail pages (`/jobs/:id`, `/issuances/:id`, `/verifications/:id`), `full={true}` renders complete 36-character UUID strings in monospace font with a copy button. Defensive styling `overflow-wrap: anywhere; word-break: break-all;` on `<code>` prevents horizontal viewport overflow on narrow screens.
 - **Multi-Tenant Scoped History & Navigation:** Backend endpoint `GET /api/v1/jobs` combined with `scope_jobs(actor, queryset).select_related("issuance__recipient", "verification")` provides an isolated, performant document and job history endpoint (Admin/Auditor sees organization-wide jobs; Issuer sees own issuances; Verifier sees own verifications). The frontend `/history` route and `History` navigation tab provide instantaneous lookup and filtering (All / Issuance / Verification) with direct links to `/issuances/:id` and `/verifications/:id`.
 - **Strict Design System Token Boundary:** `apps/web/src/test/design-system.test.tsx` strictly validates that all CSS `var(--token)` usages in `app.css` match keys declared in `:root` inside `tokens.css`. CSS fallback syntax like `var(--radius-pill, 9999px)` fails this regex validation if `--radius-pill` is not explicitly declared. All CSS rules must strictly use declared tokens (`--radius-input`, `--color-surface`, etc.) or standard CSS literals.
 
-## Production evidence correction — 2026-09-09
+## Production evidence correction - 2026-09-09
 
 Accepted live browser evidence on September 10: login, synthetic issuance, processing, actual artifact download, unchanged-file verification (`VERIFIED_INTACT`, hash true, signature true), byte-modified verification (`NO_WATERMARK`, hash false, signature null), keyboard evidence disclosure and logout passed with no console/page errors. Both verdicts passed at 1920x1080, 1280x800, 768x1024 and 375x667; mobile used reduced motion and all widths passed overflow assertions. Nine live PNGs remain in `artifacts/live-integrity-report`; 34 E2E PNGs were moved to `artifacts/evidence-report-71270c6`. Visual inspection confirmed clear verdict-first hierarchy and stacked mobile evidence fields. Final full Chromium suite passed 20/20; September 10 rerun passed 82/82 unit/component tests and standalone typecheck. Release CI verified the production build. Lint remains unconfigured. Disposable build/digest outputs and Playwright run metadata were removed; no Node processes remained. Synthetic records and server rollback evidence are intentionally retained.
 
@@ -62,7 +72,7 @@ Removing GSAP imports while leaving an unused `useRef` caused a test-time Refere
 
 The first full suite after refactor has nine failures: eight obsolete visual/copy assertions tied to removed chambers/seals/breadcrumbs, and one duplicate conclusion caused by leaving hidden evidence markup. Replace design-change detectors with outcome assertions; remove duplicate DOM rather than hiding it with CSS. Network/validation tests remain the contract.
 
-## Scope and evidence — 2026-09-08
+## Scope and evidence - 2026-09-08
 
 The user authorizes an autonomous presentation-layer rebuild, not preservation of prior motion. API, authentication, validation and security boundaries remain unchanged. Work in `.worktrees/splitbind-mvp`; portable knowledge resides in the parent project's `docs/knowledge`, not in that worktree (its knowledge index does not exist).
 

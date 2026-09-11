@@ -1,6 +1,6 @@
 # Frontend Design and Motion Invariants
 
-## Current implementation notice — 2026-09-09
+## Current implementation notice - 2026-09-09
 
 The presentation guidance below is historical and superseded by [Frontend refinement QA](frontend-refinement-qa.md) and the app worktree's `design.md`. The current Evidence desk removes chambers, CryptographicMotif, laser scans, seals, fake telemetry, mobile drawers and root overflow clipping. It uses visible mobile tabs, verdict-first results and technical disclosure. GSAP is limited to scoped 180ms opacity and 220ms real status changes, disabled for reduced motion. Upload stages are not cryptographic-processing evidence. Do not restore previous false-positive signature or blanket tampering copy. The inspected Vite configuration targets the local backend, not the historical production proxy described below.
 

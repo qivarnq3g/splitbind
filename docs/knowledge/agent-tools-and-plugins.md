@@ -82,6 +82,15 @@ Headless browser automation tool used for end-to-end testing, visual QA auditing
 **Host & Execution Quirks:**
 - **Pre-installed Chromium Path on Windows Host:** If Playwright fails with `Executable doesn't exist at C:\Users\<user>\AppData\Local\ms-playwright\chromium_headless_shell-<rev>\...`, inspect `C:\Users\<user>\AppData\Local\ms-playwright` for installed browser revisions (e.g., `chromium-1234\chrome-win64\chrome.exe`) and pass `executablePath: "C:/Users/<user>/AppData/Local/ms-playwright/chromium-1234/chrome-win64/chrome.exe"` into `chromium.launch({ headless: true, executablePath: ... })`.
 
+### Claude in Chrome (MCP browser control)
+
+Browser automation driven through the user's real Chrome profile (`mcp__claude-in-chrome__*`). Unlike Playwright it reuses the live browser session, so authenticated production pages can be inspected without re-login and without handling credentials.
+
+**Host & Execution Quirks:**
+- **`resize_window` silently fails on a maximized window:** The tool returns `Successfully resized window containing tab <id> to <w>x<h> pixels` while the page viewport never changes. Observed 2026-09-11 on Windows 11: two consecutive calls (400x860, then 420x900) both reported success, yet `window.innerWidth` stayed `1680`, `outerWidth` stayed `1920`, and screenshots kept the desktop layout. The success message is not evidence of a viewport change. Always read `innerWidth` from the page before treating any screenshot as a responsive-breakpoint check. Probable cause, not confirmed in session: Chrome's `windows.update` ignores `width`/`height` while the window `state` is `maximized`. For reliable multi-viewport QA use Playwright with an explicit `viewport`, or have the user unmaximize the window first.
+- **Console capture starts at first read, not at page load:** `read_console_messages` returns `No console messages found for this tab` when the page loaded before the first call, because tracking begins when the tool is first invoked. Call it once, then reload the page, then read again to capture load-time errors.
+- **Screenshot frame is not the CSS viewport:** the returned image dimensions (and the reported coordinate frame) can differ from `innerWidth`/`clientWidth`. Measure layout with `getBoundingClientRect()` through `javascript_tool` rather than estimating pixel positions off a screenshot.
+
 ### Windows Dev Skills (WinUI & Windows App SDK)
 
 Official Microsoft plugins and skills for Windows application development (WinUI 3, Windows App SDK, packaging, MSIX, and Win32 modernization).
@@ -105,6 +114,51 @@ Official Microsoft plugins and skills for Windows application development (WinUI
 **Build and Test Invariants:**
 - **Windows App SDK 1.6+ PublishSingleFile Requirement:** When configuring `<PublishSingleFile>true</PublishSingleFile>` in an unpackaged WinUI 3 project (`<UseWinUI>true</UseWinUI>`), `Microsoft.WindowsAppSDK.SingleFile.targets` enforces that `<EnableMsixTooling>true</EnableMsixTooling>` must also be added to `<PropertyGroup>`. Otherwise, compilation fails with `error: PublishSingleFile requires EnableMsixTooling for embedded resources.pri generation`.
 - **CommunityToolkit.Mvvm Async RelayCommand Test Execution:** When invoking an async `[RelayCommand]` method in unit tests or programmatic runners, calling standard `ICommand.Execute(null)` returns synchronously while the task continues in the background. Downstream checks that inspect state or call other methods with `if (IsBusy) return;` will observe intermediate state or get rejected. Always cast to `CommunityToolkit.Mvvm.Input.IAsyncRelayCommand` and call/await `ExecuteAsync(null)` to verify full execution.
+
+### Scientific Agent Skills (K-Dense)
+
+164 research skills for science and technical writing: figures, schematics, statistics, scientific writing, literature lookup, plus domain libraries for biology and chemistry. MIT licensed. Source: https://github.com/K-Dense-AI/scientific-agent-skills
+
+| Platform | Install command | Verification command |
+|---|---|---|
+| Claude Code | see the two-step workaround below | `claude plugin list` |
+| Any platform with an Agent Skills loader | copy `skills/<name>/` into the platform's skills directory | platform skill list |
+
+**The repository is a plugin, not a marketplace.** It ships `plugin.json` at the root but no
+`.claude-plugin/marketplace.json`, so `claude plugin marketplace add K-Dense-AI/scientific-agent-skills`
+fails with `Marketplace file not found`. Two further failure modes appear before that one:
+
+1. `marketplace add <owner/repo>` clones over **SSH** and fails with `Host key verification failed`
+   when GitHub is not in `known_hosts`. Pass the full HTTPS URL instead.
+2. The clone then exceeds the default 120 s git timeout. Raise it:
+   `CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=900000`.
+
+Working install: clone the plugin, wrap it in a local marketplace, then install from that path.
+
+```bash
+git clone --depth 1 --filter=blob:none --no-checkout \
+  https://github.com/K-Dense-AI/scientific-agent-skills.git
+git sparse-checkout set skills     # 39 MB instead of the full repo with docs/images
+# write .claude-plugin/marketplace.json in the PARENT directory, with
+#   "plugins": [{"name": "scientific-agent-skills", "source": "./scientific-agent-skills", ...}]
+claude plugin marketplace add <parent directory>
+claude plugin install scientific-agent-skills@<marketplace name>
+```
+
+**Cost before installing:** `claude plugin details scientific-agent-skills` reports the always-on
+token cost. This plugin adds about **26.5k tokens to every session** because all 164 skill
+descriptions load. Disable it (`claude plugin disable`) in sessions that do not need it.
+
+**Skills that earned their place in this project:**
+- `scientific-visualization`: network-free CLIs that are useful on their own, independent of any
+  model - `palette_audit.py` (WCAG contrast against the background plus pairwise CIE L\* grayscale
+  separation), `image_metadata.py` (effective DPI at a stated print width, alpha, ICC),
+  `figure_export.py`, and `assets/publication.mplstyle` with Okabe-Ito cycles.
+- `scientific-schematics`: **generates diagrams with an image model through OpenRouter**. It needs
+  `OPENROUTER_API_KEY`, sends the prompt and the generated image off the machine, returns raster PNG
+  only, and its own documentation warns that misspelled labels are the most common failure. Not
+  usable for Vietnamese figure labels, and not usable at all without explicit consent to send the
+  content to a third party. Check which skills call out to a network service before using them.
 
 ### Antigravity CLI Tool Invariants
 

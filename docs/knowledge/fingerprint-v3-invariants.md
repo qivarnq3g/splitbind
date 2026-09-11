@@ -1,6 +1,6 @@
 # Fingerprint V3 implementation invariants
 
-Design invariants of the V3 fingerprint generation: what the algorithm guarantees and where its declared boundaries are. Measurements, tuning attempts and refuted hypotheses live in [fingerprint-robustness-experiments.md](fingerprint-robustness-experiments.md) — read that before proposing any change to robustness.
+Design invariants of the V3 fingerprint generation: what the algorithm guarantees and where its declared boundaries are. Measurements, tuning attempts and refuted hypotheses live in [fingerprint-robustness-experiments.md](fingerprint-robustness-experiments.md) - read that before proposing any change to robustness.
 
 Local knowledge for continuing the versioned V3 recovery work. The approved design and implementation plan remain authoritative; this file records verified implementation details that are easy to lose between task turns.
 

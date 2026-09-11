@@ -8,7 +8,7 @@ Read Part I for any substantive answer. Read Parts II and III before stating an 
 
 ---
 
-## Part I — Response quality and reasoning discipline
+## Part I - Response quality and reasoning discipline
 
 
 ### 1. Core Objective
@@ -141,7 +141,7 @@ Provide clear rationale and an improved alternative framing whenever challenging
 
 ---
 
-## Part II — Evidence and experimental rigor
+## Part II - Evidence and experimental rigor
 ### A. Evidence before conclusions
 - Match claim strength strictly to evidence strength. Explicitly categorize claims: hypothesis, plausible explanation, observed correlation, measured result, controlled comparison, causal evidence, or verified fact.
 - Never escalate "suggests", "has headroom", or "plausible" into "proven", "bottleneck", "root cause", "optimal", or "only way".
@@ -282,7 +282,7 @@ Before making architectural decisions or stating empirical conclusions, execute 
 
 ---
 
-## Part III — Epistemic calibration, feedback handling, and evidence reporting
+## Part III - Epistemic calibration, feedback handling, and evidence reporting
 
 * **Feedback Verification & Anti-Feedback Regression (Chống thoái lui hành vi do phản biện sai):**
   - Mọi phản hồi, phê bình từ bên ngoài (kể cả từ người đánh giá / reviewer) BẮT BUỘC phải tuân thủ quy trình kiểm chứng thực tế trước khi chấp nhận hoặc chuyển hóa thành tri thức:
