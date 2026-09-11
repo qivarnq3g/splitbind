@@ -85,4 +85,53 @@ describe("SplitBind landing page", () => {
 
     expect(await screen.findByRole("banner", { name: "Giới thiệu SplitBind" })).toBeVisible();
   });
+
+  it("renders seven sections under one page heading", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async () => json({
+      authenticated: false,
+      csrf_token: "csrf-token",
+      user: null,
+    })));
+
+    renderApp("/");
+
+    await screen.findByRole("banner", { name: "Giới thiệu SplitBind" });
+    expect(document.querySelectorAll("[data-landing-section]")).toHaveLength(7);
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  });
+
+  it("states the evidence boundary and never claims transformed-file detection", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async () => json({
+      authenticated: false,
+      csrf_token: "csrf-token",
+      user: null,
+    })));
+
+    renderApp("/");
+
+    const boundary = await screen.findByRole("region", { name: "Biên giới bằng chứng" });
+    expect(boundary).toHaveTextContent("không phải bằng chứng");
+    expect(boundary).toHaveTextContent("chưa khả dụng");
+    const claimSections = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-landing-section]"),
+    ).filter((section) => section.dataset.landingSection !== "05");
+    expect(claimSections).toHaveLength(6);
+    for (const section of claimSections) {
+      expect(section.textContent ?? "").not.toMatch(/sau (khi )?biến đổi/i);
+    }
+  });
+
+  it("issues no API request while rendering", async () => {
+    const fetchMock = vi.fn<typeof globalThis.fetch>(async () => json({
+      authenticated: false,
+      csrf_token: "csrf-token",
+      user: null,
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderApp("/gioi-thieu");
+
+    await screen.findByRole("banner", { name: "Giới thiệu SplitBind" });
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes("/api/v1"))).toHaveLength(0);
+  });
 });

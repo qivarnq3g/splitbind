@@ -1,5 +1,12 @@
 import { Link } from "react-router-dom";
 
+import { ArchitectureSection } from "../features/landing/ArchitectureSection";
+import { BoundarySection } from "../features/landing/BoundarySection";
+import { IssuanceSection } from "../features/landing/IssuanceSection";
+import { LandingClosing } from "../features/landing/LandingClosing";
+import { LandingHero } from "../features/landing/LandingHero";
+import { ProblemSection } from "../features/landing/ProblemSection";
+import { VerificationSection } from "../features/landing/VerificationSection";
 import "../styles/landing.css";
 
 export function LandingPage() {
@@ -22,7 +29,13 @@ export function LandingPage() {
         </Link>
       </header>
       <main className="landing-main" id="noi-dung-chinh" tabIndex={-1}>
-        <h1>Tài liệu có nguồn. Niềm tin có cơ sở.</h1>
+        <LandingHero />
+        <ProblemSection />
+        <IssuanceSection />
+        <VerificationSection />
+        <BoundarySection />
+        <ArchitectureSection />
+        <LandingClosing />
       </main>
       <footer className="landing-footer">
         <span>SplitBind · Nhóm 9 · An toàn thông tin</span>
