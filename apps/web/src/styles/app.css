@@ -483,6 +483,7 @@ summary {
 }
 .result-page {
   max-width: 880px;
+  margin-inline: auto;
 }
 .verdict {
   display: flex;

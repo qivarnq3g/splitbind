@@ -232,4 +232,10 @@ describe("SplitBind design system", () => {
     expect(motionPage).toHaveAttribute("data-stage-rank", "1");
   });
 
+  it("centres the constrained result column inside the route stage", () => {
+    const styles = readFileSync(resolve(process.cwd(), "src/styles/app.css"), "utf8");
+
+    expect(styles).toMatch(/\.result-page\s*\{[^}]*max-width:\s*880px[^}]*margin-inline:\s*auto/s);
+  });
+
 });
