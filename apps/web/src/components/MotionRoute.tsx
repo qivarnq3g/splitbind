@@ -18,16 +18,39 @@ export function MotionRoute({ children }: PropsWithChildren) {
       }
       const media = gsap.matchMedia();
       media.add("(prefers-reduced-motion: no-preference)", () => {
-        gsap.fromTo(
-          root.current,
-          { opacity: 0.6 },
+        const stage = root.current;
+        if (!stage) return;
+        const timeline = gsap.timeline();
+        timeline.fromTo(
+          stage,
+          { opacity: 0, y: 8 },
           {
             opacity: 1,
-            duration: 0.18,
+            y: 0,
+            duration: 0.26,
             ease: "power2.out",
-            clearProps: "opacity",
+            clearProps: "opacity,transform",
           },
         );
+        const blocks = gsap.utils.toArray<HTMLElement>(
+          stage.querySelectorAll("[data-motion-block]"),
+        );
+        if (blocks.length > 0) {
+          timeline.fromTo(
+            blocks,
+            { opacity: 0, y: 10 },
+            {
+              opacity: 1,
+              y: 0,
+              duration: 0.3,
+              ease: "power2.out",
+              stagger: 0.045,
+              clearProps: "opacity,transform",
+            },
+            "-=0.14",
+          );
+        }
+        return () => timeline.kill();
       });
       return () => media.revert();
     },

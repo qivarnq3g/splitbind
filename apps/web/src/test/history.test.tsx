@@ -87,7 +87,10 @@ describe("HistoryPage", () => {
     expect(screen.getByText("(Alice Nguyen)")).toBeVisible();
     expect(screen.getByText("11111111-1111-4000-8000-111111111111")).toBeVisible();
     expect(screen.getByText("33333333-3333-4000-8000-333333333333")).toBeVisible();
-    expect(screen.getByText("VERIFIED_INTACT")).toBeVisible();
+    // The verdict is shown to operators as Vietnamese copy, never as the raw
+    // API enum; the enum remains available to assistive tech via data-vstatus.
+    expect(screen.getByText("Đã xác minh toàn vẹn")).toBeVisible();
+    expect(screen.queryByText("VERIFIED_INTACT")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Mở hồ sơ cấp phát/ })).toHaveAttribute(
       "href",
       "/issuances/22222222-2222-4000-8000-222222222222",

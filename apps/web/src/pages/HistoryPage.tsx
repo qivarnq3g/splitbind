@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ArrowRight, Clock3, FileKey2, History as HistoryIcon, ScanSearch } from "lucide-react";
 import { Link } from "react-router-dom";
 import { CompactIdentifier } from "../components/CompactIdentifier";
+import { STATUS_COPY } from "../features/evidence/copy";
 import { JOB_LABELS } from "../features/jobs/useJob";
 import { useJobList } from "../features/jobs/useJobList";
 
@@ -95,7 +96,7 @@ export function HistoryPage() {
             const isDone = item.status === "succeeded";
 
             return (
-              <article key={item.id} className="history-card" aria-labelledby={`job-title-${item.id}`}>
+              <article key={item.id} className="history-card" data-motion-block aria-labelledby={`job-title-${item.id}`}>
                 <div className="history-card-header">
                   <div className="history-card-tags">
                     <span className={`kind-badge ${item.kind}`}>
@@ -107,7 +108,8 @@ export function HistoryPage() {
                     </span>
                     {item.verification_status ? (
                       <span className="vstatus-badge" data-vstatus={item.verification_status}>
-                        {item.verification_status}
+                        {STATUS_COPY[item.verification_status as keyof typeof STATUS_COPY]?.label ??
+                          item.verification_status}
                       </span>
                     ) : null}
                   </div>

@@ -1,0 +1,626 @@
+[
+  {
+    "fixture_id": "pdf-one-vector",
+    "page_index": 0,
+    "attack": "screenshot-1920",
+    "variant": "raw",
+    "shape": [
+      1080,
+      1920
+    ],
+    "votes": 0,
+    "status": "insufficient_sync_evidence",
+    "matched": false
+  },
+  {
+    "fixture_id": "pdf-one-vector",
+    "page_index": 0,
+    "attack": "screenshot-1920",
+    "variant": "stripped",
+    "shape": [
+      960,
+      1920
+    ],
+    "votes": 3,
+    "status": "decoded",
+    "matched": true
+  },
+  {
+    "fixture_id": "pdf-one-vector",
+    "page_index": 0,
+    "attack": "screenshot-1366",
+    "variant": "raw",
+    "shape": [
+      768,
+      1366
+    ],
+    "votes": 0,
+    "status": "insufficient_sync_evidence",
+    "matched": false
+  },
+  {
+    "fixture_id": "pdf-one-vector",
+    "page_index": 0,
+    "attack": "screenshot-1366",
+    "variant": "stripped",
+    "shape": [
+      683,
+      1366
+    ],
+    "votes": 0,
+    "status": "payload_not_detected",
+    "matched": false
+  },
+  {
+    "fixture_id": "pdf-one-gradient",
+    "page_index": 0,
+    "attack": "screenshot-1920",
+    "variant": "raw",
+    "shape": [
+      1080,
+      1920
+    ],
+    "votes": 0,
+    "status": "payload_not_detected",
+    "matched": false
+  },
+  {
+    "fixture_id": "pdf-one-gradient",
+    "page_index": 0,
+    "attack": "screenshot-1920",
+    "variant": "stripped",
+    "shape": [
+      960,
+      1920
+    ],
+    "votes": 3,
+    "status": "decoded",
+    "matched": true
+  },
+  {
+    "fixture_id": "pdf-one-gradient",
+    "page_index": 0,
+    "attack": "screenshot-1366",
+    "variant": "raw",
+    "shape": [
+      768,
+      1366
+    ],
+    "votes": 0,
+    "status": "insufficient_sync_evidence",
+    "matched": false
+  },
+  {
+    "fixture_id": "pdf-one-gradient",
+    "page_index": 0,
+    "attack": "screenshot-1366",
+    "variant": "stripped",
+    "shape": [
+      683,
+      1366
+    ],
+    "votes": 0,
+    "status": "payload_not_detected",
+    "matched": false
+  },
+  {
+    "fixture_id": "pdf-one-whitespace",
+    "page_index": 0,
+    "attack": "screenshot-1920",
+    "variant": "raw",
+    "shape": [
+      1080,
+      1920
+    ],
+    "votes": 0,
+    "status": "payload_not_detected",
+    "matched": false
+  },
+  {
+    "fixture_id": "pdf-one-whitespace",
+    "page_index": 0,
+    "attack": "screenshot-1920",
+    "variant": "stripped",
+    "shape": [
+      960,
+      1920
+    ],
+    "votes": 5,
+    "status": "decoded",
+    "matched": true
+  },
+  {
+    "fixture_id": "pdf-one-whitespace",
+    "page_index": 0,
+    "attack": "screenshot-1366",
+    "variant": "raw",
+    "shape": [
+      768,
+      1366
+    ],
+    "votes": 0,
+    "status": "insufficient_sync_evidence",
+    "matched": false
+  },
+  {
+    "fixture_id": "pdf-one-whitespace",
+    "page_index": 0,
+    "attack": "screenshot-1366",
+    "variant": "stripped",
+    "shape": [
+      683,
+      1366
+    ],
+    "votes": 0,
+    "status": "payload_not_detected",
+    "matched": false
+  },
+  {
+    "fixture_id": "pdf-multi-mixed",
+    "page_index": 0,
+    "attack": "screenshot-1920",
+    "variant": "raw",
+    "shape": [
+      1080,
+      1920
+    ],
+    "votes": 0,
+    "status": "insufficient_sync_evidence",
+    "matched": false
+  },
+  {
+    "fixture_id": "pdf-multi-mixed",
+    "page_index": 0,
+    "attack": "screenshot-1920",
+    "variant": "stripped",
+    "shape": [
+      960,
+      1920
+    ],
+    "votes": 2,
+    "status": "partial_payload_evidence",
+    "matched": false
+  },
+  {
+    "fixture_id": "pdf-multi-mixed",
+    "page_index": 0,
+    "attack": "screenshot-1366",
+    "variant": "raw",
+    "shape": [
+      768,
+      1366
+    ],
+    "votes": 0,
+    "status": "insufficient_sync_evidence",
+    "matched": false
+  },
+  {
+    "fixture_id": "pdf-multi-mixed",
+    "page_index": 0,
+    "attack": "screenshot-1366",
+    "variant": "stripped",
+    "shape": [
+      683,
+      1366
+    ],
+    "votes": 0,
+    "status": "payload_not_detected",
+    "matched": false
+  },
+  {
+    "fixture_id": "pdf-multi-mixed",
+    "page_index": 1,
+    "attack": "screenshot-1920",
+    "variant": "raw",
+    "shape": [
+      1080,
+      1920
+    ],
+    "votes": 0,
+    "status": "insufficient_sync_evidence",
+    "matched": false
+  },
+  {
+    "fixture_id": "pdf-multi-mixed",
+    "page_index": 1,
+    "attack": "screenshot-1920",
+    "variant": "stripped",
+    "shape": [
+      960,
+      1920
+    ],
+    "votes": 3,
+    "status": "decoded",
+    "matched": true
+  },
+  {
+    "fixture_id": "pdf-multi-mixed",
+    "page_index": 1,
+    "attack": "screenshot-1366",
+    "variant": "raw",
+    "shape": [
+      768,
+      1366
+    ],
+    "votes": 0,
+    "status": "insufficient_sync_evidence",
+    "matched": false
+  },
+  {
+    "fixture_id": "pdf-multi-mixed",
+    "page_index": 1,
+    "attack": "screenshot-1366",
+    "variant": "stripped",
+    "shape": [
+      683,
+      1366
+    ],
+    "votes": 1,
+    "status": "partial_payload_evidence",
+    "matched": false
+  },
+  {
+    "fixture_id": "pdf-multi-mixed",
+    "page_index": 2,
+    "attack": "screenshot-1920",
+    "variant": "raw",
+    "shape": [
+      1080,
+      1920
+    ],
+    "votes": 0,
+    "status": "insufficient_sync_evidence",
+    "matched": false
+  },
+  {
+    "fixture_id": "pdf-multi-mixed",
+    "page_index": 2,
+    "attack": "screenshot-1920",
+    "variant": "stripped",
+    "shape": [
+      960,
+      1920
+    ],
+    "votes": 3,
+    "status": "decoded",
+    "matched": true
+  },
+  {
+    "fixture_id": "pdf-multi-mixed",
+    "page_index": 2,
+    "attack": "screenshot-1366",
+    "variant": "raw",
+    "shape": [
+      768,
+      1366
+    ],
+    "votes": 0,
+    "status": "insufficient_sync_evidence",
+    "matched": false
+  },
+  {
+    "fixture_id": "pdf-multi-mixed",
+    "page_index": 2,
+    "attack": "screenshot-1366",
+    "variant": "stripped",
+    "shape": [
+      683,
+      1366
+    ],
+    "votes": 0,
+    "status": "payload_not_detected",
+    "matched": false
+  },
+  {
+    "fixture_id": "pdf-multi-noise",
+    "page_index": 0,
+    "attack": "screenshot-1920",
+    "variant": "raw",
+    "shape": [
+      1080,
+      1920
+    ],
+    "votes": 0,
+    "status": "insufficient_sync_evidence",
+    "matched": false
+  },
+  {
+    "fixture_id": "pdf-multi-noise",
+    "page_index": 0,
+    "attack": "screenshot-1920",
+    "variant": "stripped",
+    "shape": [
+      960,
+      1920
+    ],
+    "votes": 3,
+    "status": "decoded",
+    "matched": true
+  },
+  {
+    "fixture_id": "pdf-multi-noise",
+    "page_index": 0,
+    "attack": "screenshot-1366",
+    "variant": "raw",
+    "shape": [
+      768,
+      1366
+    ],
+    "votes": 0,
+    "status": "insufficient_sync_evidence",
+    "matched": false
+  },
+  {
+    "fixture_id": "pdf-multi-noise",
+    "page_index": 0,
+    "attack": "screenshot-1366",
+    "variant": "stripped",
+    "shape": [
+      683,
+      1366
+    ],
+    "votes": 0,
+    "status": "payload_not_detected",
+    "matched": false
+  },
+  {
+    "fixture_id": "pdf-multi-noise",
+    "page_index": 1,
+    "attack": "screenshot-1920",
+    "variant": "raw",
+    "shape": [
+      1080,
+      1920
+    ],
+    "votes": 0,
+    "status": "payload_not_detected",
+    "matched": false
+  },
+  {
+    "fixture_id": "pdf-multi-noise",
+    "page_index": 1,
+    "attack": "screenshot-1920",
+    "variant": "stripped",
+    "shape": [
+      960,
+      1920
+    ],
+    "votes": 3,
+    "status": "decoded",
+    "matched": true
+  },
+  {
+    "fixture_id": "pdf-multi-noise",
+    "page_index": 1,
+    "attack": "screenshot-1366",
+    "variant": "raw",
+    "shape": [
+      768,
+      1366
+    ],
+    "votes": 0,
+    "status": "insufficient_sync_evidence",
+    "matched": false
+  },
+  {
+    "fixture_id": "pdf-multi-noise",
+    "page_index": 1,
+    "attack": "screenshot-1366",
+    "variant": "stripped",
+    "shape": [
+      683,
+      1366
+    ],
+    "votes": 0,
+    "status": "payload_not_detected",
+    "matched": false
+  },
+  {
+    "fixture_id": "image-clean-gradient",
+    "page_index": 0,
+    "attack": "screenshot-1920",
+    "variant": "raw",
+    "shape": [
+      1080,
+      1920
+    ],
+    "votes": 0,
+    "status": "payload_not_detected",
+    "matched": false
+  },
+  {
+    "fixture_id": "image-clean-gradient",
+    "page_index": 0,
+    "attack": "screenshot-1920",
+    "variant": "stripped",
+    "shape": [
+      960,
+      1920
+    ],
+    "votes": 4,
+    "status": "decoded",
+    "matched": true
+  },
+  {
+    "fixture_id": "image-clean-gradient",
+    "page_index": 0,
+    "attack": "screenshot-1366",
+    "variant": "raw",
+    "shape": [
+      768,
+      1366
+    ],
+    "votes": 0,
+    "status": "insufficient_sync_evidence",
+    "matched": false
+  },
+  {
+    "fixture_id": "image-clean-gradient",
+    "page_index": 0,
+    "attack": "screenshot-1366",
+    "variant": "stripped",
+    "shape": [
+      683,
+      1366
+    ],
+    "votes": 0,
+    "status": "payload_not_detected",
+    "matched": false
+  },
+  {
+    "fixture_id": "image-clean-noise",
+    "page_index": 0,
+    "attack": "screenshot-1920",
+    "variant": "raw",
+    "shape": [
+      1080,
+      1920
+    ],
+    "votes": 0,
+    "status": "payload_not_detected",
+    "matched": false
+  },
+  {
+    "fixture_id": "image-clean-noise",
+    "page_index": 0,
+    "attack": "screenshot-1920",
+    "variant": "stripped",
+    "shape": [
+      960,
+      1920
+    ],
+    "votes": 1,
+    "status": "partial_payload_evidence",
+    "matched": false
+  },
+  {
+    "fixture_id": "image-clean-noise",
+    "page_index": 0,
+    "attack": "screenshot-1366",
+    "variant": "raw",
+    "shape": [
+      768,
+      1366
+    ],
+    "votes": 0,
+    "status": "insufficient_sync_evidence",
+    "matched": false
+  },
+  {
+    "fixture_id": "image-clean-noise",
+    "page_index": 0,
+    "attack": "screenshot-1366",
+    "variant": "stripped",
+    "shape": [
+      683,
+      1366
+    ],
+    "votes": 0,
+    "status": "payload_not_detected",
+    "matched": false
+  },
+  {
+    "fixture_id": "image-clean-mixed",
+    "page_index": 0,
+    "attack": "screenshot-1920",
+    "variant": "raw",
+    "shape": [
+      1080,
+      1920
+    ],
+    "votes": 0,
+    "status": "payload_not_detected",
+    "matched": false
+  },
+  {
+    "fixture_id": "image-clean-mixed",
+    "page_index": 0,
+    "attack": "screenshot-1920",
+    "variant": "stripped",
+    "shape": [
+      960,
+      1920
+    ],
+    "votes": 0,
+    "status": "payload_not_detected",
+    "matched": false
+  },
+  {
+    "fixture_id": "image-clean-mixed",
+    "page_index": 0,
+    "attack": "screenshot-1366",
+    "variant": "raw",
+    "shape": [
+      768,
+      1366
+    ],
+    "votes": 0,
+    "status": "insufficient_sync_evidence",
+    "matched": false
+  },
+  {
+    "fixture_id": "image-clean-mixed",
+    "page_index": 0,
+    "attack": "screenshot-1366",
+    "variant": "stripped",
+    "shape": [
+      683,
+      1366
+    ],
+    "votes": 0,
+    "status": "payload_not_detected",
+    "matched": false
+  },
+  {
+    "fixture_id": "tamper-ground-truth",
+    "page_index": 0,
+    "attack": "screenshot-1920",
+    "variant": "raw",
+    "shape": [
+      1080,
+      1920
+    ],
+    "votes": 0,
+    "status": "payload_not_detected",
+    "matched": false
+  },
+  {
+    "fixture_id": "tamper-ground-truth",
+    "page_index": 0,
+    "attack": "screenshot-1920",
+    "variant": "stripped",
+    "shape": [
+      960,
+      1920
+    ],
+    "votes": 4,
+    "status": "decoded",
+    "matched": true
+  },
+  {
+    "fixture_id": "tamper-ground-truth",
+    "page_index": 0,
+    "attack": "screenshot-1366",
+    "variant": "raw",
+    "shape": [
+      768,
+      1366
+    ],
+    "votes": 0,
+    "status": "insufficient_sync_evidence",
+    "matched": false
+  },
+  {
+    "fixture_id": "tamper-ground-truth",
+    "page_index": 0,
+    "attack": "screenshot-1366",
+    "variant": "stripped",
+    "shape": [
+      683,
+      1366
+    ],
+    "votes": 0,
+    "status": "payload_not_detected",
+    "matched": false
+  }
+]
