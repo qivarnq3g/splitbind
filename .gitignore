@@ -9,9 +9,14 @@
 /docs/course/
 /docs/internal/
 /docs/project/lecturer-email-summary.md
+# Chứa IP server production, email cá nhân, Azure subscription ID, endpoint R2
+# và username quản trị. Bản thân file vẫn ở trên đĩa để dùng nội bộ.
+/docs/evaluation/integrity-release-0.1.md
 
-# Agent operating contract and knowledge base — local to each machine.
-# Same intent as the rules above; docs/knowledge/ is excluded via .git/info/exclude.
+# Agent operating contract — local to each machine.
+# Same intent as the rules above. Note: docs/knowledge/ and docs/project-context.md
+# are deliberately NOT excluded any more; see the content boundary section in
+# docs/project-context.md for what may and may not be written into them.
 /AGENTS.md
 /**/AGENTS.md
 /CLAUDE.md
@@ -21,6 +26,15 @@
 .antigravity/
 .cursor/
 /skills/
+
+# Local-only agent and tooling state. Moved here from .git/info/exclude on
+# 2026-09-11: that file is machine-local and never travels with the repository,
+# so a publication decision written there is invisible to everyone who clones.
+/.worktrees/
+/.hallmark/
+
+# Excluded because it records the production SSH administrator username.
+/docs/superpowers/plans/2026-08-17-azure-vm-provisioning.md
 
 # Agent scratch space — disposable by contract, never committed
 scratch/

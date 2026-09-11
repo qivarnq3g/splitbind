@@ -1,14 +1,14 @@
 # Đặc tả thiết kế SplitBind
 
-_Đặc tả production-quality cho bài tập lớn An toàn thông tin của Nhóm 9, ngày 13/08/2026_
+_Đặc tả production-quality cho bài tập lớn An toàn thông tin của Nhóm 9, ngày 13/08/2026 · Kiến trúc đã chốt_
 
 ---
 
-## 📋 Tổng quan
+## Tổng quan
 
 SplitBind là ứng dụng web cấp phát PDF có dấu vân tay số riêng cho từng người nhận, xác minh tài liệu nghi rò rỉ, đánh giá tính toàn vẹn và bảo vệ hồ sơ cấp phát bằng chữ ký số.
 
-Tên đề tài trong bảng phân công chính thức là **“Tìm hiểu và đề xuất Hệ thống truy vết toàn vẹn văn bản”**. Nhóm báo cáo dự kiến ngày **17/09/2026**, thứ tự **2**, theo [bảng phân công học phần](../../course/capstone-assignment-and-presentation-schedule.pdf).
+Tên đề tài trong bảng phân công chính thức là **“Tìm hiểu và đề xuất Hệ thống truy vết toàn vẹn văn bản”**. Nhóm báo cáo dự kiến ngày **17/09/2026**, thứ tự **2**. Bảng phân công được lưu cục bộ và không thuộc repository sản phẩm.
 
 > **Giới hạn bằng chứng:** Hệ thống có thể kết luận một tài liệu nghi vấn khớp với phiên bản đã cấp cho một người nhận. Hệ thống không được kết luận người nhận đó chính là người thực hiện hành vi rò rỉ.
 
@@ -30,7 +30,7 @@ Xây dựng và đánh giá một hệ thống có khả năng liên kết tài 
 
 Trong dự án này, _production-quality_ nghĩa là mã nguồn có kiểm thử, phân quyền, quản lý bí mật, quan sát được, triển khai tái lập, có backup/restore, rollback và giới hạn tài nguyên. Hạ tầng miễn phí không cung cấp SLA hoặc tính sẵn sàng cao, vì vậy sản phẩm được mô tả là **production-quality ở quy mô học thuật trên free tier**.
 
-## 🎯 Yêu cầu và tiêu chí thành công
+## Yêu cầu và tiêu chí thành công
 
 ### Vai trò người dùng
 
@@ -97,7 +97,27 @@ Mọi endpoint nghiệp vụ mặc định yêu cầu đăng nhập. Phân quy�
 
 Giới hạn được cấu hình bằng biến môi trường, nhưng production không được khởi động nếu giá trị vượt trần an toàn được mã hóa trong cấu hình.
 
-## 🏗️ Kiến trúc hệ thống
+## Kiến trúc hệ thống
+
+### Quyết định đã chốt
+
+Kiến trúc trong tài liệu này là baseline bắt buộc cho MVP. Thay đổi nền tảng triển khai, database, object storage, queue hoặc ngôn ngữ worker phải có Architecture Decision Record (ADR) mới và benchmark chứng minh lợi ích.
+
+| Hạng mục | Quyết định |
+| --- | --- |
+| Sản phẩm | Ứng dụng web cùng hai workflow cấp phát và xác minh |
+| Server chính | Azure Linux VM `Standard_B2ls_v2`, Debian 13 x86-64 |
+| Tài nguyên VM | 2 vCPU, 4 GiB RAM, Standard SSD 32 GiB |
+| Runtime | Caddy và Docker Compose; container chạy non-root |
+| Hostname production | `splitbind.qivarn.id.vn`; không thay đổi apex `qivarn.id.vn` |
+| Control plane | React + Django REST Framework |
+| Data plane | Rust worker; Python chỉ dùng nghiên cứu và benchmark |
+| Queue | RabbitMQ + transactional outbox; message JSON version hóa |
+| Dữ liệu | Neon PostgreSQL + Cloudflare R2 |
+| Bí mật production | Azure Key Vault Secrets qua managed identity của VM |
+| Dự phòng | macOS + Lima + Debian 13 ARM64; offline Docker Compose |
+
+Chi tiết lý do chọn và phương án bị loại nằm trong [ADR-001](../../decisions/001-azure-production-architecture.md).
 
 ### Nguyên tắc phân chia
 
@@ -107,22 +127,26 @@ Giới hạn được cấu hình bằng biến môi trường, nhưng productio
 - Rust worker là data plane: PDF, ảnh, watermark, hash, chữ ký và cleanup
 - Python research là implementation tham chiếu và benchmark, không phục vụ request production
 - PostgreSQL chỉ lưu metadata; R2 lưu object có vòng đời
+- Azure VM là compute host duy nhất; không chạy database hoặc object storage trên VM
+- Azure Key Vault cung cấp bí mật cho worker qua managed identity, không qua file trong Git
 
-_Sơ đồ triển khai logic gồm trình duyệt, các dịch vụ ứng dụng, hàng đợi, cơ sở dữ liệu và object storage:_
+_Sơ đồ production gồm trình duyệt, một Azure Linux VM, Azure Key Vault và hai dịch vụ dữ liệu managed:_
 
 ```mermaid
 architecture-beta
     group clients(cloud)[Client Devices]
-    group app(cloud)[Application Host]
-    group managed(cloud)[Managed Free Services]
+    group azure(cloud)[Azure Subscription]
+    group app(cloud)[Linux VM] in azure
+    group managed(cloud)[Managed Data Services]
 
-    service browser(internet)[React Browser] in clients
+    service browser(internet)[Web Browser] in clients
     service caddy(internet)[Caddy HTTPS] in app
     service django(server)[Django API] in app
     service rabbit(server)[RabbitMQ] in app
     service worker(server)[Rust Worker] in app
     service postgres(database)[Neon PostgreSQL] in managed
     service r2(disk)[Cloudflare R2] in managed
+    service vault(disk)[Azure Key Vault] in azure
 
     browser:R --> L:caddy
     caddy:R --> L:django
@@ -131,6 +155,7 @@ architecture-beta
     rabbit:R --> L:worker
     worker:B --> T:r2
     django:B --> T:r2
+    worker:R --> L:vault
 ```
 
 ### Thành phần và công nghệ
@@ -144,6 +169,7 @@ architecture-beta
 | Research | Python, NumPy, OpenCV, PyWavelets | Prototype, test vector, benchmark và biểu đồ |
 | Database | PostgreSQL trên Neon Free | Metadata, outbox, job, manifest và audit |
 | Object storage | Cloudflare R2 Standard[^5] | Input/output có thời hạn và server-side encryption |
+| Secret store | Azure Key Vault Secrets[^10] | Khóa ký, khóa watermark và credential production |
 | Edge | Caddy | HTTPS, security headers, reverse proxy, static frontend |
 | Packaging | Docker Compose | Môi trường nhất quán trên Windows, macOS và Linux |
 | CI | GitHub Actions | Test, lint, scan, SBOM và multi-arch build check |
@@ -161,11 +187,11 @@ sequenceDiagram
     accTitle: Luồng cấp phát tài liệu
     accDescr: Issuer tải PDF trực tiếp lên object storage, Django tạo job nguyên tử và Rust worker xử lý từng trang trước khi ký manifest và trả kết quả
 
-    participant issuer as 👤 Issuer
-    participant api as 🖥️ Django API
-    participant storage as 💾 R2 Storage
-    participant worker as ⚙️ Rust Worker
-    participant db as 🗄️ PostgreSQL
+    participant issuer as Issuer
+    participant api as Django API
+    participant storage as R2 Storage
+    participant worker as Rust Worker
+    participant db as PostgreSQL
 
     issuer->>api: Yêu cầu URL upload
     api-->>issuer: URL ký trước và object key
@@ -193,11 +219,11 @@ sequenceDiagram
     accTitle: Luồng xác minh tài liệu
     accDescr: Verifier gửi tài liệu nghi vấn, worker trích fingerprint và watermark toàn vẹn, API kiểm tra hồ sơ ký rồi trả kết luận có mức tin cậy
 
-    participant verifier as 👤 Verifier
-    participant api as 🖥️ Django API
-    participant storage as 💾 R2 Storage
-    participant worker as ⚙️ Rust Worker
-    participant db as 🗄️ PostgreSQL
+    participant verifier as Verifier
+    participant api as Django API
+    participant storage as R2 Storage
+    participant worker as Rust Worker
+    participant db as PostgreSQL
 
     verifier->>api: Tạo verification upload
     api-->>verifier: URL ký trước
@@ -225,23 +251,23 @@ stateDiagram-v2
     accTitle: Vòng đời job SplitBind
     accDescr: Job đi từ tạo mới tới hàng đợi, xử lý và hoàn thành; lỗi tạm thời được retry có giới hạn còn lỗi vĩnh viễn đi vào dead letter
 
-    [*] --> Created: 📝 Transaction tạo job
-    Created --> Queued: 📨 Outbox đã publish
-    Queued --> Processing: ⚙️ Worker nhận lease
-    Processing --> Succeeded: ✅ Kết quả đã commit
-    Processing --> RetryableFailed: ⚠️ Lỗi tạm thời
-    Processing --> Failed: ❌ Lỗi vĩnh viễn
-    RetryableFailed --> Queued: 🔄 Còn retry
-    RetryableFailed --> DeadLettered: 🚫 Hết retry
-    Queued --> Cancelled: 🛑 Người có quyền hủy
-    Processing --> Cancelled: 🛑 Worker xác nhận hủy
-    Succeeded --> [*]: 🏁 Hoàn thành
-    Failed --> [*]: 🏁 Đóng
-    DeadLettered --> [*]: 🏁 Cần điều tra
-    Cancelled --> [*]: 🧹 Đã cleanup
+    [*] --> Created: Transaction tạo job
+    Created --> Queued: Outbox đã publish
+    Queued --> Processing: Worker nhận lease
+    Processing --> Succeeded: Kết quả đã commit
+    Processing --> RetryableFailed: Lỗi tạm thời
+    Processing --> Failed: Lỗi vĩnh viễn
+    RetryableFailed --> Queued: Còn retry
+    RetryableFailed --> DeadLettered: Hết retry
+    Queued --> Cancelled: Người có quyền hủy
+    Processing --> Cancelled: Worker xác nhận hủy
+    Succeeded --> [*]: Hoàn thành
+    Failed --> [*]: Đóng
+    DeadLettered --> [*]: Cần điều tra
+    Cancelled --> [*]: Đã cleanup
 ```
 
-## 🔐 Mô hình bảo mật và bằng chứng
+## Mô hình bảo mật và bằng chứng
 
 ### Mô hình đe dọa
 
@@ -299,15 +325,15 @@ Manifest nội bộ dùng canonical JSON và tối thiểu chứa:
 - `signing_key_id`
 - `retention_policy_id`
 
-Ed25519 ký bytes canonical của manifest. Khóa ký và khóa watermark là hai key family riêng. Public key và trạng thái thu hồi được lưu trong database; private key không lưu trong Git, image hoặc database.
+Hệ thống tạo hai payload canonical: manifest nội bộ có đầy đủ trường được phân quyền và public evidence manifest không có `document_id`, `recipient_id`, object key hoặc dữ liệu cá nhân. Ed25519 ký riêng exact bytes của từng payload để bản public vẫn xác minh độc lập sau phép chiếu riêng tư. Khóa ký và khóa watermark là hai key family riêng. Public key và trạng thái thu hồi được lưu trong database; private key không lưu trong Git, image hoặc database.
 
-`recipient_id` là dữ liệu truy cập có kiểm soát, không xuất hiện trong manifest chia sẻ ra ngoài. Bản manifest dùng làm bằng chứng bên ngoài chỉ chứa `issuance_id` giả danh; việc ánh xạ về người nhận chỉ được thực hiện trong hệ thống bởi vai trò có quyền và phải sinh audit log.
+`recipient_id` là dữ liệu truy cập có kiểm soát, không xuất hiện trong manifest chia sẻ ra ngoài. Trong các định danh liên kết người nhận, bản manifest dùng làm bằng chứng bên ngoài chỉ chứa `issuance_id` giả danh; ngoài ra nó có thể chứa thời điểm cấp, hash output, version thuật toán và signing key ID cần để kiểm chứng. Việc ánh xạ về người nhận chỉ được thực hiện trong hệ thống bởi vai trò có quyền và phải sinh audit log.
 
 ### Quản lý khóa
 
 - Local: khóa thử nghiệm nằm trong file ignored, permission tối thiểu và chỉ dùng test data
 - CI: khóa test cố định không có giá trị production
-- Production Oracle: private key nằm trong OCI Vault nếu tài khoản cấp được Always Free Vault
+- Production Azure: khóa Ed25519 mã hóa PKCS#8 và khóa watermark nằm trong Azure Key Vault Secrets; passphrase là secret riêng; VM dùng system-assigned managed identity với quyền đọc tối thiểu[^10]
 - Fallback Mac: private key PKCS#8 mã hóa nằm ngoài repository và được mount read-only; passphrase được nhập khi khởi động, không ghi vào shell history
 - Mỗi chữ ký ghi `key_id`; rotation tạo khóa mới, khóa cũ chỉ chuyển sang verify-only
 - Thu hồi khóa không xóa public key hoặc hồ sơ lịch sử
@@ -323,7 +349,7 @@ Ed25519 ký bytes canonical của manifest. Khóa ký và khóa watermark là ha
 - Audit log append-only ở cấp ứng dụng; mọi sự kiện có actor, action, target, timestamp, correlation ID và outcome
 - Log không chứa password, session, private key, presigned URL hoàn chỉnh hoặc nội dung PDF
 
-## 🧠 Kiểm soát tài nguyên và vòng đời dữ liệu
+## Kiểm soát tài nguyên và vòng đời dữ liệu
 
 ### Quy tắc xử lý
 
@@ -358,7 +384,19 @@ Ed25519 ký bytes canonical của manifest. Khóa ký và khóa watermark là ha
 - Benchmark dataset tải theo manifest/checksum vào thư mục ignored và xóa được tái lập
 - Multi-stage image không mang compiler, cache hoặc test data vào runtime
 
-## 💾 Dữ liệu và API
+### Hạn mức Azure production
+
+| Thành phần | Memory limit | Ghi chú |
+| --- | ---: | --- |
+| Caddy + static React | 128 MiB | Không chạy Node.js ở runtime |
+| Django API + outbox publisher | 640 MiB | Số process cố định theo cấu hình |
+| RabbitMQ | 512 MiB | Queue có TTL và giới hạn chiều dài |
+| Rust worker | 1.5 GiB | Concurrency 1, xử lý từng trang |
+| Hệ điều hành và dự phòng | Phần còn lại | Không chạy profile research/observability nặng |
+
+Tổng container limit không được vượt 3 GiB. VM có swap 1 GiB với `vm.swappiness=10` chỉ để hấp thụ đỉnh ngắn, không dùng swap để biện minh cho việc vượt budget RAM. Disk cảnh báo ở 70%, chặn tạo job mới ở 80% và cleanup khẩn cấp ở 85%.
+
+## Dữ liệu và API
 
 ### Thực thể chính
 
@@ -393,7 +431,7 @@ Thông tin cá nhân không được nhúng trực tiếp vào watermark. `recip
 
 OpenAPI là nguồn sự thật cho contract frontend. API client TypeScript được sinh trong CI và CI thất bại nếu schema thay đổi mà client chưa cập nhật.
 
-## 🧪 Kiểm thử và đánh giá
+## Kiểm thử và đánh giá
 
 ### Kim tự tháp kiểm thử
 
@@ -447,7 +485,7 @@ OpenAPI là nguồn sự thật cho contract frontend. API client TypeScript đ�
 
 Ngưỡng screenshot, biến dạng phối cảnh và localization IoU được báo cáo như kết quả nghiên cứu, không là điều kiện chặn MVP cho đến khi baseline thực nghiệm đầu tiên hoàn tất. Không được thay đổi bộ test để che giấu kết quả kém.
 
-## 🚀 Triển khai và vận hành
+## Triển khai và vận hành
 
 ### Môi trường
 
@@ -455,11 +493,17 @@ Ngưỡng screenshot, biến dạng phối cảnh và localization IoU được 
 | --- | --- | --- |
 | Development | Windows WSL2/Docker và macOS | Code, test nhanh, profile theo nhu cầu |
 | CI | GitHub Actions Ubuntu | Kiểm thử, scan và build validation |
-| Primary | Oracle Always Free Debian/Ubuntu ARM64 | Server công khai chính nếu cấp được capacity |
-| Fallback | macOS + Lima + Debian 13 ARM64 | Staging, demo và server dự phòng |
+| Primary | Azure VM `Standard_B2ls_v2`, Debian 13 x86-64 | Server công khai chính |
+| Fallback | macOS + Lima + Debian 13 ARM64 | Server dự phòng khi Azure không khả dụng |
 | Offline demo | Docker Compose trên laptop | Không phụ thuộc Internet trong buổi báo cáo |
 
-MacBook Air M2 không cài Debian trực tiếp. Lima dùng Apple Virtualization Framework để chạy Debian 13 ARM64 minimal.[^3][^4] VM mặc định 4 CPU, 4 GiB RAM và disk sparse tối đa 30 GiB; chỉ một worker job chạy đồng thời.
+Azure VM có 2 vCPU và 4 GiB RAM; nếu SKU không có ở region đã chọn, chỉ được thay bằng SKU x86-64 có ít nhất cùng tài nguyên sau khi kiểm tra giá.[^8] Compute host mục tiêu đã được cấp phát với tên `vm-splitbind-prod`; mọi phiên triển khai phải audit lại trạng thái thực tế và không tạo tài nguyên trùng. VM dùng Standard SSD 32 GiB, system-assigned managed identity, SSH key; Network Security Group chỉ mở `80/443` công khai và giới hạn `22` theo IP quản trị. Không mở cổng PostgreSQL, RabbitMQ hoặc Docker daemon ra Internet.
+
+Tài khoản Azure for Students cung cấp `$100` credit trong 12 tháng cho mục đích giáo dục; credit hết thì dịch vụ có thể bị vô hiệu hóa nếu không nâng cấp.[^7] Dự án giữ spending limit, không chuyển Pay-as-you-go, đặt budget alert ở `$25`, `$50`, `$75` và `$90`; budget alert chỉ thông báo chứ không tự dừng tài nguyên.[^9] Giữ VM hiện có ở trạng thái deallocated cho đến khi có release candidate triển khai được và budget đã được xác minh; tiếp tục deallocate khi không cần môi trường public.
+
+Hostname công khai của SplitBind là `splitbind.qivarn.id.vn`. Chỉ tạo hoặc thay đổi record của nhãn `splitbind` sau khi release candidate, backup/restore, rollback và Azure preflight đều đạt; không thay đổi apex `qivarn.id.vn`, NS, MX, email hoặc hosting hiện hữu. Sau cutover phải xác minh authoritative DNS, chứng chỉ TLS của Caddy, liveness, readiness và hai workflow; thất bại phải phục hồi trạng thái DNS và image digest đã ghi nhận.
+
+MacBook Air M2 không cài Debian trực tiếp. Lima dùng Apple Virtualization Framework để chạy Debian 13 ARM64 minimal.[^3][^4] VM dự phòng mặc định 4 CPU, 4 GiB RAM và disk sparse tối đa 30 GiB; chỉ một worker job chạy đồng thời.
 
 ### CI/CD
 
@@ -497,7 +541,7 @@ Các metric tối thiểu:
 
 Alert ưu tiên cleanup failure, disk trên 80%, queue bị kẹt, khóa sắp hết hạn và database gần quota.
 
-## 🗺️ Thứ tự triển khai
+## Thứ tự triển khai
 
 1. Đóng băng threat model, data contract và bộ PDF/ảnh nghiệm thu nhỏ
 2. Viết Python reference implementation và attack simulator
@@ -512,21 +556,21 @@ Alert ưu tiên cleanup failure, disk trên 80%, queue bị kẹt, khóa sắp h
 
 Không bắt đầu chức năng chống thông đồng hoặc định vị nâng cao trước khi hai workflow lõi đạt ngưỡng MVP.
 
-## ⚠️ Rủi ro và biện pháp
+## Rủi ro và biện pháp
 
 | Rủi ro | Mức | Biện pháp |
 | --- | --- | --- |
 | Watermark không đạt tuyên bố | Rất cao | Benchmark trước UI, công bố đúng giới hạn |
 | Phạm vi quá rộng trước 17/09 | Cao | Cổng MVP, nâng cao chỉ sau lõi |
 | Build OpenCV/PDF đa kiến trúc | Cao | Pin image/dependency, CI amd64/arm64 sớm |
-| Free tier thay đổi hoặc hết capacity | Cao | Oracle primary, Mac fallback, offline demo |
+| Azure credit hết hoặc VM bị vô hiệu hóa | Cao | Budget alert, spending limit, Mac fallback, offline demo |
 | RAM 8 GiB trên Mac | Trung bình | Lima 4 GiB, concurrency 1, Compose profiles |
 | Lộ khóa hoặc presigned URL | Cao | Vault/mount read-only, redaction, rotation |
 | PDF độc hại gây DoS | Cao | Giới hạn trước decode, timeout, sandbox container |
 | Cleanup sai làm đầy disk | Cao | Quota, `defer`, sweeper, metric và fault-injection test |
 | Gán nguồn bị hiểu thành buộc tội | Cao | Ngôn ngữ bằng chứng bắt buộc trong UI/báo cáo |
 
-## ✅ Tiêu chí hoàn tất
+## Tiêu chí hoàn tất
 
 Dự án chỉ được xem là hoàn tất khi:
 
@@ -539,14 +583,17 @@ Dự án chỉ được xem là hoàn tất khi:
 - CI xanh trên code, test, scan và multi-arch build check
 - backup/restore và rollback đã được diễn tập
 - báo cáo phân biệt fact, confidence, limitation và inference
+- deployment Azure tái lập từ image digest và cấu hình không chứa secret
 - offline demo hoạt động khi server hoặc Internet không sẵn sàng
 
-## 🔗 Tài liệu liên quan
+## Tài liệu liên quan
 
 - Bản tổng hợp trao đổi với giảng viên, lịch môn học và thông tin máy thành viên được lưu cục bộ; các tài liệu này không được đưa vào repository vì chứa dữ liệu cá nhân hoặc không thuộc sản phẩm
+- [ADR-001: Kiến trúc production trên Azure](../../decisions/001-azure-production-architecture.md)
+- [Kế hoạch triển khai MVP](../plans/2026-08-27-splitbind-mvp-master.md)
 - [Repository private](https://github.com/qivarnq3g/splitbind)
 
-## 📚 Tham khảo
+## Tham khảo
 
 [^1]: Django Software Foundation. (2025). [“Django 5.2 release notes”](https://docs.djangoproject.com/en/5.2/releases/5.2/).
 
@@ -560,6 +607,14 @@ Dự án chỉ được xem là hoàn tất khi:
 
 [^6]: GitHub. (2026). [“Product usage included with each plan”](https://docs.github.com/en/billing/reference/product-usage-included).
 
+[^7]: Microsoft. (2026). [“Frequently asked questions about Azure for Education”](https://learn.microsoft.com/en-us/azure/education-hub/faq).
+
+[^8]: Microsoft. (2026). [“Bsv2-series sizes”](https://learn.microsoft.com/en-sg/azure/virtual-machines/sizes/general-purpose/bsv2-series).
+
+[^9]: Microsoft. (2026). [“Tutorial: Create and manage budgets”](https://learn.microsoft.com/en-us/azure/cost-management-billing/costs/tutorial-acm-create-budgets).
+
+[^10]: Microsoft. (2026). [“Secure your Azure Key Vault”](https://learn.microsoft.com/en-us/azure/key-vault/general/secure-key-vault).
+
 ---
 
-_Phiên bản đặc tả: 1.0 · Trạng thái: chờ nhóm duyệt · Người duy trì: Nhóm 9_
+_Phiên bản đặc tả: 1.1 · Trạng thái: kiến trúc đã chốt · Người duy trì: Nhóm 9_

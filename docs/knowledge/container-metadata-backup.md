@@ -1,0 +1,3 @@
+# Container metadata backup
+
+On a tested read-only Docker container with writable /tmp tmpfs, an application-generated JSON backup existed according to in-container ls, while docker compose cp reported file-not-found. Do not assume generation failed or rerun migrations. Stream the exact backup with docker compose exec -T service cat into a private host-side file under umask 077; validate JSON without printing it. Remove only the disposable container copy after host verification. Keep the host backup while rollback retention is needed. This is a verified fallback for that mount behavior, not a claim that all docker cp operations on tmpfs fail.
