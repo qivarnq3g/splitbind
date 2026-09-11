@@ -1,21 +1,44 @@
 # Local course materials and private project evidence
-/AGENTS.md
-/**/AGENTS.md
+# Restored 2026-09-11: the AgentConfig template .gitignore had overwritten these
+# rules. They encode a deliberate decision that course PDFs, lecturer
+# correspondence, and internal notes never enter the publication set.
 /*.pdf
+/*.docx
+/*.xlsx
 /note.txt
 /docs/course/
 /docs/internal/
 /docs/project/lecturer-email-summary.md
 
+# Agent operating contract and knowledge base — local to each machine.
+# Same intent as the rules above; docs/knowledge/ is excluded via .git/info/exclude.
+/AGENTS.md
+/**/AGENTS.md
+/CLAUDE.md
+/**/CLAUDE.md
+.claude/
+.codex/
+.antigravity/
+.cursor/
+/skills/
+
+# Agent scratch space — disposable by contract, never committed
+scratch/
+.scratch/
+*.scratch.*
+*.tmp
+tmp/
+temp/
+
 # Environment and secrets
 .env
 .env.*
 !.env.example
-*.pem
+secrets/
 *.key
+*.pem
 *.p12
 *.pfx
-secrets/
 
 # Editors and operating systems
 .idea/
@@ -23,6 +46,7 @@ secrets/
 .DS_Store
 Thumbs.db
 Desktop.ini
+desktop.ini
 
 # Python
 __pycache__/
@@ -40,18 +64,17 @@ venv/
 # Node.js and frontend
 node_modules/
 dist/
+build/
+out/
 coverage/
 *.tsbuildinfo
 
 # Runtime and disposable outputs
 *.log
-tmp/
-temp/
 .cache/
 artifacts/
 reports/
 *.swp
-*.tmp
 
 # Local infrastructure state
 .lima/
