@@ -121,14 +121,16 @@ export function VerificationDetailPage() {
                   {integrity?.next ?? "Kết quả không xác định ai đã chỉnh sửa hoặc phát tán tài liệu."}
                 </p>
               </div>
-              <EvidenceSummary
-                status={data.status}
-                evidence={data.evidence}
-                showConclusion={false}
-              />
+              <div data-motion-block>
+                <EvidenceSummary
+                  status={data.status}
+                  evidence={data.evidence}
+                  showConclusion={false}
+                />
+              </div>
             </>
           ) : (
-            <section className="status-board">
+            <section className="status-board" data-motion-block>
               <h2>Chưa có kết luận</h2>
               <p>{missingEvidenceCopy(data.job_status)}</p>
             </section>
