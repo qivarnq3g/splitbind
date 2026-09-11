@@ -6,13 +6,17 @@ import { HistoryPage } from "../pages/HistoryPage";
 import { IssueDocumentPage } from "../pages/IssueDocumentPage";
 import { IssuanceDetailPage } from "../pages/IssuanceDetailPage";
 import { JobDetailPage } from "../pages/JobDetailPage";
+import { LandingPage } from "../pages/LandingPage";
 import { LoginPage } from "../pages/LoginPage";
 import { VerificationDetailPage } from "../pages/VerificationDetailPage";
 import { VerifyDocumentPage } from "../pages/VerifyDocumentPage";
 
-function RoleHome() {
+function HomeRoute() {
   const session = useSession();
-  return <Navigate to={canCreateIssuance(session.data?.user?.role) ? "/issue" : "/verify"} replace />;
+  if (session.data?.authenticated) {
+    return <Navigate to={canCreateIssuance(session.data?.user?.role) ? "/issue" : "/verify"} replace />;
+  }
+  return <LandingPage />;
 }
 
 function SessionBoundary() {
@@ -26,6 +30,8 @@ function SessionBoundary() {
 }
 
 export const appRoutes: RouteObject[] = [
+  { path: "/", element: <HomeRoute /> },
+  { path: "/gioi-thieu", element: <LandingPage /> },
   {
     element: <AppShell />,
     children: [
@@ -33,7 +39,6 @@ export const appRoutes: RouteObject[] = [
       {
         element: <SessionBoundary />,
         children: [
-          { index: true, element: <RoleHome /> },
           { path: "/issue", element: <IssueDocumentPage /> },
           { path: "/verify", element: <VerifyDocumentPage /> },
           { path: "/history", element: <HistoryPage /> },
