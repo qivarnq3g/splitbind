@@ -106,7 +106,7 @@ export function JobDetailPage() {
           : "Yêu cầu đã được tiếp nhận và đang chờ xử lý.";
   return (
     <main ref={root} className="workspace-page result-page">
-      <header className="page-heading">
+      <header className="page-heading" data-motion-block>
         <p className="page-context">
           {verification ? "Xác minh tài liệu" : "Cấp phát tài liệu"}
         </p>
@@ -131,7 +131,7 @@ export function JobDetailPage() {
       ) : data ? (
         <>
           <section className="status-board job-record">
-            <div className="job-current" aria-live="polite">
+            <div className="job-current" aria-live="polite" data-motion-block>
               <StatusBadge
                 label="Trạng thái công việc"
                 status={data.status}
@@ -139,7 +139,7 @@ export function JobDetailPage() {
               />
               <p>{explanation}</p>
             </div>
-            <ol className="job-steps" aria-label="Tiến trình các bước">
+            <ol className="job-steps" aria-label="Tiến trình các bước" data-motion-block>
               {[
                 "Tiếp nhận",
                 "Hàng đợi",
@@ -206,7 +206,7 @@ export function JobDetailPage() {
               ) : null}
             </div>
           </section>
-          <section className="record-metadata">
+          <section className="record-metadata" data-motion-block>
             <h2>Thông tin công việc</h2>
             <dl className="status-details">
               <div>

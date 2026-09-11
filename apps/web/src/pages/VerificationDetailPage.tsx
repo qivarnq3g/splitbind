@@ -61,7 +61,7 @@ export function VerificationDetailPage() {
           : "warning");
   return (
     <main className="workspace-page result-page">
-      <header className="page-heading">
+      <header className="page-heading" data-motion-block>
         <p className="page-context">Xác minh tài liệu</p>
         <h1>Kết quả kiểm chứng</h1>
       </header>
@@ -87,6 +87,7 @@ export function VerificationDetailPage() {
             <>
               <section
                 className="verdict"
+                data-motion-block
                 data-tone={tone}
                 aria-label="Kết luận kiểm chứng"
               >
@@ -111,7 +112,7 @@ export function VerificationDetailPage() {
                   <p>{copy.inference}</p>
                 </div>
               </section>
-              <div className="result-next">
+              <div className="result-next" data-motion-block>
                 <Link className="button button-secondary" to="/verify">
                   Kiểm tra tệp khác
                   <ArrowRight size={16} aria-hidden="true" />
@@ -132,7 +133,7 @@ export function VerificationDetailPage() {
               <p>{missingEvidenceCopy(data.job_status)}</p>
             </section>
           )}
-          <section className="record-metadata" aria-label="Thông tin hồ sơ">
+          <section className="record-metadata" aria-label="Thông tin hồ sơ" data-motion-block>
             <h2>Hồ sơ kiểm chứng</h2>
             <dl className="status-details">
               <div>

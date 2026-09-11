@@ -89,13 +89,13 @@ export function VerifyDocumentPage() {
     );
   return (
     <main className="workspace-page">
-      <header className="page-heading">
+      <header className="page-heading" data-motion-block>
         <p className="page-context">Kiểm tra toàn vẹn</p>
         <h1>Xác minh tài liệu</h1>
         <p>Tải tài liệu lên để xem kết quả kiểm tra kỹ thuật.</p>
       </header>
       <div className="workbench-layout">
-        <section className="workbench" aria-label="Xác minh tài liệu">
+        <section className="workbench" aria-label="Xác minh tài liệu" data-motion-block>
           <form
             className="form-stack"
             onSubmit={submit}
@@ -160,7 +160,7 @@ export function VerifyDocumentPage() {
             </div>
           </form>
         </section>
-        <aside className="task-guide" aria-label="Thông tin xác minh">
+        <aside className="task-guide" aria-label="Thông tin xác minh" data-motion-block>
           <h2>Đối chiếu, không phỏng đoán</h2>
           <p>
             Kiểm tra xem tệp có khớp bản đã cấp phát và hồ sơ chữ ký có hợp lệ

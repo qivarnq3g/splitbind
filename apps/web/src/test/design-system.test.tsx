@@ -247,4 +247,27 @@ describe("SplitBind design system", () => {
     expect(styles).toMatch(/\.technical-details summary:hover\s*\{/);
   });
 
+  it("marks staggered blocks on the issuance workbench", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async (input) => {
+      const url = String(input);
+      if (url.includes("/api/v1/demo/capabilities")) return json({ enabled: false });
+      return json({
+        authenticated: true,
+        csrf_token: "csrf-token",
+        user: {
+          id: USER_ID,
+          username: "issuer.demo",
+          role: "issuer",
+          organization_id: ORGANIZATION_ID,
+        },
+      });
+    }));
+
+    renderApp("/issue");
+
+    await screen.findByRole("heading", { name: "Tạo bản cấp phát" });
+    expect(document.querySelectorAll("[data-motion-block]").length).toBeGreaterThanOrEqual(3);
+    expect(document.querySelector(".page-heading")).toHaveAttribute("data-motion-block");
+  });
+
 });

@@ -47,7 +47,7 @@ export function IssuanceDetailPage() {
 
   return (
     <main className="workspace-page result-page">
-      <header className="page-heading">
+      <header className="page-heading" data-motion-block>
         <p className="page-context">Cấp phát tài liệu</p>
         <h1>Hồ sơ cấp phát</h1>
       </header>
@@ -71,6 +71,7 @@ export function IssuanceDetailPage() {
         <>
           <section
             className="verdict"
+            data-motion-block
             data-tone={
               available
                 ? "success"
@@ -103,7 +104,7 @@ export function IssuanceDetailPage() {
               </p>
             </div>
           </section>
-          <div className="result-next">
+          <div className="result-next" data-motion-block>
             {issuance.data.result_available ? (
               <button
                 className="button button-primary"
@@ -131,7 +132,7 @@ export function IssuanceDetailPage() {
               {download.error.message}
             </p>
           ) : null}
-          <section className="record-metadata">
+          <section className="record-metadata" data-motion-block>
             <h2>Thông tin bản cấp phát</h2>
             <dl className="status-details">
               <div>

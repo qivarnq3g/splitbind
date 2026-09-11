@@ -96,13 +96,13 @@ export function IssueDocumentPage() {
     );
   return (
     <main className="workspace-page">
-      <header className="page-heading">
+      <header className="page-heading" data-motion-block>
         <p className="page-context">Cấp phát tài liệu</p>
         <h1>Tạo bản cấp phát</h1>
         <p>Chọn PDF và người nhận để tạo bản cấp phát riêng.</p>
       </header>
       <div className="workbench-layout">
-        <section className="workbench" aria-label="Tạo bản cấp phát">
+        <section className="workbench" aria-label="Tạo bản cấp phát" data-motion-block>
           <form
             className="form-stack"
             onSubmit={submit}
@@ -197,7 +197,7 @@ export function IssueDocumentPage() {
             </div>
           </form>
         </section>
-        <aside className="task-guide" aria-label="Thông tin quy trình">
+        <aside className="task-guide" aria-label="Thông tin quy trình" data-motion-block>
           <h2>Từ tài liệu đến bản cấp phát</h2>
           <ol className="guide-steps">
             <li>
