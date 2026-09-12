@@ -7,10 +7,10 @@ param(
     [string]$AcmeEmail = "operator@example.invalid",
     [string]$ApiImage = "ghcr.io/qivarnq3g/splitbind-api@sha256:3f5fd3db7dd6f37fe655367bd68671b16a281f9cf054f262a5adb8e2298b6caa",
     [string]$WebImage = "ghcr.io/qivarnq3g/splitbind-web@sha256:532ef439f2343d3fb7c7cd49d300141a88c53ebb9f37e3d2f724930762961d68",
-    [string]$DatabaseHost = if ($env:SPLITBIND_DATABASE_HOST) { $env:SPLITBIND_DATABASE_HOST } else { "ep-production.neon.tech" },
+    [string]$DatabaseHost = $(if ($env:SPLITBIND_DATABASE_HOST) { $env:SPLITBIND_DATABASE_HOST } else { "ep-production.neon.tech" }),
     [string]$DatabaseUrl = $env:SPLITBIND_DATABASE_URL,
-    [string]$R2Endpoint = if ($env:SPLITBIND_R2_ENDPOINT) { $env:SPLITBIND_R2_ENDPOINT } else { "https://R2ACCOUNTIDREDACTED000000000000.r2.cloudflarestorage.com" },
-    [string]$R2Bucket = if ($env:SPLITBIND_R2_BUCKET) { $env:SPLITBIND_R2_BUCKET } else { "splitbind-storage" },
+    [string]$R2Endpoint = $(if ($env:SPLITBIND_R2_ENDPOINT) { $env:SPLITBIND_R2_ENDPOINT } else { "https://R2ACCOUNTIDREDACTED000000000000.r2.cloudflarestorage.com" }),
+    [string]$R2Bucket = $(if ($env:SPLITBIND_R2_BUCKET) { $env:SPLITBIND_R2_BUCKET } else { "splitbind-storage" }),
     [string]$R2AccessKey = $env:SPLITBIND_R2_ACCESS_KEY,
     [string]$R2SecretKey = $env:SPLITBIND_R2_SECRET_KEY,
     [string]$AdminPassword = $env:SPLITBIND_ADMIN_PASSWORD,
@@ -137,11 +137,6 @@ MANIFEST_SIGNING_KEY_PASSPHRASE_FILE=/home/$AdminUser/splitbind/secrets/manifest
     # Copy compose.production.yaml
     scp -i $SshKeyPath (Join-Path $repoRoot "infra\compose\compose.production.yaml") "$AdminUser@$VmHost`:~/splitbind/compose/compose.yaml"
 
-    # Copy settings patch
-    ssh -i $SshKeyPath "$AdminUser@$VmHost" "mkdir -p /home/$AdminUser/splitbind/patches"
-    scp -i $SshKeyPath (Join-Path $repoRoot "services\api\config\settings_common.py") "$AdminUser@$VmHost`:/home/$AdminUser/splitbind/patches/settings_common.py"
-    ssh -i $SshKeyPath "$AdminUser@$VmHost" "chmod 755 /home/$AdminUser/splitbind/patches && chmod 644 /home/$AdminUser/splitbind/patches/settings_common.py"
-
     # Set strict Linux file permissions on secrets
     ssh -i $SshKeyPath "$AdminUser@$VmHost" "chmod 700 /home/$AdminUser/splitbind/secrets; chmod 600 /home/$AdminUser/splitbind/secrets/*.env /home/$AdminUser/splitbind/compose/.env; chmod 644 /home/$AdminUser/splitbind/secrets/manifest-signing-key.*"
 
@@ -201,7 +196,11 @@ MANIFEST_SIGNING_KEY_PASSPHRASE_FILE=/home/$AdminUser/splitbind/secrets/manifest
         }
     }
 
-    Write-Host "`nDEPLOYMENT COMPLETED SUCCESSFULLY!" -ForegroundColor Green
+    if (-not $httpsStatus) {
+        throw "Public HTTPS never returned 200 for https://$Hostname. The cutover is NOT verified; inspect Caddy certificate issuance before calling this a release."
+    }
+
+    Write-Host "`nDEPLOYMENT VERIFIED." -ForegroundColor Green
     Write-Host "Endpoint: https://$Hostname"
     Write-Host "HTTPS Status: $httpsStatus"
     Write-Host "Admin Username: $BootstrapUsername"
