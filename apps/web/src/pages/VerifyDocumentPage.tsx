@@ -1,10 +1,11 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowRight } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { DocumentFileInput } from "../components/DocumentFileInput";
 import { WorkflowSteps } from "../components/WorkflowSteps";
 import { canCreateVerification, useSession } from "../features/auth/session";
+import { getDemoCapabilities } from "../features/demo/capabilities";
 import { SafeApiError } from "../features/shared/apiError";
 import {
   type UploadStage,
@@ -20,6 +21,15 @@ export function VerifyDocumentPage() {
   const [file, setFile] = useState<File | null>(null);
   const [stage, setStage] = useState<UploadStage | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const capabilities = useQuery({
+    queryKey: ["demo-capabilities"],
+    queryFn: ({ signal }) => getDemoCapabilities(signal),
+    enabled: Boolean(session.data?.user),
+    staleTime: 30_000,
+    retry: false,
+  });
+  const algorithmLabel = capabilities.data?.algorithm_label;
+  const exactOnly = algorithmLabel === undefined || algorithmLabel === "integrity_release_v1";
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -27,7 +37,7 @@ export function VerifyDocumentPage() {
     mutationFn: async () => {
       if (!file)
         throw new SafeApiError("Chưa có tệp. Chọn một tệp rồi thử lại.");
-      validateVerificationFile(file);
+      validateVerificationFile(file, exactOnly);
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -35,6 +45,7 @@ export function VerifyDocumentPage() {
         file,
         setStage,
         controller.signal,
+        exactOnly,
       );
       setStage(null);
       return createVerification(upload.uploadId, controller.signal);
@@ -54,7 +65,7 @@ export function VerifyDocumentPage() {
       return;
     }
     try {
-      validateVerificationFile(selected);
+      validateVerificationFile(selected, exactOnly);
       setFile(selected);
     } catch (error) {
       setFile(selected);
@@ -66,6 +77,7 @@ export function VerifyDocumentPage() {
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (validationError) return;
     verification.mutate();
   }
 
@@ -88,13 +100,13 @@ export function VerifyDocumentPage() {
     );
   return (
     <main className="workspace-page">
-      <header className="page-heading">
+      <header className="page-heading" data-motion-block>
         <p className="page-context">Kiểm tra toàn vẹn</p>
         <h1>Xác minh tài liệu</h1>
         <p>Tải tài liệu lên để xem kết quả kiểm tra kỹ thuật.</p>
       </header>
       <div className="workbench-layout">
-        <section className="workbench" aria-label="Xác minh tài liệu">
+        <section className="workbench" aria-label="Xác minh tài liệu" data-motion-block>
           <form
             className="form-stack"
             onSubmit={submit}
@@ -109,7 +121,11 @@ export function VerifyDocumentPage() {
               <DocumentFileInput
                 id="verification-pdf"
                 label="Tệp cần kiểm chứng"
-                accept="application/pdf,image/png,image/jpeg,.pdf,.png,.jpg,.jpeg"
+                accept={
+                  exactOnly
+                    ? "application/pdf,.pdf"
+                    : "application/pdf,image/png,image/jpeg,.pdf,.png,.jpg,.jpeg"
+                }
                 disabled={verification.isPending}
                 invalid={Boolean(validationError)}
                 describedBy="verification-pdf-help"
@@ -125,8 +141,16 @@ export function VerifyDocumentPage() {
                 {validationError ??
                   (file
                     ? `${Math.max(1, Math.ceil(file.size / 1024))} KiB · Tệp được chọn trên thiết bị, chưa tải lên.`
-                    : "PDF, PNG hoặc JPEG · tối đa 10 MiB · PDF tối đa 50 trang")}
+                    : exactOnly
+                      ? "PDF · tối đa 100 MB · PDF tối đa 50 trang"
+                      : "PDF, PNG hoặc JPEG · tối đa 100 MB · PDF tối đa 50 trang")}
               </p>
+              {exactOnly ? (
+                <p className="field-help">
+                  Bản đang chạy chỉ đối chiếu được tệp PDF. Kiểm tra ảnh thuộc
+                  đường nhận diện dấu vết, hiện chưa phát hành.
+                </p>
+              ) : null}
             </div>
 
             <WorkflowSteps stage={stage} />
@@ -139,7 +163,7 @@ export function VerifyDocumentPage() {
               <button
                 className="button button-primary"
                 type="submit"
-                disabled={verification.isPending}
+                disabled={verification.isPending || Boolean(validationError)}
                 data-state={
                   verification.isPending
                     ? "loading"
@@ -159,7 +183,7 @@ export function VerifyDocumentPage() {
             </div>
           </form>
         </section>
-        <aside className="task-guide" aria-label="Thông tin xác minh">
+        <aside className="task-guide" aria-label="Thông tin xác minh" data-motion-block>
           <h2>Đối chiếu, không phỏng đoán</h2>
           <p>
             Kiểm tra xem tệp có khớp bản đã cấp phát và hồ sơ chữ ký có hợp lệ

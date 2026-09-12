@@ -18,6 +18,9 @@ services:
       - target: 8443
         published: "443"
         protocol: tcp
+      - target: 8443
+        published: "443"
+        protocol: udp
     environment:
       SPLITBIND_HOSTNAME: ${SPLITBIND_HOSTNAME:?SPLITBIND_HOSTNAME is required}
       ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL is required}
@@ -42,7 +45,7 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     tmpfs: ["/tmp:size=268435456,mode=1770,uid=10001,gid=10001"]
-    mem_limit: 512m
+    mem_limit: 448m
     cpus: 0.75
     env_file: ["${API_ENV_FILE:?API_ENV_FILE is required}"]
     environment:
@@ -59,8 +62,6 @@ services:
       start_period: 30s
     stop_grace_period: 30s
     restart: unless-stopped
-    volumes:
-      - /home/PRODUCTION_VM_ADMIN/splitbind/patches/settings_common.py:/app/services/api/config/settings_common.py:ro
     networks: [app]
   worker:
     image: ${API_IMAGE:?API_IMAGE must be an immutable digest}
@@ -70,7 +71,7 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     tmpfs: ["/tmp:size=2147483648,mode=1770,uid=10001,gid=10001"]
-    mem_limit: 2g
+    mem_limit: 2496m
     cpus: 1.0
     env_file: ["${WORKER_ENV_FILE:?WORKER_ENV_FILE is required}"]
     environment:
@@ -95,8 +96,6 @@ services:
       start_period: 30s
     stop_grace_period: 30s
     restart: unless-stopped
-    volumes:
-      - /home/PRODUCTION_VM_ADMIN/splitbind/patches/settings_common.py:/app/services/api/config/settings_common.py:ro
     networks: [app]
     depends_on:
       api:

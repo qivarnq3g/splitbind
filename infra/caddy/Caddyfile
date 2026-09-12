@@ -8,11 +8,12 @@
 {$SPLITBIND_HOSTNAME} {
     encode zstd gzip
     header {
-        Strict-Transport-Security "max-age=31536000; includeSubDomains"
-        X-Content-Type-Options "nosniff"
-        Referrer-Policy "same-origin"
-        Permissions-Policy "camera=(), microphone=(), geolocation=()"
-        Content-Security-Policy "default-src 'self'; connect-src 'self' https://*.r2.cloudflarestorage.com; font-src 'self' data:; img-src 'self' data: blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+        >Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        >X-Content-Type-Options "nosniff"
+        >Referrer-Policy "same-origin"
+        >Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        >Content-Security-Policy "default-src 'self'; connect-src 'self' https://*.r2.cloudflarestorage.com; font-src 'self' data:; img-src 'self' data: blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+        >Alt-Svc "h3=\":443\"; ma=2592000"
     }
     handle /api/* {
         reverse_proxy api:8000

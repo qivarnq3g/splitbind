@@ -1121,7 +1121,8 @@ def test_actual_checksum_mismatch_fails_before_decode(monkeypatch):
 
 @pytest.mark.django_db
 @override_settings(SPLITBIND_DEMO_MODE=True)
-def test_actual_input_above_ten_mib_fails_before_decode(monkeypatch):
+@override_settings(MAX_PDF_BYTES=2048)
+def test_actual_input_above_the_configured_byte_limit_fails_before_decode(monkeypatch):
     from splitbind.demo.verification import DemoVerificationError, process_verification_job
 
     monkeypatch.setenv("SPLITBIND_DEMO_FINGERPRINT_KEY_HEX", FINGERPRINT_KEY.hex())
@@ -1137,12 +1138,13 @@ def test_actual_input_above_ten_mib_fails_before_decode(monkeypatch):
 
 @pytest.mark.django_db
 @override_settings(SPLITBIND_DEMO_MODE=True)
-def test_more_than_five_pdf_pages_fails_before_rendering(monkeypatch):
+@override_settings(MAX_PDF_PAGES=3)
+def test_a_pdf_page_count_above_the_configured_limit_fails_before_rendering(monkeypatch):
     from splitbind.demo.verification import DemoVerificationError, process_verification_job
 
     monkeypatch.setenv("SPLITBIND_DEMO_FINGERPRINT_KEY_HEX", FINGERPRINT_KEY.hex())
     context = _new_verification_context(
-        blank_pdf_bytes(page_sizes=((288, 384),) * 6)
+        blank_pdf_bytes(page_sizes=((288, 384),) * 4)
     )
 
     with pytest.raises(DemoVerificationError, match="^DEMO_PDF_PAGE_LIMIT$"):
@@ -1557,3 +1559,47 @@ def test_internal_capability_rejects_secret_bearing_committed_evidence():
         forged.save()
 
     assert not DemoVerificationResult.objects.filter(job=context[0]).exists()
+
+
+@pytest.mark.django_db
+def test_fingerprint_capability_is_off_unless_explicitly_enabled():
+    from django.conf import settings
+
+    assert settings.SPLITBIND_FINGERPRINT_ENABLED is False, (
+        "the transformed-attribution capability must stay off by default; enabling it "
+        "changes what the product claims about a document"
+    )
+
+
+@pytest.mark.django_db
+@override_settings(
+    SPLITBIND_DEMO_MODE=False,
+    SPLITBIND_RELEASE_MODE=ReleaseMode.INTEGRITY_V1,
+    SPLITBIND_FINGERPRINT_ENABLED=True,
+)
+def test_integrity_release_runs_the_fingerprint_decoder_once_the_capability_is_enabled(
+    monkeypatch,
+):
+    from splitbind.demo import verification as verification_module
+    from splitbind.demo.verification import process_verification_job
+
+    monkeypatch.setenv("SPLITBIND_DEMO_FINGERPRINT_KEY_HEX", FINGERPRINT_KEY.hex())
+    context = _new_verification_context(synthetic_image_bytes(extension=".png"))
+    observed = {}
+
+    original = verification_module._decode_content
+
+    def record(source, **kwargs):
+        observed["ran"] = True
+        observed["has_key"] = kwargs.get("fingerprint_key") is not None
+        observed["has_candidate"] = kwargs.get("candidate") is not None
+        return original(source, **kwargs)
+
+    monkeypatch.setattr(verification_module, "_decode_content", record)
+
+    result = process_verification_job(job_id=context[0].id, storage=context[2])
+
+    assert observed.get("ran") is True, "the decoder never ran with the capability on"
+    assert observed.get("has_key") is True
+    assert observed.get("has_candidate") is True
+    assert "fingerprint.transformed_attribution_unavailable" not in result.limitations

@@ -7,6 +7,8 @@ from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.db import connection, transaction
 
+from config.limits import PRODUCTION_RUNTIME_LIMITS
+
 from splitbind.demo import issuance as demo_issuance
 from splitbind.demo import verification as demo_verification
 from splitbind.demo.models import DemoIssuanceResult, DemoVerificationResult
@@ -17,10 +19,13 @@ from splitbind.demo.worker import (
     stage_next_created_job,
 )
 from splitbind.jobs.models import Job, JobKind, JobStatus
+from splitbind.observability import get_logger, log_swallowed
 from splitbind.jobs.state import transition_job
 from splitbind.release.manifest import load_manifest_signing_key
 from splitbind.release.mode import integrity_release_enabled
 
+
+logger = get_logger("splitbind.release.worker")
 
 INTEGRITY_DEADLINE_ERROR_CODE = "INTEGRITY_JOB_DEADLINE_EXCEEDED"
 INTEGRITY_TIMEOUT_ERROR_CODE = "INTEGRITY_JOB_TIMEOUT_EXCEEDED"
@@ -118,7 +123,15 @@ def process_integrity_cycle(storage, now: datetime) -> WorkerCycleResult | None:
             )
         else:
             return WorkerCycleResult(job.id, job.kind, "INTEGRITY_JOB_KIND_INVALID")
-    except Exception:
+    except Exception as error:
+        log_swallowed(
+            logger,
+            error,
+            action="cycle",
+            job=job.id,
+            kind=job.kind,
+            code="INTEGRITY_JOB_PROCESSING_FAILED",
+        )
         return WorkerCycleResult(job.id, job.kind, "INTEGRITY_JOB_PROCESSING_FAILED")
     return WorkerCycleResult(job.id, job.kind, "OK")
 
@@ -136,11 +149,9 @@ def recover_stale_integrity_jobs(*, storage, now: datetime):
 def validate_integrity_worker_startup() -> None:
     _require_integrity_mode()
     expected_limits = {
-        "MAX_PDF_BYTES": 10 * 1024 * 1024,
-        "MAX_PDF_PAGES": 50,
-        "MAX_IMAGE_PIXELS": 40_000_000,
-        "JOB_TIMEOUT_SECONDS": 600,
-        "WORKER_CONCURRENCY": 1,
+        name: value
+        for name, value in PRODUCTION_RUNTIME_LIMITS.items()
+        if name != "RETENTION_RECONCILIATION_LEASE_SECONDS"
     }
     if any(getattr(settings, name, None) != value for name, value in expected_limits.items()):
         raise ImproperlyConfigured("INTEGRITY_LIMITS_INVALID")

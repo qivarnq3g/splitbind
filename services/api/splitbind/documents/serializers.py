@@ -8,9 +8,28 @@ from splitbind.release.mode import integrity_release_enabled
 
 
 class IssuanceCreateSerializer(serializers.Serializer):
-    recipient_id = serializers.UUIDField()
+    recipient_id = serializers.UUIDField(required=False)
+    recipient_email = serializers.EmailField(required=False, allow_blank=False, max_length=120)
+    recipient_name = serializers.CharField(required=False, allow_blank=True, max_length=200)
     upload_id = serializers.UUIDField()
     correlation_id = serializers.UUIDField()
+
+    def validate(self, attrs):
+        has_id = bool(attrs.get("recipient_id"))
+        has_email = bool(attrs.get("recipient_email"))
+        if has_id and has_email:
+            raise serializers.ValidationError(
+                "Chỉ được cung cấp mã người nhận (recipient_id) hoặc email người nhận (recipient_email), không được cung cấp cả hai."
+            )
+        if not has_id and not has_email:
+            raise serializers.ValidationError(
+                "Cần cung cấp email người nhận (recipient_email) hoặc mã người nhận (recipient_id)."
+            )
+        if has_email:
+            attrs["recipient_email"] = attrs["recipient_email"].strip()
+            if attrs.get("recipient_name") is not None:
+                attrs["recipient_name"] = attrs["recipient_name"].strip()
+        return attrs
 
 
 class VerificationCreateSerializer(serializers.Serializer):
@@ -87,7 +106,9 @@ def _contract_evidence(value):
     limitations = value.get("limitations")
     if integrity_mode:
         projected_limitations = ["evidence.not_proof_of_leak_edit_or_distribution"]
-        if projected.get("exact_file_hash_match") is not True:
+        if getattr(settings, "SPLITBIND_FINGERPRINT_ENABLED", False):
+            projected_limitations.append("fingerprint.recall_below_release_gate")
+        elif projected.get("exact_file_hash_match") is not True:
             projected_limitations.append(
                 "fingerprint.transformed_attribution_unavailable"
             )
@@ -161,6 +182,7 @@ def serialize_issuance(record, job=None):
 
 def serialize_verification(record, job=None):
     job = job or record.jobs.order_by("created_at").first()
+    demo_result = getattr(record, "demo_result", None)
     return {
         "id": str(record.id),
         "job_id": str(job.id) if job else None,
@@ -168,6 +190,7 @@ def serialize_verification(record, job=None):
         "status": record.status,
         "created_at": record.created_at.isoformat(),
         "completed_at": record.completed_at.isoformat() if record.completed_at else None,
+        "input_sha256": demo_result.input_sha256 if demo_result else None,
         "evidence": _contract_evidence(record.evidence),
         "metrics": _contract_metrics(record.metrics),
     }

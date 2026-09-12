@@ -1,9 +1,21 @@
-﻿import { Check, Copy } from "lucide-react";
+import { Check, Copy } from "lucide-react";
 import { useEffect, useState } from "react";
 
-export function CompactIdentifier({ label, value }: { label: string; value: string }) {
+export function CompactIdentifier({
+  label,
+  value,
+  full = false,
+}: {
+  label: string;
+  value: string;
+  full?: boolean;
+}) {
   const [copied, setCopied] = useState(false);
-  const compact = value.length > 13 ? `${value.slice(0, 8)}…${value.slice(-4)}` : value;
+  const displayValue = full
+    ? value
+    : value.length > 13
+      ? `${value.slice(0, 8)}…${value.slice(-4)}`
+      : value;
 
   useEffect(() => {
     if (!copied) return;
@@ -22,7 +34,7 @@ export function CompactIdentifier({ label, value }: { label: string; value: stri
 
   return (
     <span className="compact-identifier" title={value}>
-      <code>{compact}</code>
+      <code>{displayValue}</code>
       <button
         className="copy-identifier"
         type="button"

@@ -48,9 +48,6 @@ from splitbind_ref.fingerprint_v2 import FingerprintV2Context, embed_fingerprint
 from splitbind_ref.fingerprint_v2_profile import candidate_identifier_v2, load_v2_profiles
 
 
-DEMO_MAX_PDF_BYTES = 10 * 1024 * 1024
-DEMO_MAX_PAGES = 5
-DEMO_MAX_RASTER_PIXELS = 40_000_000
 CANONICAL_CANVAS = DEMO_CANONICAL_CANVAS
 SOURCE_RENDER_SCALE = 2.0
 FINGERPRINT_KEY_ENV = "SPLITBIND_DEMO_FINGERPRINT_KEY_HEX"
@@ -194,7 +191,10 @@ def _process_issuance_job(
     integrity_mode = integrity_release_enabled(
         getattr(settings, "SPLITBIND_RELEASE_MODE", None)
     )
-    fingerprint_key = None if integrity_mode else _load_fingerprint_key()
+    fingerprint_enabled = bool(getattr(settings, "SPLITBIND_FINGERPRINT_ENABLED", False))
+    fingerprint_key = (
+        None if integrity_mode and not fingerprint_enabled else _load_fingerprint_key()
+    )
     signing_private_key = None
     if integrity_mode:
         signing_key_file = getattr(settings, "SPLITBIND_MANIFEST_SIGNING_KEY_FILE", None)
@@ -219,7 +219,7 @@ def _process_issuance_job(
         try:
             downloaded = storage.download_bytes(
                 key=claim.source_object_key,
-                max_bytes=min(settings.MAX_PDF_BYTES, DEMO_MAX_PDF_BYTES),
+                max_bytes=settings.MAX_PDF_BYTES,
                 expected_sha256=claim.expected_source_sha256,
             )
         except UploadRejected as error:
@@ -241,7 +241,7 @@ def _process_issuance_job(
             source_path.read_bytes(),
             issuance_id=claim.issuance_id,
             fingerprint_key=fingerprint_key,
-            visible_marker=integrity_mode,
+            visible_marker=integrity_mode and not fingerprint_enabled,
         )
         output_path.write_bytes(output_bytes)
         if not _begin_output_upload(claim):
@@ -252,7 +252,7 @@ def _process_issuance_job(
                     key=claim.output_object_key,
                     content_type="application/pdf",
                     chunks=iter(lambda: output_stream.read(64 * 1024), b""),
-                    max_bytes=min(settings.MAX_PDF_BYTES, DEMO_MAX_PDF_BYTES),
+                    max_bytes=settings.MAX_PDF_BYTES,
                 )
         except Exception as error:
             cleanup_failures, code = _compensate_owned_output(
@@ -706,7 +706,7 @@ def _build_issuance_pdf(
     fingerprint_key: bytes | None,
     visible_marker: bool = False,
 ) -> tuple[bytes, int, str]:
-    if len(source_pdf) > DEMO_MAX_PDF_BYTES:
+    if len(source_pdf) > settings.MAX_PDF_BYTES:
         raise DemoIssuanceError("DEMO_PDF_FILE_LIMIT")
     if not source_pdf.startswith(b"%PDF-"):
         raise DemoIssuanceError("DEMO_PDF_INVALID")
@@ -733,7 +733,7 @@ def _build_issuance_pdf(
     try:
         input_pdf.init_forms()
         page_count = len(input_pdf)
-        if not 1 <= page_count <= DEMO_MAX_PAGES:
+        if not 1 <= page_count <= settings.MAX_PDF_PAGES:
             raise DemoIssuanceError("DEMO_PDF_PAGE_LIMIT")
         page_units = _source_page_units(source_pdf, page_count)
         _validate_raster_budget(input_pdf, page_units)
@@ -821,7 +821,7 @@ def _validate_raster_budget(
         render_width = math.ceil(width * SOURCE_RENDER_SCALE * user_unit)
         render_height = math.ceil(height * SOURCE_RENDER_SCALE * user_unit)
         cumulative_pixels += max(render_width * render_height, canvas_pixels)
-        if cumulative_pixels > DEMO_MAX_RASTER_PIXELS:
+        if cumulative_pixels > settings.MAX_DOCUMENT_RASTER_PIXELS:
             raise DemoIssuanceError("DEMO_PDF_RASTER_LIMIT")
 
 

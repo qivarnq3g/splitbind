@@ -24,9 +24,13 @@ from splitbind.demo.models import (
 from splitbind.documents.models import Document, Issuance, Verification
 from splitbind.jobs.models import Job, JobKind, JobStatus
 from splitbind.jobs.state import transition_job
+from splitbind.observability import get_logger, log_swallowed
 from splitbind.outbox.messages import SCHEMA_PATH
 from splitbind.outbox.models import OutboxEvent
 from splitbind.uploads.models import UploadRequest
+
+
+logger = get_logger("splitbind.demo.worker")
 
 
 DEADLINE_ERROR_CODE = "DEMO_JOB_DEADLINE_EXCEEDED"
@@ -411,7 +415,14 @@ def _recover_stale_job(*, job_id: UUID, stale_before, storage):
     if action == "tombstone":
         try:
             storage.delete(key=claim.output_object_key)
-        except Exception:
+        except Exception as error:
+            log_swallowed(
+                logger,
+                error,
+                action="stale_cleanup",
+                job=claim.job_id,
+                code=STALE_CLEANUP_ERROR_CODE,
+            )
             return StaleRecoveryResult(
                 claim.job_id,
                 JobKind.ISSUANCE,
@@ -430,7 +441,14 @@ def _recover_stale_job(*, job_id: UUID, stale_before, storage):
     )
     try:
         storage.delete(key=claim.output_object_key)
-    except Exception:
+    except Exception as error:
+        log_swallowed(
+            logger,
+            error,
+            action="stale_cleanup",
+            job=claim.job_id,
+            code=STALE_CLEANUP_ERROR_CODE,
+        )
         demo_issuance._record_stale_output_delete_failure(
             claim,
             prior_cleanup_failures=prior_cleanup_failures,
@@ -539,7 +557,15 @@ def run_worker_cycle(*, storage) -> WorkerCycleResult | None:
                 kind=job.kind,
                 safe_code="DEMO_JOB_KIND_INVALID",
             )
-    except Exception:
+    except Exception as error:
+        log_swallowed(
+            logger,
+            error,
+            action="cycle",
+            job=job.id,
+            kind=job.kind,
+            code="DEMO_JOB_PROCESSING_FAILED",
+        )
         return WorkerCycleResult(
             job_id=job.id,
             kind=job.kind,

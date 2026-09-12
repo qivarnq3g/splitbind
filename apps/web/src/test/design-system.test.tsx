@@ -204,7 +204,7 @@ describe("SplitBind design system", () => {
 
     renderApp(`/jobs/${JOB_ID}`);
 
-    expect(await screen.findByText("00000000…0006")).toBeVisible();
+    expect(await screen.findByText(JOB_ID)).toBeVisible();
     expect(screen.getByRole("status", { name: "Trạng thái công việc: Hoàn tất" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Sao chép mã công việc" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Đã sao chép mã công việc" })).toBeVisible());
@@ -232,4 +232,84 @@ describe("SplitBind design system", () => {
     expect(motionPage).toHaveAttribute("data-stage-rank", "1");
   });
 
+  it("centres the constrained result column inside the route stage", () => {
+    const styles = readFileSync(resolve(process.cwd(), "src/styles/app.css"), "utf8");
+
+    expect(styles).toMatch(/\.result-page\s*\{[^}]*max-width:\s*880px[^}]*margin-inline:\s*auto/s);
+  });
+
+  it("eases the interactive states of navigation, inputs and disclosures", () => {
+    const styles = readFileSync(resolve(process.cwd(), "src/styles/app.css"), "utf8");
+
+    expect(styles).toMatch(/\.nav-item\s*\{[^}]*transition:[^}]*color var\(--dur-hover\)/s);
+    expect(styles).toMatch(/\.nav-item:hover\s*\{/);
+    expect(styles).toMatch(/\.field input:not\(\[type="file"\]\)\s*\{[^}]*transition:[^}]*border-color var\(--dur-hover\)/s);
+    expect(styles).toMatch(/\.technical-details summary:hover\s*\{/);
+  });
+
+  it("marks staggered blocks on the issuance workbench", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async (input) => {
+      const url = String(input);
+      if (url.includes("/api/v1/demo/capabilities")) return json({ enabled: false });
+      return json({
+        authenticated: true,
+        csrf_token: "csrf-token",
+        user: {
+          id: USER_ID,
+          username: "issuer.demo",
+          role: "issuer",
+          organization_id: ORGANIZATION_ID,
+        },
+      });
+    }));
+
+    renderApp("/issue");
+
+    await screen.findByRole("heading", { name: "Tạo bản cấp phát" });
+    expect(document.querySelectorAll("[data-motion-block]").length).toBeGreaterThanOrEqual(3);
+    expect(document.querySelector(".page-heading")).toHaveAttribute("data-motion-block");
+  });
+
+  it("gives the public overview a way in from inside the workbench", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async (input) => {
+      const url = String(input);
+      if (url.includes("/api/v1/demo/capabilities")) return json({ enabled: false });
+      return json({
+        authenticated: true,
+        csrf_token: "csrf-token",
+        user: {
+          id: USER_ID,
+          username: "issuer.demo",
+          role: "issuer",
+          organization_id: ORGANIZATION_ID,
+        },
+      });
+    }));
+
+    renderApp("/issue");
+
+    const link = await screen.findByRole("link", { name: "Giới thiệu" });
+    expect(link).toHaveAttribute("href", "/about");
+  });
+
+  it("holds the page shape while the session is being checked", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(() => new Promise(() => {})));
+
+    renderApp("/history");
+
+    const status = await screen.findByRole("status", { name: "Đang kiểm tra phiên đăng nhập" });
+    expect(status).toBeVisible();
+    expect(status.querySelectorAll(".session-skeleton-line").length).toBeGreaterThanOrEqual(3);
+  });
+
+});
+
+it("gives every route its own document title", async () => {
+  const { titleForPath } = await import("../app/documentTitle");
+  const paths = ["/", "/about", "/login", "/issue", "/verify", "/history",
+    "/jobs/abc", "/issuances/abc", "/verifications/abc"];
+  const titles = paths.map(titleForPath);
+  expect(new Set(titles).size).toBe(paths.length);
+  for (const title of titles) expect(title).toContain("SplitBind");
+  expect(titleForPath("/khong-ton-tai")).toMatch(/Không tìm thấy trang/);
 });

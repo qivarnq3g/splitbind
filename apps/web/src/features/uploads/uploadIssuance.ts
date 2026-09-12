@@ -1,7 +1,7 @@
 import { api } from "../../api/client";
 import { SafeApiError, safeApiMessage } from "../shared/apiError";
 
-export const MAX_PDF_BYTES = 10 * 1024 * 1024;
+export const MAX_PDF_BYTES = 100 * 1024 * 1024;
 
 export type UploadStage = "hashing" | "intent" | "uploading" | "finalizing";
 
@@ -14,13 +14,13 @@ type UploadKind = "issuance_input" | "verification_input";
 
 function validateSize(file: File): void {
   if (file.size > MAX_PDF_BYTES) {
-    throw new SafeApiError("Tệp vượt quá giới hạn 10 MiB. Chọn tệp nhỏ hơn rồi thử lại.");
+    throw new SafeApiError("Tệp vượt quá giới hạn 100 MB. Chọn tệp nhỏ hơn rồi thử lại.");
   }
 }
 
-function normalizedContentType(file: File, kind: UploadKind): string | null {
+function normalizedContentType(file: File, kind: UploadKind, exactOnly = false): string | null {
   const name = file.name.toLocaleLowerCase();
-  const candidates = kind === "issuance_input"
+  const candidates = kind === "issuance_input" || exactOnly
     ? [{ suffixes: [".pdf"], type: "application/pdf" }]
     : [
         { suffixes: [".pdf"], type: "application/pdf" },
@@ -39,10 +39,14 @@ export function validatePdf(file: File): void {
   }
 }
 
-export function validateVerificationFile(file: File): void {
+export function validateVerificationFile(file: File, exactOnly = false): void {
   validateSize(file);
-  if (!normalizedContentType(file, "verification_input")) {
-    throw new SafeApiError("Tệp chưa đúng định dạng. Chọn tệp PDF, PNG hoặc JPEG rồi thử lại.");
+  if (!normalizedContentType(file, "verification_input", exactOnly)) {
+    throw new SafeApiError(
+      exactOnly
+        ? "Tệp đã chọn không phải PDF. Chọn tệp có định dạng PDF rồi thử lại."
+        : "Tệp chưa đúng định dạng. Chọn tệp PDF, PNG hoặc JPEG rồi thử lại.",
+    );
   }
 }
 
@@ -56,10 +60,11 @@ export async function uploadPdf(
   kind: UploadKind,
   onStage: (stage: UploadStage) => void,
   signal?: AbortSignal,
+  exactOnly = false,
 ): Promise<UploadReady> {
   if (kind === "issuance_input") validatePdf(file);
-  else validateVerificationFile(file);
-  const contentType = normalizedContentType(file, kind)!;
+  else validateVerificationFile(file, exactOnly);
+  const contentType = normalizedContentType(file, kind, exactOnly)!;
   onStage("hashing");
   const checksum = await sha256(file);
 
@@ -114,6 +119,7 @@ export function uploadVerificationPdf(
   file: File,
   onStage: (stage: UploadStage) => void,
   signal?: AbortSignal,
+  exactOnly = false,
 ): Promise<UploadReady> {
-  return uploadPdf(file, "verification_input", onStage, signal);
+  return uploadPdf(file, "verification_input", onStage, signal, exactOnly);
 }

@@ -11,7 +11,7 @@ from splitbind.documents.views import (
     VerificationCreateView,
     VerificationDetailView,
 )
-from splitbind.jobs.views import JobCancelView, JobDetailView
+from splitbind.jobs.views import JobCancelView, JobDetailView, JobListView
 from splitbind.uploads.views import UploadCompleteView, UploadIntentView
 
 
@@ -31,6 +31,7 @@ urlpatterns = [
     path("api/v1/issuances/<uuid:id>/result", IssuanceResultView.as_view(), name="issuance-result"),
     path("api/v1/verifications", VerificationCreateView.as_view(), name="verification-create"),
     path("api/v1/verifications/<uuid:id>", VerificationDetailView.as_view(), name="verification-detail"),
+    path("api/v1/jobs", JobListView.as_view(), name="job-list"),
     path("api/v1/jobs/<uuid:id>", JobDetailView.as_view(), name="job-detail"),
     path("api/v1/jobs/<uuid:id>/cancel", JobCancelView.as_view(), name="job-cancel"),
 ]

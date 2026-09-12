@@ -135,8 +135,50 @@ SPLITBIND_MANIFEST_SIGNING_KEY_PASSPHRASE_FILE = os.environ.get(
     "SPLITBIND_MANIFEST_SIGNING_KEY_PASSPHRASE_FILE"
 )
 globals().update(load_runtime_limits(ENVIRONMENT, os.environ))
+def load_fingerprint_capability(value: object) -> bool:
+    if value is None or value == "false":
+        return False
+    if value != "true":
+        raise ImproperlyConfigured(
+            "SPLITBIND_FINGERPRINT_ENABLED must be exactly true or false"
+        )
+    return True
+
+
+SPLITBIND_FINGERPRINT_ENABLED = load_fingerprint_capability(
+    os.environ.get("SPLITBIND_FINGERPRINT_ENABLED")
+)
 SPLITBIND_BROKER_READINESS = None
 BROKER_READINESS_TIMEOUT_SECONDS = 1.0
+
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+if LOG_LEVEL not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+    raise ImproperlyConfigured("LOG_LEVEL must be one of DEBUG, INFO, WARNING, ERROR, CRITICAL")
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "keyvalue": {
+            "format": "ts=%(asctime)s level=%(levelname)s logger=%(name)s %(message)s",
+            "datefmt": "%Y-%m-%dT%H:%M:%S%z",
+        }
+    },
+    "handlers": {
+        "stdout": {
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stdout",
+            "formatter": "keyvalue",
+        }
+    },
+    "root": {"handlers": ["stdout"], "level": "WARNING"},
+    "loggers": {
+        "splitbind": {"handlers": ["stdout"], "level": LOG_LEVEL, "propagate": False},
+        "django": {"handlers": ["stdout"], "level": "INFO", "propagate": False},
+        "django.request": {"handlers": ["stdout"], "level": "WARNING", "propagate": False},
+        "django.db.backends": {"handlers": ["stdout"], "level": "WARNING", "propagate": False},
+    },
+}
 
 REST_FRAMEWORK = {
     "NUM_PROXIES": 1,
@@ -175,6 +217,6 @@ SPECTACULAR_SETTINGS = {
         "JobKindEnum": ["issuance", "verification"],
         "HealthStatusEnum": ["ok"],
         "ReadinessStatusEnum": ["ready", "not_ready"],
-        "ComponentStatusEnum": ["up", "down"],
+        "ComponentStatusEnum": ["up", "down", "not_applicable"],
     },
 }

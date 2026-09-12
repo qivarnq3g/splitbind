@@ -564,11 +564,11 @@ def test_actual_checksum_mismatch_fails_before_pdf_processing(processing_issuanc
 
 
 @pytest.mark.django_db
-@override_settings(SPLITBIND_DEMO_MODE=True)
-def test_more_than_five_pages_fails_before_rendering(processing_issuance, monkeypatch):
+@override_settings(SPLITBIND_DEMO_MODE=True, MAX_PDF_PAGES=3)
+def test_a_page_count_above_the_configured_limit_fails_before_rendering(processing_issuance, monkeypatch):
     replace_source(
         processing_issuance,
-        blank_pdf_bytes(page_sizes=((288, 384),) * 6),
+        blank_pdf_bytes(page_sizes=((288, 384),) * 4),
     )
     monkeypatch.setenv("SPLITBIND_DEMO_FINGERPRINT_KEY_HEX", "11" * 32)
 
@@ -579,9 +579,9 @@ def test_more_than_five_pages_fails_before_rendering(processing_issuance, monkey
 
 
 @pytest.mark.django_db
-@override_settings(SPLITBIND_DEMO_MODE=True)
-def test_actual_input_above_ten_mib_fails_before_hash_acceptance(processing_issuance, monkeypatch):
-    oversized = b"%PDF-1.7\n" + b"x" * (10 * 1024 * 1024)
+@override_settings(SPLITBIND_DEMO_MODE=True, MAX_PDF_BYTES=2048)
+def test_actual_input_above_the_configured_byte_limit_fails_before_hash_acceptance(processing_issuance, monkeypatch):
+    oversized = b"%PDF-1.7\n" + b"x" * 4096
     replace_source(processing_issuance, oversized)
     monkeypatch.setenv("SPLITBIND_DEMO_FINGERPRINT_KEY_HEX", "11" * 32)
 
@@ -592,8 +592,8 @@ def test_actual_input_above_ten_mib_fails_before_hash_acceptance(processing_issu
 
 
 @pytest.mark.django_db
-@override_settings(SPLITBIND_DEMO_MODE=True)
-def test_cumulative_raster_work_above_forty_megapixels_fails_before_rendering(
+@override_settings(SPLITBIND_DEMO_MODE=True, MAX_DOCUMENT_RASTER_PIXELS=40_000_000)
+def test_cumulative_raster_work_above_the_document_budget_fails_before_rendering(
     processing_issuance,
     monkeypatch,
 ):

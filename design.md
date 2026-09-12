@@ -26,7 +26,7 @@ Integrity reports use a dedicated algorithm-aware presentation: SHA-256 lookup a
 
 ## Motion and accessibility
 
-One 180ms route opacity transition; one 220ms state resolution via scoped useGSAP with revertOnUpdate. No repeat loops except an indeterminate processing indicator. No ScrollTrigger. Reduced motion immediately shows final state. Errors/focus are instant. Native file controls support keyboard and drop, visible labels, local file selection is distinct from server upload. Mobile navigation stays directly available; no hidden drawer for two destinations. Long values wrap at source.
+One 180ms route opacity transition; one 220ms state resolution via scoped useGSAP with revertOnUpdate. No repeat loops except an indeterminate processing indicator. No ScrollTrigger. ScrollTrigger is permitted on the public landing route only (`/` for an anonymous visitor and `/about`): inside the workbench, scroll-driven motion would compete with the user's own task, while on the landing it is the means of explaining the mechanism. Reduced motion immediately shows final state. Errors/focus are instant. Native file controls support keyboard and drop, visible labels, local file selection is distinct from server upload. Mobile navigation stays directly available; no hidden drawer for two destinations. Long values wrap at source.
 
 ## Validation
 

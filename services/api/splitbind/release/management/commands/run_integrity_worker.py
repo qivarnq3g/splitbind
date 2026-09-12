@@ -5,12 +5,16 @@ from django.core.exceptions import ImproperlyConfigured
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
+from splitbind.observability import get_logger, log_swallowed
 from splitbind.release.worker import (
     process_integrity_cycle,
     recover_stale_integrity_jobs,
     validate_integrity_worker_startup,
 )
 from splitbind.uploads import services as upload_services
+
+
+logger = get_logger("splitbind.release.run_integrity_worker")
 
 
 class Command(BaseCommand):
@@ -30,11 +34,13 @@ class Command(BaseCommand):
             raise CommandError(str(error)) from None
         try:
             storage = upload_services.get_storage()
-        except Exception:
+        except Exception as error:
+            log_swallowed(logger, error, action="startup", code="INTEGRITY_STORAGE_UNAVAILABLE")
             raise CommandError("INTEGRITY_STORAGE_UNAVAILABLE") from None
         try:
             recovered = recover_stale_integrity_jobs(storage=storage, now=timezone.now())
-        except Exception:
+        except Exception as error:
+            log_swallowed(logger, error, action="startup", code="INTEGRITY_STALE_RECOVERY_FAILED")
             raise CommandError("INTEGRITY_STALE_RECOVERY_FAILED") from None
         for outcome in recovered:
             self.stdout.write(
@@ -44,7 +50,10 @@ class Command(BaseCommand):
             while True:
                 try:
                     result = process_integrity_cycle(storage, timezone.now())
-                except Exception:
+                except Exception as error:
+                    log_swallowed(
+                        logger, error, action="cycle", code="INTEGRITY_WORKER_CYCLE_FAILED"
+                    )
                     self.stdout.write(
                         "action=cycle code=INTEGRITY_WORKER_CYCLE_FAILED"
                     )

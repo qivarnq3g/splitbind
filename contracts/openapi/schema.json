@@ -480,6 +480,58 @@
                 }
             }
         },
+        "/api/v1/jobs": {
+            "get": {
+                "operationId": "job_list",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "kind",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "issuance",
+                                "verification"
+                            ]
+                        },
+                        "description": "Filter jobs by kind (issuance or verification)"
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/Job"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Authentication, permission, or CSRF denied."
+                    }
+                }
+            }
+        },
         "/api/v1/jobs/{id}": {
             "get": {
                 "operationId": "job_retrieve",
@@ -1356,6 +1408,16 @@
                         "type": "string",
                         "format": "uuid"
                     },
+                    "recipient_email": {
+                        "type": "string",
+                        "format": "email",
+                        "minLength": 1,
+                        "maxLength": 120
+                    },
+                    "recipient_name": {
+                        "type": "string",
+                        "maxLength": 200
+                    },
                     "upload_id": {
                         "type": "string",
                         "format": "uuid"
@@ -1367,7 +1429,6 @@
                 },
                 "required": [
                     "correlation_id",
-                    "recipient_id",
                     "upload_id"
                 ]
             },
@@ -1436,6 +1497,18 @@
                     "updated_at": {
                         "type": "string",
                         "format": "date-time"
+                    },
+                    "recipient_email": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "recipient_name": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "verification_status": {
+                        "type": "string",
+                        "nullable": true
                     }
                 },
                 "required": [
@@ -1521,10 +1594,11 @@
                         "additionalProperties": {
                             "enum": [
                                 "up",
-                                "down"
+                                "down",
+                                "not_applicable"
                             ],
                             "type": "string",
-                            "description": "* `up` - up\n* `down` - down"
+                            "description": "* `up` - up\n* `down` - down\n* `not_applicable` - not_applicable"
                         }
                     }
                 },
@@ -1756,7 +1830,7 @@
                     },
                     "size_bytes": {
                         "type": "integer",
-                        "maximum": 10485760,
+                        "maximum": 104857600,
                         "minimum": 1
                     },
                     "sha256": {
@@ -1817,6 +1891,11 @@
                         "format": "date-time",
                         "nullable": true
                     },
+                    "input_sha256": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "SHA-256 of the file that was submitted for checking."
+                    },
                     "evidence": {
                         "$ref": "#/components/schemas/VerificationEvidence"
                     },
@@ -1829,6 +1908,7 @@
                     "created_at",
                     "evidence",
                     "id",
+                    "input_sha256",
                     "job_id",
                     "job_status",
                     "metrics",

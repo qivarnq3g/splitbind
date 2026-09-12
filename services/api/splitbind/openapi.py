@@ -143,6 +143,10 @@ class VerificationSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=VerificationStatus.values, allow_null=True)
     created_at = serializers.DateTimeField()
     completed_at = serializers.DateTimeField(allow_null=True)
+    input_sha256 = serializers.CharField(
+        allow_null=True,
+        help_text="SHA-256 of the file that was submitted for checking.",
+    )
     evidence = VerificationEvidenceSerializer()
     metrics = VerificationMetricsSerializer()
 
@@ -159,6 +163,9 @@ class JobSerializer(serializers.Serializer):
     safe_error_code = serializers.CharField(allow_null=True)
     created_at = serializers.DateTimeField()
     updated_at = serializers.DateTimeField()
+    recipient_email = serializers.CharField(allow_null=True, required=False)
+    recipient_name = serializers.CharField(allow_null=True, required=False)
+    verification_status = serializers.CharField(allow_null=True, required=False)
 
 
 class LiveSerializer(serializers.Serializer):
@@ -167,7 +174,9 @@ class LiveSerializer(serializers.Serializer):
 
 class ReadinessSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=["ready", "not_ready"])
-    components = serializers.DictField(child=serializers.ChoiceField(choices=["up", "down"]))
+    components = serializers.DictField(
+        child=serializers.ChoiceField(choices=["up", "down", "not_applicable"])
+    )
 
 
 class DemoProcessingLimitsSerializer(serializers.Serializer):
@@ -284,6 +293,20 @@ verification_create_schema = extend_schema(
 verification_detail_schema = extend_schema(
     operation_id="verification_retrieve",
     responses={200: VerificationSerializer, 403: DETAIL_403, 404: DETAIL_404},
+)
+job_list_schema = extend_schema(
+    operation_id="job_list",
+    parameters=[
+        OpenApiParameter(
+            name="kind",
+            type=str,
+            location=OpenApiParameter.QUERY,
+            required=False,
+            enum=JobKind.values,
+            description="Filter jobs by kind (issuance or verification)",
+        ),
+    ],
+    responses={200: JobSerializer(many=True), 403: DETAIL_403},
 )
 job_detail_schema = extend_schema(
     operation_id="job_retrieve", responses={200: JobSerializer, 403: DETAIL_403, 404: DETAIL_404}

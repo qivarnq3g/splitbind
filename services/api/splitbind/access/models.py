@@ -194,6 +194,15 @@ class Recipient(ValidatedOrganizationOwnedModel):
     display_name = models.CharField(max_length=200)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    @property
+    def email(self) -> str:
+        """Canonical email address of the recipient stored in external_reference."""
+        return self.external_reference
+
+    @email.setter
+    def email(self, value: str) -> None:
+        self.external_reference = value
+
     class Meta:
         constraints = [
             models.UniqueConstraint(

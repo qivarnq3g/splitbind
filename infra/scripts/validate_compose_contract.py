@@ -72,6 +72,14 @@ def _published_ports(service: dict) -> set[int]:
     return {int(item["published"]) for item in service.get("ports", [])}
 
 
+def _bind_targets(service: dict) -> set[str]:
+    return {
+        str(item.get("target", ""))
+        for item in service.get("volumes", [])
+        if isinstance(item, dict) and item.get("type") == "bind"
+    }
+
+
 def validate_contract(rendered: dict) -> dict[str, object]:
     services = rendered.get("services", {})
     if set(services) != {"caddy", "api", "worker"}:
@@ -84,6 +92,17 @@ def validate_contract(rendered: dict) -> dict[str, object]:
         raise ComposeContractError("every runtime image must use an immutable sha256 digest")
     if services["worker"]["image"] != services["api"]["image"]:
         raise ComposeContractError("worker must reuse the API image")
+
+    for name, service in services.items():
+        overlaid = sorted(
+            target
+            for target in _bind_targets(service)
+            if target.startswith("/app") or target.startswith("/etc/caddy")
+        )
+        if overlaid:
+            raise ComposeContractError(
+                f"{name} must not bind-mount host files over image content: {overlaid}"
+            )
 
     for name in ("api", "worker"):
         service = services[name]

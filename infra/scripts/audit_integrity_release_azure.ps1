@@ -3,12 +3,18 @@ param(
     [string]$ResourceGroupName = "rg-splitbind-prod",
     [string]$VmName = "vm-splitbind-prod",
     [string]$SshKeyPath = "$env:USERPROFILE\.ssh\splitbind_azure_ed25519",
-    [string]$AdminUser = "PRODUCTION_VM_ADMIN",
+    [string]$AdminUser = $env:SPLITBIND_VM_ADMIN_USER,
     [string]$ExpectedHostname = "splitbind.qivarn.id.vn"
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+$missingTarget = @()
+if (-not $AdminUser) { $missingTarget += "SPLITBIND_VM_ADMIN_USER (or -AdminUser)" }
+if ($missingTarget.Count -gt 0) {
+    throw "Missing deployment target settings: $($missingTarget -join ', '). The production host, administrator and endpoints are deliberately not stored in this repository; see infra/scripts/README.md."
+}
 
 Write-Host "Running read-only Azure preflight audit for SplitBind Integrity Release 0.1..." -ForegroundColor Cyan
 

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { FileKey2, LogOut, ScanSearch } from "lucide-react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { FileKey2, History, LogOut, ScanSearch } from "lucide-react";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   canCreateIssuance,
   canCreateVerification,
@@ -31,7 +31,7 @@ export function AppShell() {
         <NavLink
           className="app-brand"
           to="/"
-          aria-label="SplitBind — trang làm việc"
+          aria-label="SplitBind - trang làm việc"
         >
           <span className="brand-symbol" aria-hidden="true">
             <i />
@@ -78,6 +78,10 @@ export function AppShell() {
               Xác minh
             </NavLink>
           ) : null}
+          <NavLink to="/history" className="nav-item">
+            <History size={18} aria-hidden="true" />
+            Lịch sử
+          </NavLink>
           {!canCreateIssuance(user.role) &&
           !canCreateVerification(user.role) ? (
             <span className="nav-readonly">
@@ -105,7 +109,10 @@ export function AppShell() {
           </aside>
         ) : null}
         <footer className="foot-line">
-          <span>SplitBind · Nhóm 9 · ATTT</span>
+          <span>
+            SplitBind · Nhóm 9 · ATTT ·{" "}
+            <Link to="/about">Giới thiệu</Link>
+          </span>
           <span>Cấp phát có chữ ký. Xác minh có bằng chứng.</span>
         </footer>
       </div>

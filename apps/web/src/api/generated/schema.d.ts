@@ -127,6 +127,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["job_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/jobs/{id}": {
         parameters: {
             query?: never;
@@ -334,7 +350,10 @@ export interface components {
         };
         IssuanceCreateRequest: {
             /** Format: uuid */
-            recipient_id: string;
+            recipient_id?: string;
+            /** Format: email */
+            recipient_email?: string;
+            recipient_name?: string;
             /** Format: uuid */
             upload_id: string;
             /** Format: uuid */
@@ -365,6 +384,9 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+            recipient_email?: string | null;
+            recipient_name?: string | null;
+            verification_status?: string | null;
         };
         /**
          * @description * `issuance` - issuance
@@ -396,7 +418,7 @@ export interface components {
         Readiness: {
             status: components["schemas"]["ReadinessStatusEnum"];
             components: {
-                [key: string]: "up" | "down";
+                [key: string]: "up" | "down" | "not_applicable";
             };
         };
         /**
@@ -492,6 +514,8 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             completed_at: string | null;
+            /** @description SHA-256 of the file that was submitted for checking. */
+            input_sha256: string | null;
             evidence: components["schemas"]["VerificationEvidence"];
             metrics: components["schemas"]["VerificationMetrics"];
         };
@@ -871,6 +895,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CodeError"];
+                };
+            };
+        };
+    };
+    job_list: {
+        parameters: {
+            query?: {
+                /** @description Filter jobs by kind (issuance or verification) */
+                kind?: "issuance" | "verification";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"][];
+                };
+            };
+            /** @description Authentication, permission, or CSRF denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DetailError"];
                 };
             };
         };

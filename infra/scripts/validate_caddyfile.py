@@ -146,17 +146,18 @@ def validate_caddyfile(text: str) -> dict[str, object]:
     assert isinstance(health, Block)
     assert isinstance(fallback, Block)
     header_directives = (
-        ("Strict-Transport-Security", "max-age=31536000; includeSubDomains"),
-        ("X-Content-Type-Options", "nosniff"),
-        ("Referrer-Policy", "same-origin"),
-        ("Permissions-Policy", "camera=(), microphone=(), geolocation=()"),
+        (">Strict-Transport-Security", "max-age=31536000; includeSubDomains"),
+        (">X-Content-Type-Options", "nosniff"),
+        (">Referrer-Policy", "same-origin"),
+        (">Permissions-Policy", "camera=(), microphone=(), geolocation=()"),
         (
-            "Content-Security-Policy",
+            ">Content-Security-Policy",
             "default-src 'self'; connect-src 'self' "
             "https://*.r2.cloudflarestorage.com; font-src 'self' data:; "
             "img-src 'self' data: blob:; object-src 'none'; base-uri 'self'; "
             "frame-ancestors 'none'",
         ),
+        (">Alt-Svc", 'h3=":443"; ma=2592000'),
     )
     _directives(header, header_directives, "header block")
     route_directives = (("reverse_proxy", "api:8000"),)
@@ -179,7 +180,8 @@ def validate_caddyfile(text: str) -> dict[str, object]:
         },
         "site_label": "{$SPLITBIND_HOSTNAME}",
         "encodings": ["zstd", "gzip"],
-        "headers": {tokens[0]: tokens[1] for tokens in header_directives},
+        "header_mode": "deferred_set",
+        "headers": {tokens[0][1:]: tokens[1] for tokens in header_directives},
         "routes": {
             "/api/*": {"reverse_proxy": "api:8000"},
             "/health/*": {"reverse_proxy": "api:8000"},

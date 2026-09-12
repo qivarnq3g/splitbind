@@ -18,6 +18,7 @@ from splitbind.validators import SHA256_PATTERN, validate_sha256
 
 
 DEMO_CANONICAL_CANVAS = (2304, 1152)
+DEMO_MAX_COMMITTED_PAGES = 50
 DEMO_FROZEN_CANDIDATE_IDENTIFIER = (
     "5342463201e7490f80b69ef1a3289afce40ef02989c9a4d89f00b916055cbf1c4"
     "c83a97b880000000240380000000000003ff8000000000000000001800000001200"
@@ -237,7 +238,7 @@ class DemoIssuanceResult(ValidatedOrganizationOwnedModel):
                     & Q(canvas_width=DEMO_CANONICAL_CANVAS[1])
                     & Q(input_sha256__isnull=False)
                     & Q(output_sha256__isnull=False)
-                    & Q(page_count__gte=1, page_count__lte=5)
+                    & Q(page_count__gte=1, page_count__lte=DEMO_MAX_COMMITTED_PAGES)
                     & Q(processing_ms__isnull=False)
                     & Q(limitations=list(DEMO_LIMITATIONS))
                     & Q(cleanup_failures=0)

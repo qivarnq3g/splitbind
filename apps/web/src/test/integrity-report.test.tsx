@@ -23,7 +23,7 @@ it("reports no matching issuance without claiming a known document was modified"
     fingerprint_confidence: 0, valid_vote_count: 0, integrity_score: null,
   }} />);
   expect(screen.getByText(/Không tìm thấy bản cấp phát có mã SHA-256 trùng/)).toBeVisible();
-  expect(screen.getByText("Chưa kiểm tra — chưa tìm được bản cấp phát")).toBeInTheDocument();
+  expect(screen.getByText("Chưa kiểm tra - chưa tìm được bản cấp phát")).toBeInTheDocument();
   expect(document.body).not.toHaveTextContent(/API|Số phiếu|Điểm fingerprint|Điểm toàn vẹn|Vùng toàn vẹn nghi vấn/);
 });
 
@@ -56,4 +56,22 @@ it("does not describe partial evidence as decoded watermark in integrity mode", 
   const copy = verificationCopy("PARTIAL_EVIDENCE", "integrity_release_v1", true, null);
   expect(copy.label).toBe("Chưa đủ bằng chứng xác minh");
   expect(copy.inference).not.toMatch(/watermark|thủy vân/);
+});
+
+it("renders the uploaded file's own digest in the technical panel", () => {
+  const digest = "1234567890abcdef".repeat(4);
+  render(<EvidenceSummary status="NO_WATERMARK" evidence={{
+    algorithm_label: "integrity_release_v1", exact_file_hash_match: false,
+    manifest_signature_valid: null,
+  }} inputSha256={digest} />);
+  expect(screen.getByText("Mã băm tệp đã tải lên · SHA-256")).toBeInTheDocument();
+  expect(screen.getByText(digest)).toBeInTheDocument();
+});
+
+it("states explicitly that no digest exists yet instead of an empty cell", () => {
+  render(<EvidenceSummary status="NO_WATERMARK" evidence={{
+    algorithm_label: "integrity_release_v1", exact_file_hash_match: false,
+    manifest_signature_valid: null,
+  }} inputSha256={null} />);
+  expect(screen.getByText("Chưa có mã băm tệp đã tải lên")).toBeInTheDocument();
 });

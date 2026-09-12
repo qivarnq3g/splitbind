@@ -1,4 +1,5 @@
 import io
+import logging
 import uuid
 from datetime import timedelta
 
@@ -470,3 +471,69 @@ def test_command_rejects_invalid_poll_interval_without_startup_access(poll_inter
             str(poll_interval),
             stdout=io.StringIO(),
         )
+
+
+@override_settings(
+    SPLITBIND_RELEASE_MODE=ReleaseMode.INTEGRITY_V1,
+    JOB_TIMEOUT_SECONDS=600,
+)
+def test_cycle_failure_is_recorded_with_the_job_identity_not_only_a_safe_code(
+    queued_verification, monkeypatch, caplog
+):
+    from splitbind.release.worker import process_integrity_cycle
+
+    job = queued_verification()
+    monkeypatch.setattr(
+        "splitbind.release.worker.stage_next_created_job", lambda **kwargs: None
+    )
+
+    def explode(*, job_id, storage, owner_token):
+        raise RuntimeError("upstream detail that must not reach the caller")
+
+    monkeypatch.setattr("splitbind.demo.verification.process_verification_job", explode)
+
+    with caplog.at_level(logging.ERROR, logger="splitbind.release.worker"):
+        outcome = process_integrity_cycle(FakeObjectStorage(), timezone.now())
+
+    assert outcome.safe_code == "INTEGRITY_JOB_PROCESSING_FAILED"
+    assert len(caplog.records) == 1
+    logged = caplog.records[0].getMessage()
+    assert f"job={job.id}" in logged
+    assert "code=INTEGRITY_JOB_PROCESSING_FAILED" in logged
+    assert "RuntimeError" in logged
+    assert "explode" in logged
+
+
+def test_command_cycle_failure_reaches_the_log_while_stdout_stays_safe(monkeypatch, caplog):
+    monkeypatch.setattr(
+        "splitbind.release.management.commands.run_integrity_worker.validate_integrity_worker_startup",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        "splitbind.uploads.services.get_storage", lambda: FakeObjectStorage()
+    )
+    monkeypatch.setattr(
+        "splitbind.release.management.commands.run_integrity_worker.recover_stale_integrity_jobs",
+        lambda **kwargs: (),
+    )
+
+    def fail_cycle(storage, now):
+        raise RuntimeError("private provider credential")
+
+    monkeypatch.setattr(
+        "splitbind.release.management.commands.run_integrity_worker.process_integrity_cycle",
+        fail_cycle,
+    )
+    stdout = io.StringIO()
+
+    with caplog.at_level(
+        logging.ERROR, logger="splitbind.release.run_integrity_worker"
+    ):
+        call_command("run_integrity_worker", "--once", stdout=stdout)
+
+    assert stdout.getvalue().strip() == "action=cycle code=INTEGRITY_WORKER_CYCLE_FAILED"
+    assert len(caplog.records) == 1
+    logged = caplog.records[0].getMessage()
+    assert "code=INTEGRITY_WORKER_CYCLE_FAILED" in logged
+    assert "RuntimeError" in logged
+    assert "fail_cycle" in logged

@@ -6,6 +6,8 @@ Date: 2026-09-06
 
 Accepted for Integrity Release 0.1 only. It does not supersede the Rust/RabbitMQ target for the full fingerprint product.
 
+Amended on 2026-09-12 by [ADR-003](003-enable-transformed-attribution.md), which turns transformed attribution into an explicit off-by-default capability. The guardrail below that reads "UI and reports must state that transformed fingerprint attribution is unavailable" applies only while that capability is off. Every other guardrail here stands.
+
 ## Context
 
 Fingerprint V1, V2 and V3 have no promoted profile. The verified V3 pre-gate completed 352/352 rows without execution errors or false attributions, but all four candidates failed the JPEG, resize and crop rate gates. Therefore the Rust fingerprint port remains correctly blocked.

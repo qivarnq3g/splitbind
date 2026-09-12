@@ -11,10 +11,25 @@ from splitbind.access.throttles import AccountRateThrottle, SourceIPRateThrottle
 from splitbind.access.selectors import scope_jobs
 from splitbind.audit.models import AuditOutcome
 from splitbind.audit.services import record_event
-from splitbind.jobs.models import Job
+from splitbind.jobs.models import Job, JobKind
 from splitbind.jobs.serializers import CancelJobSerializer, serialize_job
 from splitbind.jobs.services import JobConflict, WorkflowNotFound, request_cancel
-from splitbind.openapi import job_cancel_schema, job_detail_schema
+from splitbind.openapi import job_cancel_schema, job_detail_schema, job_list_schema
+
+
+class JobListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @job_list_schema
+    def get(self, request):
+        qs = scope_jobs(request.user, Job.objects.all()).select_related(
+            "issuance__recipient", "verification"
+        )
+        kind = request.query_params.get("kind")
+        if kind in {JobKind.ISSUANCE, JobKind.VERIFICATION}:
+            qs = qs.filter(kind=kind)
+        jobs = qs.order_by("-created_at")[:50]
+        return Response([serialize_job(job) for job in jobs])
 
 
 class JobDetailView(APIView):

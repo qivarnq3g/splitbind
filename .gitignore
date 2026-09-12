@@ -1,11 +1,31 @@
 # Local course materials and private project evidence
 /AGENTS.md
 /**/AGENTS.md
+/CLAUDE.md
+/**/CLAUDE.md
 /*.pdf
+/*.docx
+/*.xlsx
 /note.txt
 /docs/course/
 /docs/internal/
 /docs/project/lecturer-email-summary.md
+
+# Ghi IP production, email cá nhân, Azure subscription, endpoint R2 và username
+# quản trị. File vẫn nằm trên đĩa để dùng nội bộ, chỉ không được publish.
+/docs/evaluation/integrity-release-0.1.md
+
+# Ghi username quản trị SSH của production.
+/docs/superpowers/plans/2026-08-17-azure-vm-provisioning.md
+
+# Agent operating contract and tooling state - local to each machine.
+.claude/
+.codex/
+.antigravity/
+.cursor/
+/skills/
+/.superpowers/
+/.worktrees/
 
 # Environment and secrets
 .env
@@ -23,6 +43,7 @@ secrets/
 .DS_Store
 Thumbs.db
 Desktop.ini
+desktop.ini
 
 # Python
 __pycache__/
@@ -40,6 +61,8 @@ venv/
 # Node.js and frontend
 node_modules/
 dist/
+build/
+out/
 coverage/
 *.tsbuildinfo
 
@@ -52,6 +75,9 @@ artifacts/
 reports/
 *.swp
 *.tmp
+scratch/
+.scratch/
+*.scratch.*
 
 # Local infrastructure state
 /.neon

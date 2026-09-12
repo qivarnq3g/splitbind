@@ -1,0 +1,26 @@
+{
+  "schema_version": 4,
+  "provenance": "Experimental grid extending the frozen V3 candidate at tile_size_px 512 / payload_repetitions 5. V3 itself is untouched and remains the sealed reference.",
+  "hypothesis": "V2 swept qim_delta 24-64 without spread spectrum and never exceeded 3/12 decode. V3 added spread spectrum (spread_delta 4.0, spread_chips_per_bit 64) and reached 9-10/12. Spread is therefore the mechanism that produced the gain, yet spread_chips_per_bit, spread_delta and the saturated_fraction_min threshold that routes tiles to the spread codec were all frozen and never swept. This grid sweeps them.",
+  "fixed": {
+    "qim_delta": 32.0,
+    "pilot_strength_rms": 2.0,
+    "spread_delta": 4.0,
+    "saturation_low": 16,
+    "saturation_high": 239,
+    "tile_size_px": 512,
+    "tiles_per_page": 18,
+    "payload_repetitions": 5,
+    "bit_replication": 3,
+    "bit_confidence_min": 0.6,
+    "pilot_score_min": 0.2,
+    "max_geometry_hypotheses": 8,
+    "geometry_ratio_tolerance": 0.001,
+    "crop_retained_scales": [0.8660254037844386],
+    "resize_interpolation": "INTER_CUBIC"
+  },
+  "sweep": {
+    "spread_chips_per_bit": [64, 128],
+    "saturated_fraction_min": [0.75, 0.5]
+  }
+}

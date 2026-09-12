@@ -90,11 +90,15 @@ async function mockIssuerContract(page: Page) {
 
 test("issuance browser contract journey", async ({ page }) => {
   const workflow: string[] = [];
+  let issuancePayload: Record<string, unknown> | null = null;
   await mockIssuerContract(page);
   page.on("request", (request) => {
     const path = new URL(request.url()).pathname;
     if (!["/api/v1/auth/session", "/api/v1/demo/capabilities"].includes(path) && (path.startsWith("/api/v1/") || path === "/direct-upload")) {
       workflow.push(path);
+    }
+    if (path === "/api/v1/issuances" && request.method() === "POST") {
+      issuancePayload = request.postDataJSON();
     }
   });
   await page.route("https://storage.example.test/direct-upload", async (route) => {
@@ -104,12 +108,16 @@ test("issuance browser contract journey", async ({ page }) => {
   });
 
   await page.goto("/issue");
+  await expect(page.getByLabel("Mã người nhận")).toHaveCount(0);
+  await expect(page.getByLabel("Email người nhận")).toBeVisible();
+  await expect(page.getByLabel("Họ và tên")).toBeVisible();
+
   await page.getByLabel("Tệp PDF").setInputFiles({
     name: "course.pdf",
     mimeType: "application/pdf",
     buffer: Buffer.from("%PDF-1.4\n%%EOF"),
   });
-  await page.getByLabel("Mã người nhận").fill(RECIPIENT_ID);
+  await page.getByLabel("Email người nhận").fill("student@example.com");
   await page.getByRole("button", { name: "Tạo bản cấp phát" }).click();
 
   await expect(page.getByText("Đang xử lý")).toBeVisible();
@@ -120,6 +128,41 @@ test("issuance browser contract journey", async ({ page }) => {
     "/api/v1/issuances",
     `/api/v1/jobs/${JOB_ID}`,
   ]);
+  expect(issuancePayload).toMatchObject({
+    recipient_email: "student@example.com",
+    upload_id: UPLOAD_ID,
+  });
+  expect(issuancePayload?.recipient_id).toBeUndefined();
+});
+
+test("issuance browser journey with optional recipient name", async ({ page }) => {
+  let issuancePayload: Record<string, unknown> | null = null;
+  await mockIssuerContract(page);
+  page.on("request", (request) => {
+    if (request.url().includes("/api/v1/issuances") && request.method() === "POST") {
+      issuancePayload = request.postDataJSON();
+    }
+  });
+  await page.route("https://storage.example.test/direct-upload", async (route) => {
+    await route.fulfill({ status: 200, body: "" });
+  });
+
+  await page.goto("/issue");
+  await page.getByLabel("Tệp PDF").setInputFiles({
+    name: "course.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4\n%%EOF"),
+  });
+  await page.getByLabel("Email người nhận").fill("alice@example.com");
+  await page.getByLabel("Họ và tên").fill("Alice Nguyễn");
+  await page.getByRole("button", { name: "Tạo bản cấp phát" }).click();
+
+  await expect(page.getByText("Đang xử lý")).toBeVisible();
+  expect(issuancePayload).toMatchObject({
+    recipient_email: "alice@example.com",
+    recipient_name: "Alice Nguyễn",
+    upload_id: UPLOAD_ID,
+  });
 });
 
 test("issuance workbench does not overflow supported narrow widths", async ({ page }, testInfo) => {

@@ -1,13 +1,40 @@
 import { api } from "../../api/client";
 import { SafeApiError, safeApiMessage } from "../shared/apiError";
 
-export async function createIssuance(uploadId: string, recipientId: string, signal?: AbortSignal) {
+export type RecipientTarget =
+  | string
+  | {
+      email: string;
+      name?: string;
+    };
+
+export async function createIssuance(
+  uploadId: string,
+  target: RecipientTarget,
+  signal?: AbortSignal,
+) {
+  const body: {
+    upload_id: string;
+    correlation_id: string;
+    recipient_id?: string;
+    recipient_email?: string;
+    recipient_name?: string;
+  } = {
+    upload_id: uploadId,
+    correlation_id: globalThis.crypto.randomUUID(),
+  };
+
+  if (typeof target === "string") {
+    body.recipient_id = target;
+  } else {
+    body.recipient_email = target.email.trim();
+    if (target.name?.trim()) {
+      body.recipient_name = target.name.trim();
+    }
+  }
+
   const result = await api.POST("/api/v1/issuances", {
-    body: {
-      upload_id: uploadId,
-      recipient_id: recipientId,
-      correlation_id: globalThis.crypto.randomUUID(),
-    },
+    body,
     signal,
   });
   if (!result.data) throw new SafeApiError(safeApiMessage(result.response.status, result.error));
