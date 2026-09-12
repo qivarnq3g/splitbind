@@ -167,3 +167,38 @@ def test_api_startup_never_runs_schema_migrations():
     assert "manage.py migrate" not in entrypoint
     assert "exec python manage.py migrate --noinput" in migration_entrypoint
     assert "migration-entrypoint.sh" in dockerfile
+
+
+def test_production_compose_never_overlays_image_content_with_host_files():
+    rendered = _render_production()
+    for name, service in rendered["services"].items():
+        for volume in service.get("volumes", []):
+            assert volume.get("type") != "bind", (
+                f"{name} bind-mounts {volume.get('source')} over {volume.get('target')}; "
+                "the image digest must be the only source of application code"
+            )
+
+
+def test_validator_rejects_a_host_file_mounted_over_application_code():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("validate_compose_contract", VALIDATOR)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    rendered = _render_production()
+    rendered["services"]["api"]["volumes"] = [
+        {
+            "type": "bind",
+            "source": "/home/operator/patches/settings_common.py",
+            "target": "/app/services/api/config/settings_common.py",
+            "read_only": True,
+        }
+    ]
+
+    try:
+        module.validate_contract(rendered)
+    except module.ComposeContractError as error:
+        assert "bind-mount" in str(error)
+    else:
+        raise AssertionError("a host file mounted over /app must fail the contract")

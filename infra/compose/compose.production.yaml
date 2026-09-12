@@ -59,8 +59,6 @@ services:
       start_period: 30s
     stop_grace_period: 30s
     restart: unless-stopped
-    volumes:
-      - /home/PRODUCTION_VM_ADMIN/splitbind/patches/settings_common.py:/app/services/api/config/settings_common.py:ro
     networks: [app]
   worker:
     image: ${API_IMAGE:?API_IMAGE must be an immutable digest}
@@ -95,8 +93,6 @@ services:
       start_period: 30s
     stop_grace_period: 30s
     restart: unless-stopped
-    volumes:
-      - /home/PRODUCTION_VM_ADMIN/splitbind/patches/settings_common.py:/app/services/api/config/settings_common.py:ro
     networks: [app]
     depends_on:
       api:
