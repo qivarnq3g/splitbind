@@ -81,7 +81,7 @@ describe("SplitBind landing page", () => {
       },
     })));
 
-    renderApp("/gioi-thieu");
+    renderApp("/about");
 
     expect(await screen.findByRole("banner", { name: "Giới thiệu SplitBind" })).toBeVisible();
   });
@@ -133,7 +133,7 @@ describe("SplitBind landing page", () => {
     }));
     vi.stubGlobal("fetch", fetchMock);
 
-    renderApp("/gioi-thieu");
+    renderApp("/about");
 
     await screen.findByRole("banner", { name: "Giới thiệu SplitBind" });
     expect(fetchMock.mock.calls.filter(([input]) => String(input).includes("/api/v1"))).toHaveLength(0);

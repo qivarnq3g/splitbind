@@ -21,7 +21,7 @@ export function LandingHero() {
           <Link className="button button-primary" to="/login">
             Đăng nhập
           </Link>
-          <a className="button button-secondary" href="#bien-gioi-bang-chung">
+          <a className="button button-secondary" href="#evidence-boundary">
             Xem cách hoạt động
           </a>
         </div>

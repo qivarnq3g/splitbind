@@ -3,11 +3,11 @@ export function ArchitectureSection() {
     <section
       className="landing-section"
       data-landing-section="06"
-      aria-labelledby="he-thong-dung-bang-gi"
+      aria-labelledby="architecture"
     >
       <div className="landing-section-body">
         <p className="landing-eyebrow">06</p>
-        <h2 id="he-thong-dung-bang-gi">Hệ thống dựng bằng gì</h2>
+        <h2 id="architecture">Hệ thống dựng bằng gì</h2>
         <p>
           Các thành phần được chia theo vai trò tách bạch, để khối xử lý nặng
           không nằm chung với khối phục vụ giao diện.

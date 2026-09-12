@@ -3,11 +3,11 @@ export function ProblemSection() {
     <section
       className="landing-section"
       data-landing-section="02"
-      aria-labelledby="van-de-can-giai"
+      aria-labelledby="the-problem"
     >
       <div className="landing-section-body">
         <p className="landing-eyebrow">02</p>
-        <h2 id="van-de-can-giai">Tệp đã ra ngoài. Bạn có mười hai người nhận.</h2>
+        <h2 id="the-problem">Tệp đã ra ngoài. Bạn có mười hai người nhận.</h2>
         <p>
           Một tài liệu nội bộ được gửi cho mười hai người. Vài ngày sau, nó xuất
           hiện ở nơi không được phép. Nếu cả mười hai bản đều là cùng một tệp,

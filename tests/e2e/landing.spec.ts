@@ -34,7 +34,7 @@ test("the landing issues no API traffic of its own", async ({ page }) => {
     const path = new URL(request.url()).pathname;
     if (path.startsWith("/api/v1/") && !path.startsWith("/api/v1/auth/session")) apiPaths.push(path);
   });
-  await page.goto("/gioi-thieu");
+  await page.goto("/about");
   await expect(page.getByRole("banner", { name: "Giới thiệu SplitBind" })).toBeVisible();
   expect(apiPaths).toEqual([]);
 });
@@ -49,7 +49,7 @@ test("the landing never scrolls sideways", async ({ page }) => {
   await anonymous(page);
   for (const width of [1920, 1280, 768, 375]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.goto("/gioi-thieu");
+    await page.goto("/about");
     await expect(page.getByRole("banner", { name: "Giới thiệu SplitBind" })).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(0);
@@ -59,7 +59,7 @@ test("the landing never scrolls sideways", async ({ page }) => {
 test("reduced motion shows every section immediately", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await anonymous(page);
-  await page.goto("/gioi-thieu");
+  await page.goto("/about");
   await expect(page.getByRole("region", { name: "Biên giới bằng chứng" })).toBeVisible();
   const hidden = await page.evaluate(() =>
     Array.from(document.querySelectorAll<HTMLElement>("[data-landing-section]"))

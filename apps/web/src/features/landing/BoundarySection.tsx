@@ -7,7 +7,7 @@ export function BoundarySection() {
     >
       <div className="landing-section-body">
         <p className="landing-eyebrow">05</p>
-        <h2 id="bien-gioi-bang-chung">Những điều hệ thống không kết luận</h2>
+        <h2 id="evidence-boundary">Những điều hệ thống không kết luận</h2>
         <p>
           Bản đang chạy chỉ đối chiếu được những tệp khớp chính xác. Khi không tìm
           được bản cấp phát tương ứng, kết quả cho biết chưa xác định được nguồn,

@@ -3,11 +3,11 @@ export function VerificationSection() {
     <section
       className="landing-section"
       data-landing-section="04"
-      aria-labelledby="doi-chieu-tep-nghi-van"
+      aria-labelledby="verification"
     >
       <div className="landing-section-body">
         <p className="landing-eyebrow">04</p>
-        <h2 id="doi-chieu-tep-nghi-van">Tệp nghi vấn, đặt cạnh hồ sơ gốc</h2>
+        <h2 id="verification">Tệp nghi vấn, đặt cạnh hồ sơ gốc</h2>
         <p>
           Bạn tải lên tệp nghi vấn. Hệ thống băm tệp đó bằng SHA-256, so khớp giá
           trị băm với hồ sơ của các bản đã cấp phát, đồng thời kiểm tra chữ ký số

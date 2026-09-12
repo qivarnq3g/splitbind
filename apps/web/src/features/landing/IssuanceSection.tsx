@@ -3,11 +3,11 @@ export function IssuanceSection() {
     <section
       className="landing-section"
       data-landing-section="03"
-      aria-labelledby="cap-phat-co-chu-ky"
+      aria-labelledby="issuance"
     >
       <div className="landing-section-body">
         <p className="landing-eyebrow">03</p>
-        <h2 id="cap-phat-co-chu-ky">Mỗi người một bản riêng, có chữ ký</h2>
+        <h2 id="issuance">Mỗi người một bản riêng, có chữ ký</h2>
         <p>
           Khi phát hành một tài liệu, hệ thống không gửi cùng một tệp cho mọi
           người. Mỗi người nhận có một bản được dựng riêng, và mỗi bản để lại một

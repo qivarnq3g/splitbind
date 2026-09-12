@@ -16,7 +16,7 @@ export function LandingPage() {
   useScrollReveal(root);
   return (
     <div className="landing" ref={root}>
-      <a className="skip-link" href="#noi-dung-chinh">
+      <a className="skip-link" href="#main-content">
         Đến nội dung chính
       </a>
       <header className="landing-header" aria-label="Giới thiệu SplitBind">
@@ -32,7 +32,7 @@ export function LandingPage() {
           Đăng nhập
         </Link>
       </header>
-      <main className="landing-main" id="noi-dung-chinh" tabIndex={-1}>
+      <main className="landing-main" id="main-content" tabIndex={-1}>
         <LandingHero />
         <ProblemSection />
         <IssuanceSection />

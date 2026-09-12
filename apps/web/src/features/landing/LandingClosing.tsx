@@ -5,11 +5,11 @@ export function LandingClosing() {
     <section
       className="landing-section"
       data-landing-section="07"
-      aria-labelledby="dang-nhap-de-bat-dau"
+      aria-labelledby="get-started"
     >
       <div className="landing-section-body">
         <p className="landing-eyebrow">07</p>
-        <h2 id="dang-nhap-de-bat-dau">Đăng nhập để bắt đầu</h2>
+        <h2 id="get-started">Đăng nhập để bắt đầu</h2>
         <p>
           SplitBind là bài tập lớn môn an toàn thông tin của nhóm 9. Bản đang chạy
           phục vụ mục đích trình bày và kiểm thử, không phải một dịch vụ thương

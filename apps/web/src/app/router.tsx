@@ -43,7 +43,7 @@ function SessionBoundary() {
 
 export const appRoutes: RouteObject[] = [
   { path: "/", element: <HomeRoute /> },
-  { path: "/gioi-thieu", element: <LandingPage /> },
+  { path: "/about", element: <LandingPage /> },
   {
     element: <AppShell />,
     children: [
