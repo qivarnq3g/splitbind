@@ -141,7 +141,7 @@ describe("SplitBind landing page", () => {
 
   it("leaves every section fully visible when reduced motion is requested", async () => {
     vi.stubGlobal("matchMedia", vi.fn().mockImplementation((query: string) => ({
-      matches: query.includes("reduce"),
+      matches: query.includes("prefers-reduced-motion: reduce"),
       media: query,
       onchange: null,
       addListener: vi.fn(),
@@ -162,7 +162,7 @@ describe("SplitBind landing page", () => {
     const sections = Array.from(document.querySelectorAll<HTMLElement>("[data-landing-section]"));
     expect(sections).toHaveLength(7);
     for (const section of sections) {
-      expect(section.style.opacity).not.toBe("0");
+      expect(section.style.opacity).toBe("");
     }
   });
 
