@@ -46,3 +46,35 @@ def test_log_swallowed_records_context_and_frames_at_error_level(caplog):
     assert "job=job-1" in message
     assert "RuntimeError" in message
     assert SECRET not in message
+
+
+def _reraise_chained():
+    try:
+        _raise_with_secret(SECRET)
+    except RuntimeError as original:
+        raise ValueError("safe code") from original
+
+
+def _captured_chain():
+    try:
+        _reraise_chained()
+    except ValueError as error:
+        return error
+    raise AssertionError("the helper must raise")
+
+
+def test_safe_traceback_follows_the_cause_so_a_reraise_still_locates_the_defect():
+    rendered = safe_traceback(_captured_chain())
+
+    assert "ValueError" in rendered
+    assert "caused by" in rendered
+    assert "RuntimeError" in rendered
+    assert "_raise_with_secret" in rendered
+    assert SECRET not in rendered
+
+
+def test_safe_traceback_stops_at_the_requested_depth():
+    rendered = safe_traceback(_captured_chain(), depth=1)
+
+    assert "caused by" not in rendered
+    assert "RuntimeError" not in rendered

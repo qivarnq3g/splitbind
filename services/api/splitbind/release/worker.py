@@ -150,7 +150,7 @@ def validate_integrity_worker_startup() -> None:
         "MAX_PDF_BYTES": 100 * 1024 * 1024,
         "MAX_PDF_PAGES": 50,
         "MAX_IMAGE_PIXELS": 40_000_000,
-        "MAX_DOCUMENT_RASTER_PIXELS": 120_000_000,
+        "MAX_DOCUMENT_RASTER_PIXELS": 140_000_000,
         "JOB_TIMEOUT_SECONDS": 600,
         "WORKER_CONCURRENCY": 1,
     }
