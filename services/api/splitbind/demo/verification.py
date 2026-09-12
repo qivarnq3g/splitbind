@@ -57,6 +57,7 @@ _UNKNOWN_PAGE_MIN_CONSISTENT_DECODES = 2
 _BASE_LIMITATIONS = DEMO_VERIFICATION_LIMITATIONS
 INTEGRITY_ALGORITHM_LABEL = "integrity_release_v1"
 TRANSFORMED_ATTRIBUTION_UNAVAILABLE = "fingerprint.transformed_attribution_unavailable"
+FINGERPRINT_BELOW_RELEASE_GATE = "fingerprint.recall_below_release_gate"
 
 
 class DemoVerificationError(RuntimeError):
@@ -114,9 +115,12 @@ def process_verification_job(
         raise DemoVerificationError("DEMO_JOB_CANCELLED")
 
     try:
+        fingerprint_enabled = bool(
+            getattr(settings, "SPLITBIND_FINGERPRINT_ENABLED", False)
+        )
         fingerprint_key = None
         candidate = None
-        if not integrity_mode:
+        if not integrity_mode or fingerprint_enabled:
             try:
                 fingerprint_key = _load_fingerprint_key()
                 candidate, _candidate_identifier = _select_frozen_candidate()
@@ -153,7 +157,7 @@ def process_verification_job(
             source_path = workspace_path / "suspect.bin"
             source_path.write_bytes(downloaded.data)
             source_bytes = source_path.read_bytes()
-            if integrity_mode:
+            if integrity_mode and not fingerprint_enabled:
                 pages_analyzed = _inspect_integrity_content(source_bytes)
                 decode = _DecodeSummary(None, 0.0, 0, "payload_not_detected")
             else:
@@ -185,7 +189,7 @@ def process_verification_job(
                 decode=decode,
                 pages_analyzed=pages_analyzed,
                 processing_ms=processing_ms,
-                exact_only=integrity_mode,
+                exact_only=integrity_mode and not fingerprint_enabled,
             )
         except DemoVerificationError:
             raise
@@ -1111,10 +1115,13 @@ def _result_from_record(record: DemoVerificationResult) -> VerificationProcessin
     integrity_mode = integrity_release_enabled(
         getattr(settings, "SPLITBIND_RELEASE_MODE", None)
     )
+    fingerprint_enabled = bool(getattr(settings, "SPLITBIND_FINGERPRINT_ENABLED", False))
     limitations = tuple(evidence["limitations"])
     if integrity_mode:
         limitations = ("evidence.not_proof_of_leak_edit_or_distribution",)
-        if evidence["exact_file_hash_match"] is not True:
+        if fingerprint_enabled:
+            limitations += (FINGERPRINT_BELOW_RELEASE_GATE,)
+        elif evidence["exact_file_hash_match"] is not True:
             limitations += (TRANSFORMED_ATTRIBUTION_UNAVAILABLE,)
     return VerificationProcessingResult(
         organization_id=record.organization_id,

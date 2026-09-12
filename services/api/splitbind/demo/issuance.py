@@ -191,7 +191,10 @@ def _process_issuance_job(
     integrity_mode = integrity_release_enabled(
         getattr(settings, "SPLITBIND_RELEASE_MODE", None)
     )
-    fingerprint_key = None if integrity_mode else _load_fingerprint_key()
+    fingerprint_enabled = bool(getattr(settings, "SPLITBIND_FINGERPRINT_ENABLED", False))
+    fingerprint_key = (
+        None if integrity_mode and not fingerprint_enabled else _load_fingerprint_key()
+    )
     signing_private_key = None
     if integrity_mode:
         signing_key_file = getattr(settings, "SPLITBIND_MANIFEST_SIGNING_KEY_FILE", None)
@@ -238,7 +241,7 @@ def _process_issuance_job(
             source_path.read_bytes(),
             issuance_id=claim.issuance_id,
             fingerprint_key=fingerprint_key,
-            visible_marker=integrity_mode,
+            visible_marker=integrity_mode and not fingerprint_enabled,
         )
         output_path.write_bytes(output_bytes)
         if not _begin_output_upload(claim):

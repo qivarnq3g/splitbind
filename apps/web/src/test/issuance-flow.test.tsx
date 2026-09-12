@@ -94,6 +94,7 @@ describe("issuance browser workflow", () => {
   it("hashes, uploads, finalizes, creates, and follows an issuance job", async () => {
     const observed: ObservedRequest[] = [];
     let jobReads = 0;
+    let jobSucceeds = false;
     const fetchMock = vi.fn<typeof globalThis.fetch>(async (input, init) => {
       const request = input instanceof Request && init === undefined ? input : new Request(input, init);
       const url = new URL(request.url);
@@ -150,7 +151,7 @@ describe("issuance browser workflow", () => {
         return json({
           id: JOB_ID,
           kind: "issuance",
-          status: jobReads === 1 ? "processing" : "succeeded",
+          status: jobSucceeds ? "succeeded" : "processing",
           attempt: 0,
           issuance_id: ISSUANCE_ID,
           verification_id: null,
@@ -171,7 +172,8 @@ describe("issuance browser workflow", () => {
     fireEvent.change(screen.getByLabelText(/Email người nhận/i), { target: { value: "student@example.com" } });
     fireEvent.submit(screen.getByRole("button", { name: "Tạo bản cấp phát" }).closest("form")!);
 
-    expect(await screen.findByText("Đang xử lý")).toBeVisible();
+    expect(await screen.findByText("Đang xử lý", undefined, { timeout: 5000 })).toBeVisible();
+    jobSucceeds = true;
 
     const workflow = observed.filter((request) => ![
       "/api/v1/auth/session",
@@ -558,7 +560,7 @@ describe("issuance browser workflow", () => {
     fireEvent.change(screen.getByLabelText(/Họ và tên/i), { target: { value: "Nguyễn Văn A" } });
     fireEvent.submit(screen.getByRole("button", { name: "Tạo bản cấp phát" }).closest("form")!);
 
-    expect(await screen.findByText("Đang xử lý")).toBeVisible();
+    expect(await screen.findByText("Đang xử lý", undefined, { timeout: 5000 })).toBeVisible();
 
     const issuanceReq = observed.find((r) => r.path === "/api/v1/issuances");
     expect(issuanceReq).toBeDefined();

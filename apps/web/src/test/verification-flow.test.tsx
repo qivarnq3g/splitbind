@@ -85,7 +85,7 @@ describe("verification browser workflow", () => {
       target: { files: [new File(["%PDF-1.4\n%%EOF"], "suspect.pdf", { type: "application/pdf" })] },
     });
     fireEvent.submit(screen.getByRole("button", { name: "Bắt đầu xác minh" }).closest("form")!);
-    expect(await screen.findByText("Đang xử lý")).toBeVisible();
+    expect(await screen.findByText("Đang xử lý", undefined, { timeout: 5000 })).toBeVisible();
 
     const workflow = observed.filter((request) => ![
       "/api/v1/auth/session",

@@ -106,7 +106,9 @@ def _contract_evidence(value):
     limitations = value.get("limitations")
     if integrity_mode:
         projected_limitations = ["evidence.not_proof_of_leak_edit_or_distribution"]
-        if projected.get("exact_file_hash_match") is not True:
+        if getattr(settings, "SPLITBIND_FINGERPRINT_ENABLED", False):
+            projected_limitations.append("fingerprint.recall_below_release_gate")
+        elif projected.get("exact_file_hash_match") is not True:
             projected_limitations.append(
                 "fingerprint.transformed_attribution_unavailable"
             )

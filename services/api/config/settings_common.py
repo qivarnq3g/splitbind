@@ -135,6 +135,19 @@ SPLITBIND_MANIFEST_SIGNING_KEY_PASSPHRASE_FILE = os.environ.get(
     "SPLITBIND_MANIFEST_SIGNING_KEY_PASSPHRASE_FILE"
 )
 globals().update(load_runtime_limits(ENVIRONMENT, os.environ))
+def load_fingerprint_capability(value: object) -> bool:
+    if value is None or value == "false":
+        return False
+    if value != "true":
+        raise ImproperlyConfigured(
+            "SPLITBIND_FINGERPRINT_ENABLED must be exactly true or false"
+        )
+    return True
+
+
+SPLITBIND_FINGERPRINT_ENABLED = load_fingerprint_capability(
+    os.environ.get("SPLITBIND_FINGERPRINT_ENABLED")
+)
 SPLITBIND_BROKER_READINESS = None
 BROKER_READINESS_TIMEOUT_SECONDS = 1.0
 

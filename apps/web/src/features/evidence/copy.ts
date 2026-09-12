@@ -7,6 +7,8 @@ export const LIMITATION_COPY: Record<string, string> = {
   technical_not_legal: "Đây là tín hiệu kỹ thuật, không phải kết luận pháp lý.",
   "fingerprint.experimental_unreleased_v2": "Dấu vân tay này là ứng viên thử nghiệm và chưa được phát hành.",
   "fingerprint.transformed_attribution_unavailable": "Nhận diện fingerprint sau biến đổi chưa khả dụng.",
+  "fingerprint.recall_below_release_gate":
+    "Nhận diện fingerprint sau biến đổi đang bật ở mức nghiên cứu: khi nhận ra thì đúng, nhưng nhiều trường hợp không nhận ra. Không nhận ra không có nghĩa là tệp sai nguồn.",
   "fingerprint.not_gate_g1_evidence": "Kết quả này chưa phải bằng chứng đạt cổng đánh giá phát hành.",
   "evidence.not_proof_of_leak_edit_or_distribution": "Kết quả không chứng minh ai đã làm rò rỉ, chỉnh sửa hoặc phân phối tài liệu.",
   "integrity.not_evaluated": "Demo không đánh giá watermark toàn vẹn hoặc định vị vùng chỉnh sửa.",

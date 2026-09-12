@@ -15,6 +15,7 @@ export function IntegrityEvidence({ status, evidence, showConclusion, inputSha25
   const extraLimits = (evidence.limitations ?? []).some(id => ![
     "evidence.not_proof_of_leak_edit_or_distribution",
     "fingerprint.transformed_attribution_unavailable",
+    "fingerprint.recall_below_release_gate",
     "match_not_actor_proof", "technical_not_legal",
   ].includes(id));
   return (
