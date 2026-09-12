@@ -31,7 +31,7 @@ export function AppShell() {
         <NavLink
           className="app-brand"
           to="/"
-          aria-label="SplitBind — trang làm việc"
+          aria-label="SplitBind - trang làm việc"
         >
           <span className="brand-symbol" aria-hidden="true">
             <i />

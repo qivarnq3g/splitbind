@@ -351,7 +351,7 @@ describe("issuance browser workflow", () => {
     });
     renderApp(`/issuances/${ISSUANCE_ID}`);
     await screen.findByText("Kết quả PDF đang được xử lý.");
-    expect(screen.queryByText("Chế độ demo cục bộ — vân tay thử nghiệm, chưa phát hành.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Chế độ demo cục bộ - vân tay thử nghiệm, chưa phát hành.")).not.toBeInTheDocument();
   });
 
   it("shows an honest processing state without a download action", async () => {
@@ -395,7 +395,7 @@ describe("issuance browser workflow", () => {
     });
     renderApp(`/issuances/${ISSUANCE_ID}`);
 
-    expect(await screen.findByText("Thử nghiệm — chưa phát hành")).toBeVisible();
+    expect(await screen.findByText("Thử nghiệm - chưa phát hành")).toBeVisible();
     expect(observed).not.toContain(`/api/v1/issuances/${ISSUANCE_ID}/result`);
     fireEvent.click(screen.getByRole("button", { name: "Tải PDF kết quả" }));
 

@@ -170,7 +170,7 @@ export function IssuanceDetailPage() {
                   <dd>
                     {issuance.data.algorithm_label === "integrity_release_v1"
                       ? "Toàn vẹn tệp · Integrity Release"
-                      : "Thử nghiệm — chưa phát hành"}
+                      : "Thử nghiệm - chưa phát hành"}
                   </dd>
                 </div>
               ) : null}

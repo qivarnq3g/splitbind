@@ -205,7 +205,7 @@ it("displays dynamic ETA for pending job and total duration for completed job on
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByText(/Thời gian ước tính: ~5 – 15 giây/)).toBeVisible();
+  expect(await screen.findByText(/Thời gian ước tính: ~5 - 15 giây/)).toBeVisible();
   unmount();
 
   render(

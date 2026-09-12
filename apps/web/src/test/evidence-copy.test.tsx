@@ -218,7 +218,7 @@ describe("authoritative result payoff and seal construction", () => {
 
     expect(await screen.findByRole("heading", { name: "Bản cấp phát đã sẵn sàng" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Tải PDF kết quả" })).toBeEnabled();
-    expect(screen.getByText("Thử nghiệm — chưa phát hành")).toBeVisible();
+    expect(screen.getByText("Thử nghiệm - chưa phát hành")).toBeVisible();
 
   });
 });

@@ -53,7 +53,7 @@ for (const scenario of cases) {
       await expect(page.locator("main")).not.toContainText(/API|Số phiếu|Điểm fingerprint|Điểm toàn vẹn|Vùng toàn vẹn nghi vấn/);
       await expect(page.getByRole("complementary", { name: "Giới hạn chế độ demo" })).toHaveCount(0);
       await expect(page.getByRole("complementary", { name: "Khả năng xác minh" })).toHaveCount(0);
-      if (scenario.name === "unmatched") await expect(page.getByText("Chưa kiểm tra — chưa tìm được bản cấp phát")).toBeVisible();
+      if (scenario.name === "unmatched") await expect(page.getByText("Chưa kiểm tra - chưa tìm được bản cấp phát")).toBeVisible();
       await expect(page.locator(".route-stage")).toHaveCSS("opacity", "1");
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await page.evaluate(() => window.scrollTo(0, 0));
