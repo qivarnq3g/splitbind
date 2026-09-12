@@ -22,11 +22,36 @@ $rollbackDir = "$remoteRoot/rollbacks/$ReleaseName"
 
 function Invoke-Remote {
     param([Parameter(Mandatory = $true)][string]$Command)
-    $output = ssh -n -i $SshKeyPath -o BatchMode=yes "$AdminUser@$VmHost" $Command
-    if ($LASTEXITCODE -ne 0) {
-        throw "Remote command failed with exit code ${LASTEXITCODE}:`n$Command`n$output"
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $output = ssh -n -i $SshKeyPath -o BatchMode=yes "$AdminUser@$VmHost" "( $Command ) 2>&1"
+        $code = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+    if ($code -ne 0) {
+        throw "Remote command failed with exit code ${code}:`n$Command`n$($output -join "`n")"
     }
     return $output
+}
+
+function Invoke-Scp {
+    param(
+        [Parameter(Mandatory = $true)][string]$LocalPath,
+        [Parameter(Mandatory = $true)][string]$RemotePath
+    )
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        scp -i $SshKeyPath $LocalPath "$AdminUser@$VmHost`:$RemotePath"
+        $code = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+    if ($code -ne 0) {
+        throw "Failed to copy $LocalPath to ${RemotePath}: scp exited with $code"
+    }
 }
 
 $envFile = Join-Path $repoRoot "release-images.env"
@@ -94,8 +119,7 @@ if (-not $SkipComposeSync) {
         } finally {
             Remove-Item -Path $diffPath -Force -ErrorAction SilentlyContinue
         }
-        scp -i $SshKeyPath $localCompose "$AdminUser@$VmHost`:$composeFile"
-        if ($LASTEXITCODE -ne 0) { throw "Failed to copy compose.production.yaml to the VM." }
+        Invoke-Scp -LocalPath $localCompose -RemotePath $composeFile
         Write-Host "Compose file synchronized." -ForegroundColor Green
     }
 }
