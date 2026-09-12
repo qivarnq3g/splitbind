@@ -1,5 +1,3 @@
-"""Summarise the V4 spread-parameter experiment against the re-measured V3 baseline."""
-
 from __future__ import annotations
 
 import json
@@ -35,8 +33,6 @@ def main() -> int:
         if rows_path.exists():
             rows_by_variant[s["variant"]] = json.loads(rows_path.read_text(encoding="utf-8"))
 
-    # Which fixtures does each variant still fail, and does any variant rescue
-    # the pdf-multi-mixed pages that starve the baseline of tile votes?
     print("\nFailures per variant (fixture/page, attack):")
     for variant, rows in rows_by_variant.items():
         fails = defaultdict(list)

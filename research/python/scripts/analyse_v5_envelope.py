@@ -1,11 +1,3 @@
-"""Score the V5 envelope rows under both decision policies.
-
-Reports, per attack: attribution rate at the shipped quorum (>= 2 valid votes)
-and at the proposed quorum (>= 1), plus the false-attribution count each policy
-would incur on the never-embedded negative fixtures. The looser policy is only
-defensible if that second number stays zero.
-"""
-
 from __future__ import annotations
 
 import json
@@ -40,7 +32,6 @@ def main() -> int:
     for r in positives:
         a = agg[r["attack"]]
         a["n"] += 1
-        # Correct attribution requires both a quorum AND the right identity.
         if r["attributed_quorum2"] and r["decoded_matches_expected"]:
             a["q2"] += 1
         if r["attributed_quorum1"] and r["decoded_matches_expected"]:
