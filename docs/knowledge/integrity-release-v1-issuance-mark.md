@@ -50,3 +50,23 @@ Claims that are **not** true of the released system:
 A page that says "nhúng dấu vết riêng cho người nhận" without qualification
 reads as a hidden watermark and therefore describes the unreleased path. Say
 "mã cấp phát nhìn thấy được" instead.
+
+## Two claims in the submitted report contradict this
+
+Found 2026-09-12 while auditing `docs/project/Nhom9_TruyVetToanVenVanBan.md` in the parent repository against source. The report is otherwise careful and repeatedly correct on this boundary - it labels every claim with an evidence tier, states at line 294 that production "chưa kích hoạt bộ trích xuất thủy vân tự động trên server", and concludes that the robust-watermark subsystem is held at the research tier. Two lines break that record:
+
+- line 537: "Phiên bản đang chạy trên production vẫn là Integrity Release 0.1 dùng V2."
+- line 633: "Production vẫn chạy V2 với xác thực toàn vẹn tệp chính xác."
+
+Both read as "production embeds with the V2 algorithm". The code refutes it. `_build_issuance_pdf` branches strictly:
+
+```python
+if visible_marker:
+    content = apply_visible_marker(rendered, issuance_id)
+else:
+    embedded = embed_fingerprint_v2(...)
+```
+
+`visible_marker` is `integrity_mode`, so the two paths are mutually exclusive and `embed_fingerprint_v2` is unreachable in production. The honest phrasing is that production runs the visible-marker path and performs no fingerprint embedding at all; V2 is the generation the research codec belongs to, not something the running release executes.
+
+The distinction matters because these two lines are the ones a reader reaches for when asking "so what is actually deployed", and they say the opposite of the rest of the document.
