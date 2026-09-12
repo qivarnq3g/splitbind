@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { Navigate, Outlet, RouteObject, createBrowserRouter, useLocation } from "react-router-dom";
 
 import { AppShell } from "../components/AppShell";
+import { titleForPath } from "./documentTitle";
 import { canCreateIssuance, useSession } from "../features/auth/session";
 import { HistoryPage } from "../pages/HistoryPage";
 import { IssueDocumentPage } from "../pages/IssueDocumentPage";
@@ -10,6 +12,23 @@ import { LandingPage } from "../pages/LandingPage";
 import { LoginPage } from "../pages/LoginPage";
 import { VerificationDetailPage } from "../pages/VerificationDetailPage";
 import { VerifyDocumentPage } from "../pages/VerifyDocumentPage";
+
+function DocumentTitle() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    document.title = titleForPath(pathname);
+  }, [pathname]);
+  return null;
+}
+
+function TitledOutlet() {
+  return (
+    <>
+      <DocumentTitle />
+      <Outlet />
+    </>
+  );
+}
 
 function HomeRoute() {
   const session = useSession();
@@ -41,7 +60,7 @@ function SessionBoundary() {
   return <Outlet />;
 }
 
-export const appRoutes: RouteObject[] = [
+const titledRoutes: RouteObject[] = [
   { path: "/", element: <HomeRoute /> },
   { path: "/about", element: <LandingPage /> },
   {
@@ -62,6 +81,10 @@ export const appRoutes: RouteObject[] = [
       { path: "*", element: <Navigate to="/" replace /> },
     ],
   },
+];
+
+export const appRoutes: RouteObject[] = [
+  { element: <TitledOutlet />, children: titledRoutes },
 ];
 
 export const router = createBrowserRouter(appRoutes);

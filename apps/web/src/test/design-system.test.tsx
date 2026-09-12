@@ -303,3 +303,13 @@ describe("SplitBind design system", () => {
   });
 
 });
+
+it("gives every route its own document title", async () => {
+  const { titleForPath } = await import("../app/documentTitle");
+  const paths = ["/", "/about", "/login", "/issue", "/verify", "/history",
+    "/jobs/abc", "/issuances/abc", "/verifications/abc"];
+  const titles = paths.map(titleForPath);
+  expect(new Set(titles).size).toBe(paths.length);
+  for (const title of titles) expect(title).toContain("SplitBind");
+  expect(titleForPath("/khong-ton-tai")).toMatch(/Không tìm thấy trang/);
+});

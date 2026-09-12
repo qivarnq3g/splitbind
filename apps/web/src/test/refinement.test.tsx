@@ -205,7 +205,10 @@ it("displays dynamic ETA for pending job and total duration for completed job on
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByText(/Thời gian ước tính: ~5 - 15 giây/)).toBeVisible();
+  // design.md forbids inventing a time remaining, so the waiting note may report
+  // only elapsed time measured from the server timestamps.
+  expect(await screen.findByText(/Đã xử lý: \d+s/)).toBeVisible();
+  expect(screen.queryByText(/ước tính/i)).toBeNull();
   unmount();
 
   render(

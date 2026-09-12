@@ -170,7 +170,7 @@ export function JobDetailPage() {
               <p className="waiting-note" aria-live="polite">
                 <Clock3 size={18} aria-hidden="true" />
                 {elapsed <= 15
-                  ? `Thời gian ước tính: ~5 - 15 giây · Đã xử lý: ${elapsed}s`
+                  ? `Đã xử lý: ${elapsed}s · Trang tự cập nhật khi có kết quả.`
                   : `Đang xử lý trong hàng đợi (${elapsed}s) · Vui lòng giữ nguyên trang...`}
               </p>
             ) : done && durationSeconds !== null ? (
