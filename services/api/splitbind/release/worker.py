@@ -7,6 +7,8 @@ from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.db import connection, transaction
 
+from config.limits import PRODUCTION_RUNTIME_LIMITS
+
 from splitbind.demo import issuance as demo_issuance
 from splitbind.demo import verification as demo_verification
 from splitbind.demo.models import DemoIssuanceResult, DemoVerificationResult
@@ -147,12 +149,9 @@ def recover_stale_integrity_jobs(*, storage, now: datetime):
 def validate_integrity_worker_startup() -> None:
     _require_integrity_mode()
     expected_limits = {
-        "MAX_PDF_BYTES": 100 * 1024 * 1024,
-        "MAX_PDF_PAGES": 50,
-        "MAX_IMAGE_PIXELS": 40_000_000,
-        "MAX_DOCUMENT_RASTER_PIXELS": 140_000_000,
-        "JOB_TIMEOUT_SECONDS": 600,
-        "WORKER_CONCURRENCY": 1,
+        name: value
+        for name, value in PRODUCTION_RUNTIME_LIMITS.items()
+        if name != "RETENTION_RECONCILIATION_LEASE_SECONDS"
     }
     if any(getattr(settings, name, None) != value for name, value in expected_limits.items()):
         raise ImproperlyConfigured("INTEGRITY_LIMITS_INVALID")
