@@ -32,13 +32,22 @@ export function EvidenceSummary({
   status,
   evidence,
   showConclusion = true,
+  inputSha256 = null,
 }: {
   status: VerificationStatus;
   evidence: Evidence;
   showConclusion?: boolean;
+  inputSha256?: string | null;
 }) {
   if (evidence.algorithm_label === "integrity_release_v1") {
-    return <IntegrityEvidence status={status} evidence={evidence} showConclusion={showConclusion} />;
+    return (
+      <IntegrityEvidence
+        status={status}
+        evidence={evidence}
+        showConclusion={showConclusion}
+        inputSha256={inputSha256}
+      />
+    );
   }
   const knownLimitations = (evidence.limitations ?? []).filter(
     (id) => id in LIMITATION_COPY,

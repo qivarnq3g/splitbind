@@ -514,6 +514,8 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             completed_at: string | null;
+            /** @description SHA-256 of the file that was submitted for checking. */
+            input_sha256: string | null;
             evidence: components["schemas"]["VerificationEvidence"];
             metrics: components["schemas"]["VerificationMetrics"];
         };

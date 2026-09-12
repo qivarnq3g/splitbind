@@ -1890,6 +1890,11 @@
                         "format": "date-time",
                         "nullable": true
                     },
+                    "input_sha256": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "SHA-256 of the file that was submitted for checking."
+                    },
                     "evidence": {
                         "$ref": "#/components/schemas/VerificationEvidence"
                     },
@@ -1902,6 +1907,7 @@
                     "created_at",
                     "evidence",
                     "id",
+                    "input_sha256",
                     "job_id",
                     "job_status",
                     "metrics",

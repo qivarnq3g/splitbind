@@ -143,6 +143,10 @@ class VerificationSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=VerificationStatus.values, allow_null=True)
     created_at = serializers.DateTimeField()
     completed_at = serializers.DateTimeField(allow_null=True)
+    input_sha256 = serializers.CharField(
+        allow_null=True,
+        help_text="SHA-256 of the file that was submitted for checking.",
+    )
     evidence = VerificationEvidenceSerializer()
     metrics = VerificationMetricsSerializer()
 

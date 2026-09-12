@@ -180,6 +180,7 @@ def serialize_issuance(record, job=None):
 
 def serialize_verification(record, job=None):
     job = job or record.jobs.order_by("created_at").first()
+    demo_result = getattr(record, "demo_result", None)
     return {
         "id": str(record.id),
         "job_id": str(job.id) if job else None,
@@ -187,6 +188,7 @@ def serialize_verification(record, job=None):
         "status": record.status,
         "created_at": record.created_at.isoformat(),
         "completed_at": record.completed_at.isoformat() if record.completed_at else None,
+        "input_sha256": demo_result.input_sha256 if demo_result else None,
         "evidence": _contract_evidence(record.evidence),
         "metrics": _contract_metrics(record.metrics),
     }

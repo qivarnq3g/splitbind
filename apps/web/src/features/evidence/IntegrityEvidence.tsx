@@ -1,10 +1,12 @@
+import { CompactIdentifier } from "../../components/CompactIdentifier";
 import type { components } from "../../api/generated/schema";
 import { INTEGRITY_SCOPE, integrityVerdict, type VerificationStatus } from "./copy";
 
-export function IntegrityEvidence({ status, evidence, showConclusion }: {
+export function IntegrityEvidence({ status, evidence, showConclusion, inputSha256 = null }: {
   status: VerificationStatus;
   evidence: components["schemas"]["VerificationEvidence"];
   showConclusion: boolean;
+  inputSha256?: string | null;
 }) {
   const hash = evidence.exact_file_hash_match;
   const signature = evidence.manifest_signature_valid;
@@ -24,8 +26,10 @@ export function IntegrityEvidence({ status, evidence, showConclusion }: {
           <section aria-labelledby="technical-data-heading">
             <h2 id="technical-data-heading">Bằng chứng đối chiếu</h2>
             <dl className="evidence-facts">
+              <div><dt>Mã băm tệp đã tải lên · SHA-256</dt><dd>{inputSha256 ? <CompactIdentifier label="Mã băm tệp đã tải lên" value={inputSha256} full /> : "Chưa có mã băm tệp đã tải lên"}</dd></div>
+              <div><dt>Thuật toán xử lý</dt><dd>{evidence.algorithm_label ?? "Chưa có thông tin thuật toán"}</dd></div>
               <div><dt>Mã kiểm tra tệp · SHA-256</dt><dd>{hash === true ? "Khớp bản cấp phát" : hash === false ? "Không tìm thấy bản khớp" : "Chưa có kết quả đối chiếu"}</dd></div>
-              <div><dt>Chữ ký hồ sơ cấp phát</dt><dd>{signature === true ? "Hợp lệ" : signature === false ? "Không hợp lệ" : noSource ? "Chưa kiểm tra — chưa tìm được bản cấp phát" : "Chưa xác minh được"}</dd></div>
+              <div><dt>Chữ ký hồ sơ cấp phát</dt><dd>{signature === true ? "Hợp lệ" : signature === false ? "Không hợp lệ" : noSource ? "Chưa kiểm tra - chưa tìm được bản cấp phát" : "Chưa xác minh được"}</dd></div>
               {evidence.analyzed_page_count != null ? <div><dt>Số trang đã đọc</dt><dd>{evidence.analyzed_page_count.toLocaleString("vi-VN")}</dd></div> : null}
             </dl>
           </section>

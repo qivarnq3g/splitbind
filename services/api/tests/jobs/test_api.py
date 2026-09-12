@@ -165,9 +165,74 @@ def test_verification_detail_projects_only_contract_evidence_and_metrics():
         "limitations": ["geometry.limited"],
     }
     assert response.json()["metrics"] == {"processing_ms": 25}
+    assert response.json()["input_sha256"] is None
     serialized = response.content.decode().lower()
     for forbidden in ("object_key", "private person", "provider.invalid", "exception_text"):
         assert forbidden not in serialized
+
+
+@pytest.mark.django_db
+def test_verification_detail_round_trips_the_committed_input_sha256():
+    from splitbind.demo.capabilities import DEMO_ALGORITHM_LABEL
+    from splitbind.demo.models import (
+        DEMO_VERIFICATION_LIMITATIONS,
+        DemoVerificationResult,
+        DemoVerificationState,
+        _allow_demo_result_write,
+    )
+    from splitbind.documents.models import VerificationStatus
+    from splitbind.jobs.models import Job, JobKind, JobStatus
+
+    org = Organization.objects.create(name="Digest", slug=f"digest-{uuid.uuid4().hex[:8]}")
+    verifier = make_user(org, Role.VERIFIER, "digest-verifier")
+    storage = FakeObjectStorage()
+    upload = ready_upload(org, verifier, storage, UploadPurpose.VERIFICATION)
+    verification = Verification.objects.create(
+        organization=org,
+        upload_request=upload,
+        requested_by=verifier,
+    )
+    job = Job.objects.create(
+        organization=org,
+        kind=JobKind.VERIFICATION,
+        status=JobStatus.SUCCEEDED,
+        attempt=0,
+        verification=verification,
+        deadline_at=timezone.now() + timedelta(minutes=10),
+        correlation_id=uuid.uuid4(),
+    )
+    committed_sha256 = "c" * 64
+    result_record = DemoVerificationResult(
+        organization=org,
+        job=job,
+        verification=verification,
+        attempt=0,
+        owner_token=uuid.uuid4(),
+        result_state=DemoVerificationState.COMMITTED,
+        input_sha256=committed_sha256,
+        result_status=VerificationStatus.NO_WATERMARK,
+        evidence={
+            "algorithm_label": DEMO_ALGORITHM_LABEL,
+            "decode_status": "payload_not_detected",
+            "fingerprint_confidence": 0.0,
+            "valid_vote_count": 0,
+            "analyzed_page_count": 1,
+            "manifest_signature_valid": None,
+            "exact_file_hash_match": False,
+            "limitations": list(DEMO_VERIFICATION_LIMITATIONS),
+        },
+        metrics={"processing_ms": 10, "pages_processed": 1, "cleanup_failures": 0},
+        completed_at=timezone.now(),
+    )
+    with _allow_demo_result_write():
+        result_record.save()
+    client = Client()
+    client.force_login(verifier)
+
+    response = client.get(f"/api/v1/verifications/{verification.id}")
+
+    assert response.status_code == 200
+    assert response.json()["input_sha256"] == committed_sha256
 
 
 @pytest.mark.django_db
