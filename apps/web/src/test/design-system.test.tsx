@@ -270,6 +270,28 @@ describe("SplitBind design system", () => {
     expect(document.querySelector(".page-heading")).toHaveAttribute("data-motion-block");
   });
 
+  it("gives the public overview a way in from inside the workbench", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async (input) => {
+      const url = String(input);
+      if (url.includes("/api/v1/demo/capabilities")) return json({ enabled: false });
+      return json({
+        authenticated: true,
+        csrf_token: "csrf-token",
+        user: {
+          id: USER_ID,
+          username: "issuer.demo",
+          role: "issuer",
+          organization_id: ORGANIZATION_ID,
+        },
+      });
+    }));
+
+    renderApp("/issue");
+
+    const link = await screen.findByRole("link", { name: "Giới thiệu" });
+    expect(link).toHaveAttribute("href", "/about");
+  });
+
   it("holds the page shape while the session is being checked", async () => {
     vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(() => new Promise(() => {})));
 

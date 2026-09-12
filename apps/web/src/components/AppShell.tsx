@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { FileKey2, History, LogOut, ScanSearch } from "lucide-react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   canCreateIssuance,
   canCreateVerification,
@@ -109,7 +109,10 @@ export function AppShell() {
           </aside>
         ) : null}
         <footer className="foot-line">
-          <span>SplitBind · Nhóm 9 · ATTT</span>
+          <span>
+            SplitBind · Nhóm 9 · ATTT ·{" "}
+            <Link to="/about">Giới thiệu</Link>
+          </span>
           <span>Cấp phát có chữ ký. Xác minh có bằng chứng.</span>
         </footer>
       </div>
