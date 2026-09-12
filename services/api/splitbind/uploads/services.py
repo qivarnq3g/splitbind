@@ -16,7 +16,6 @@ from splitbind.uploads.models import UploadPurpose, UploadRequest
 from splitbind.validators import SHA256_PATTERN
 
 
-MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 UPLOAD_TTL = timedelta(minutes=15)
 _KIND_TO_PURPOSE = {
     "issuance_input": UploadPurpose.ISSUANCE,

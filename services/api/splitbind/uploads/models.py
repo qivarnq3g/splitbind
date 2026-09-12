@@ -15,7 +15,7 @@ from splitbind.access.models import (
 from splitbind.validators import SHA256_PATTERN, validate_sha256
 
 
-MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 
 
 class UploadPurpose(models.TextChoices):
@@ -252,7 +252,7 @@ class UploadRequest(ValidatedOrganizationOwnedModel):
             if self.expected_sha256 is None:
                 raise ValidationError("new upload intent requires an expected checksum")
             if self.size_bytes is None or not 1 <= self.size_bytes <= MAX_UPLOAD_BYTES:
-                raise ValidationError("new upload intent size must be between one byte and ten MiB")
+                raise ValidationError("new upload intent size must be between one byte and the configured ceiling")
 
     def save(self, *args, **kwargs) -> None:
         if self._state.adding and (

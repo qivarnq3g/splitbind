@@ -1,7 +1,7 @@
 import { api } from "../../api/client";
 import { SafeApiError, safeApiMessage } from "../shared/apiError";
 
-export const MAX_PDF_BYTES = 10 * 1024 * 1024;
+export const MAX_PDF_BYTES = 100 * 1024 * 1024;
 
 export type UploadStage = "hashing" | "intent" | "uploading" | "finalizing";
 
@@ -14,7 +14,7 @@ type UploadKind = "issuance_input" | "verification_input";
 
 function validateSize(file: File): void {
   if (file.size > MAX_PDF_BYTES) {
-    throw new SafeApiError("Tệp vượt quá giới hạn 10 MiB. Chọn tệp nhỏ hơn rồi thử lại.");
+    throw new SafeApiError("Tệp vượt quá giới hạn 100 MB. Chọn tệp nhỏ hơn rồi thử lại.");
   }
 }
 

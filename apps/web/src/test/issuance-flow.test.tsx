@@ -204,7 +204,7 @@ describe("issuance browser workflow", () => {
     });
   });
 
-  it("rejects a PDF above 10 MiB before requesting an upload intent", async () => {
+  it("rejects a PDF above the configured ceiling before requesting an upload intent", async () => {
     const fetchMock = vi.fn<typeof globalThis.fetch>(async (input) => {
       const request = input instanceof Request ? input : new Request(input);
       return new URL(request.url).pathname === "/api/v1/auth/session"
@@ -214,14 +214,13 @@ describe("issuance browser workflow", () => {
     vi.stubGlobal("fetch", fetchMock);
     renderApp();
 
-    const oversized = new File([new Uint8Array(MAX_PDF_BYTES + 1)], "large.pdf", {
-      type: "application/pdf",
-    });
+    const oversized = new File([new Uint8Array(8)], "large.pdf", { type: "application/pdf" });
+    Object.defineProperty(oversized, "size", { value: MAX_PDF_BYTES + 1 });
     fireEvent.change(await screen.findByLabelText("Tệp PDF"), { target: { files: [oversized] } });
     fireEvent.change(screen.getByLabelText(/Email người nhận/i), { target: { value: "student@example.com" } });
     fireEvent.submit(screen.getByRole("button", { name: "Tạo bản cấp phát" }).closest("form")!);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Tệp vượt quá giới hạn 10 MiB");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Tệp vượt quá giới hạn 100 MB");
     expect(screen.getByRole("button", { name: "Tạo bản cấp phát" })).toBeDisabled();
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
   });

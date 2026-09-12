@@ -1121,7 +1121,8 @@ def test_actual_checksum_mismatch_fails_before_decode(monkeypatch):
 
 @pytest.mark.django_db
 @override_settings(SPLITBIND_DEMO_MODE=True)
-def test_actual_input_above_ten_mib_fails_before_decode(monkeypatch):
+@override_settings(MAX_PDF_BYTES=2048)
+def test_actual_input_above_the_configured_byte_limit_fails_before_decode(monkeypatch):
     from splitbind.demo.verification import DemoVerificationError, process_verification_job
 
     monkeypatch.setenv("SPLITBIND_DEMO_FINGERPRINT_KEY_HEX", FINGERPRINT_KEY.hex())
@@ -1137,12 +1138,13 @@ def test_actual_input_above_ten_mib_fails_before_decode(monkeypatch):
 
 @pytest.mark.django_db
 @override_settings(SPLITBIND_DEMO_MODE=True)
-def test_more_than_five_pdf_pages_fails_before_rendering(monkeypatch):
+@override_settings(MAX_PDF_PAGES=3)
+def test_a_pdf_page_count_above_the_configured_limit_fails_before_rendering(monkeypatch):
     from splitbind.demo.verification import DemoVerificationError, process_verification_job
 
     monkeypatch.setenv("SPLITBIND_DEMO_FINGERPRINT_KEY_HEX", FINGERPRINT_KEY.hex())
     context = _new_verification_context(
-        blank_pdf_bytes(page_sizes=((288, 384),) * 6)
+        blank_pdf_bytes(page_sizes=((288, 384),) * 4)
     )
 
     with pytest.raises(DemoVerificationError, match="^DEMO_PDF_PAGE_LIMIT$"):

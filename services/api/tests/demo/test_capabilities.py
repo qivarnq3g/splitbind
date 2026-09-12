@@ -26,6 +26,7 @@ def runtime_environment(*, environment_name: str, demo_mode: str) -> dict[str, s
             "MAX_PDF_BYTES": str(10 * 1024 * 1024),
             "MAX_PDF_PAGES": "50",
             "MAX_IMAGE_PIXELS": "40000000",
+            "MAX_DOCUMENT_RASTER_PIXELS": "120000000",
             "JOB_TIMEOUT_SECONDS": "600",
             "WORKER_CONCURRENCY": "1",
             "RETENTION_RECONCILIATION_LEASE_SECONDS": "300",

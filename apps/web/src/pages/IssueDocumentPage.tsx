@@ -133,7 +133,7 @@ export function IssueDocumentPage() {
                 {validationError ??
                   (file
                     ? `${Math.max(1, Math.ceil(file.size / 1024))} KiB · Tệp được chọn trên thiết bị, chưa tải lên.`
-                    : "PDF · tối đa 10 MiB · PDF tối đa 50 trang")}
+                    : "PDF · tối đa 100 MB · PDF tối đa 50 trang")}
               </p>
             </div>
             <div className="field">

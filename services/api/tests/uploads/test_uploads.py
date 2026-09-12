@@ -19,12 +19,13 @@ from splitbind.integrations.storage.fake import FakeObjectStorage
 from splitbind.integrations.storage.s3 import S3ObjectStorage
 from splitbind.retention.capabilities import _allow_cleanup_schedule_write
 from splitbind.uploads.models import (
+    MAX_UPLOAD_BYTES,
     CleanupLane,
     CleanupScheduleState,
     UploadPurpose,
     UploadRequest,
 )
-from splitbind.uploads.services import MAX_UPLOAD_BYTES, UploadRejected, complete_upload, create_upload
+from splitbind.uploads.services import UploadRejected, complete_upload, create_upload
 
 
 SHA256 = "a" * 64
@@ -655,7 +656,7 @@ def test_new_upload_rows_require_expected_checksum_and_bounded_size(organization
     }
     with pytest.raises(ValidationError, match="expected checksum"):
         UploadRequest.objects.create(**common, expected_sha256=None, size_bytes=1)
-    with pytest.raises(ValidationError, match="between one byte and ten MiB"):
+    with pytest.raises(ValidationError, match="between one byte and the configured ceiling"):
         UploadRequest.objects.create(**common, expected_sha256=SHA256, size_bytes=MAX_UPLOAD_BYTES + 1)
 
 

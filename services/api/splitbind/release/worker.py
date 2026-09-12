@@ -147,9 +147,10 @@ def recover_stale_integrity_jobs(*, storage, now: datetime):
 def validate_integrity_worker_startup() -> None:
     _require_integrity_mode()
     expected_limits = {
-        "MAX_PDF_BYTES": 10 * 1024 * 1024,
+        "MAX_PDF_BYTES": 100 * 1024 * 1024,
         "MAX_PDF_PAGES": 50,
         "MAX_IMAGE_PIXELS": 40_000_000,
+        "MAX_DOCUMENT_RASTER_PIXELS": 120_000_000,
         "JOB_TIMEOUT_SECONDS": 600,
         "WORKER_CONCURRENCY": 1,
     }

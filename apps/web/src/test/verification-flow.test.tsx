@@ -245,7 +245,7 @@ describe("verification browser workflow", () => {
     const input = await screen.findByLabelText("Tệp cần kiểm chứng");
     await waitFor(() => expect(input).toHaveAttribute("accept", "application/pdf,.pdf"));
     expect(input.getAttribute("accept")).not.toMatch(/image|png|jpe?g/i);
-    expect(screen.getByText(/^PDF · tối đa 10 MiB/)).toBeVisible();
+    expect(screen.getByText(/^PDF · tối đa 100 MB/)).toBeVisible();
     expect(screen.getByText(/Kiểm tra ảnh thuộc đường nhận diện dấu vết/)).toBeVisible();
   });
 

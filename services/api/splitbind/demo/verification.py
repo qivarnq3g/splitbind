@@ -50,9 +50,7 @@ from splitbind.uploads.models import PromotionStatus, UploadPurpose, UploadReque
 from splitbind_ref.fingerprint_v2 import DecodeV2Decision, decode_fingerprint_v2
 
 
-DEMO_MAX_INPUT_BYTES = 10 * 1024 * 1024
-DEMO_MAX_PAGES = 5
-DEMO_MAX_RASTER_PIXELS = 40_000_000
+PAGE_INDEX_HYPOTHESES = 5
 PDF_RENDER_SCALE = 2.0
 _LEGACY_CANONICAL_PAGE_CONTENT = b"q\n1152 0 0 2304 0 0 cm\n/Im0 Do\nQ\n"
 _UNKNOWN_PAGE_MIN_CONSISTENT_DECODES = 2
@@ -129,7 +127,7 @@ def process_verification_job(
         try:
             downloaded = storage.download_bytes(
                 key=acquired.input_object_key,
-                max_bytes=min(settings.MAX_PDF_BYTES, DEMO_MAX_INPUT_BYTES),
+                max_bytes=settings.MAX_PDF_BYTES,
                 expected_sha256=acquired.expected_input_sha256,
             )
         except UploadRejected as error:
@@ -268,7 +266,7 @@ def _acquire_processing_claim(*, job_id, owner_token):
 def _decode_content(
     source: bytes, *, fingerprint_key: bytes, candidate
 ) -> tuple[_DecodeSummary, int]:
-    if len(source) > DEMO_MAX_INPUT_BYTES:
+    if len(source) > settings.MAX_PDF_BYTES:
         raise DemoVerificationError("DEMO_INPUT_FILE_LIMIT")
     if source.startswith(b"%PDF-"):
         return _decode_pdf(source, fingerprint_key=fingerprint_key, candidate=candidate)
@@ -281,7 +279,7 @@ def _decode_content(
 
 def _inspect_integrity_content(source: bytes) -> int:
     """Validate a bounded input without executing hidden-fingerprint recovery."""
-    if len(source) > DEMO_MAX_INPUT_BYTES:
+    if len(source) > settings.MAX_PDF_BYTES:
         raise DemoVerificationError("DEMO_INPUT_FILE_LIMIT")
     if source.startswith(b"%PDF-"):
         try:
@@ -298,7 +296,7 @@ def _inspect_integrity_content(source: bytes) -> int:
         try:
             document.init_forms()
             page_count = len(document)
-            if not 1 <= page_count <= DEMO_MAX_PAGES:
+            if not 1 <= page_count <= settings.MAX_PDF_PAGES:
                 raise DemoVerificationError("DEMO_PDF_PAGE_LIMIT")
             _page_units, render_scales = _pdf_page_metadata(source, page_count)
             _validate_pdf_raster_budget(document, render_scales)
@@ -330,7 +328,7 @@ def _decode_pdf(source: bytes, *, fingerprint_key: bytes, candidate) -> tuple[_D
     try:
         document.init_forms()
         page_count = len(document)
-        if not 1 <= page_count <= DEMO_MAX_PAGES:
+        if not 1 <= page_count <= settings.MAX_PDF_PAGES:
             raise DemoVerificationError("DEMO_PDF_PAGE_LIMIT")
         _page_units, render_scales = _pdf_page_metadata(source, page_count)
         _validate_pdf_raster_budget(document, render_scales)
@@ -422,7 +420,7 @@ def _decode_image(
             DEMO_CANONICAL_CANVAS,
             (candidate,),
         )
-        for page_index in range(DEMO_MAX_PAGES)
+        for page_index in range(PAGE_INDEX_HYPOTHESES)
     ]
     return _aggregate_unknown_page_decisions(decisions), 1
 
@@ -476,7 +474,7 @@ def _jpeg_dimensions(source: bytes) -> tuple[int, int]:
 def _validate_image_dimensions(*, width: int, height: int) -> None:
     if width <= 0 or height <= 0:
         raise DemoVerificationError("DEMO_IMAGE_INVALID")
-    if width * height > DEMO_MAX_RASTER_PIXELS:
+    if width * height > settings.MAX_IMAGE_PIXELS:
         raise DemoVerificationError("DEMO_INPUT_RASTER_LIMIT")
 
 
@@ -562,7 +560,7 @@ def _validate_pdf_raster_budget(
         render_width = math.ceil(width * render_scales[page_index])
         render_height = math.ceil(height * render_scales[page_index])
         cumulative_pixels += render_width * render_height
-        if cumulative_pixels > DEMO_MAX_RASTER_PIXELS:
+        if cumulative_pixels > settings.MAX_DOCUMENT_RASTER_PIXELS:
             raise DemoVerificationError("DEMO_INPUT_RASTER_LIMIT")
 
 

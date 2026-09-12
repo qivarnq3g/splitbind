@@ -11,9 +11,10 @@ def load_production_settings(monkeypatch, database_url, **environment):
     monkeypatch.delenv("SPLITBIND_DATABASE_HOST", raising=False)
     monkeypatch.setenv("ENVIRONMENT", "production")
     defaults = {
-        "MAX_PDF_BYTES": str(10 * 1024 * 1024),
+        "MAX_PDF_BYTES": str(100 * 1024 * 1024),
         "MAX_PDF_PAGES": "50",
         "MAX_IMAGE_PIXELS": "40000000",
+        "MAX_DOCUMENT_RASTER_PIXELS": "120000000",
         "JOB_TIMEOUT_SECONDS": "600",
         "WORKER_CONCURRENCY": "1",
         "RETENTION_RECONCILIATION_LEASE_SECONDS": "300",
