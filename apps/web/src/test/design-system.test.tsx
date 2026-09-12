@@ -270,4 +270,14 @@ describe("SplitBind design system", () => {
     expect(document.querySelector(".page-heading")).toHaveAttribute("data-motion-block");
   });
 
+  it("holds the page shape while the session is being checked", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(() => new Promise(() => {})));
+
+    renderApp("/history");
+
+    const status = await screen.findByRole("status", { name: "Đang kiểm tra phiên đăng nhập" });
+    expect(status).toBeVisible();
+    expect(status.querySelectorAll(".session-skeleton-line").length).toBeGreaterThanOrEqual(3);
+  });
+
 });
