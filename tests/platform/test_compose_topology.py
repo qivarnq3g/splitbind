@@ -195,6 +195,12 @@ class ComposeTopologyTest(unittest.TestCase):
                     "published": "443",
                     "protocol": "tcp",
                 },
+                {
+                    "mode": "ingress",
+                    "target": 8443,
+                    "published": "443",
+                    "protocol": "udp",
+                },
             ],
         )
         for name in ("api", "worker"):

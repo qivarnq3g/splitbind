@@ -18,6 +18,9 @@ services:
       - target: 8443
         published: "443"
         protocol: tcp
+      - target: 8443
+        published: "443"
+        protocol: udp
     environment:
       SPLITBIND_HOSTNAME: ${SPLITBIND_HOSTNAME:?SPLITBIND_HOSTNAME is required}
       ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL is required}

@@ -37,6 +37,7 @@ class CaddyfileValidatorTest(unittest.TestCase):
                 },
                 "site_label": "{$SPLITBIND_HOSTNAME}",
                 "encodings": ["zstd", "gzip"],
+                "header_mode": "deferred_set",
                 "headers": {
                     "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
                     "X-Content-Type-Options": "nosniff",
@@ -48,6 +49,7 @@ class CaddyfileValidatorTest(unittest.TestCase):
                         "img-src 'self' data: blob:; object-src 'none'; base-uri 'self'; "
                         "frame-ancestors 'none'"
                     ),
+                    "Alt-Svc": 'h3=":443"; ma=2592000',
                 },
                 "routes": {
                     "/api/*": {"reverse_proxy": "api:8000"},
@@ -73,6 +75,12 @@ class CaddyfileValidatorTest(unittest.TestCase):
                 1,
             ),
             "unbalanced block": valid.rsplit("}", 1)[0],
+            "non-deferred header duplicates the upstream value": valid.replace(
+                ">Referrer-Policy", "Referrer-Policy", 1
+            ),
+            "Alt-Svc left to advertise the internal port": valid.replace(
+                '>Alt-Svc "h3=\\":443\\"; ma=2592000"\n', "", 1
+            ),
         }
         for name, content in mutations.items():
             with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:

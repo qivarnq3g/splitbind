@@ -202,3 +202,16 @@ def test_validator_rejects_a_host_file_mounted_over_application_code():
         assert "bind-mount" in str(error)
     else:
         raise AssertionError("a host file mounted over /app must fail the contract")
+
+
+def test_caddy_publishes_https_over_both_tcp_and_udp_so_http3_is_reachable():
+    rendered = _render_production()
+    published = {
+        (int(item["published"]), item.get("protocol", "tcp"))
+        for item in rendered["services"]["caddy"].get("ports", [])
+    }
+    assert (443, "tcp") in published
+    assert (443, "udp") in published, (
+        "Caddy advertises HTTP/3 over Alt-Svc; without the UDP publication the "
+        "advertisement points at a port nothing listens on"
+    )
