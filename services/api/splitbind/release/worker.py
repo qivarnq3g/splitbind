@@ -17,10 +17,13 @@ from splitbind.demo.worker import (
     stage_next_created_job,
 )
 from splitbind.jobs.models import Job, JobKind, JobStatus
+from splitbind.observability import get_logger, log_swallowed
 from splitbind.jobs.state import transition_job
 from splitbind.release.manifest import load_manifest_signing_key
 from splitbind.release.mode import integrity_release_enabled
 
+
+logger = get_logger("splitbind.release.worker")
 
 INTEGRITY_DEADLINE_ERROR_CODE = "INTEGRITY_JOB_DEADLINE_EXCEEDED"
 INTEGRITY_TIMEOUT_ERROR_CODE = "INTEGRITY_JOB_TIMEOUT_EXCEEDED"
@@ -118,7 +121,15 @@ def process_integrity_cycle(storage, now: datetime) -> WorkerCycleResult | None:
             )
         else:
             return WorkerCycleResult(job.id, job.kind, "INTEGRITY_JOB_KIND_INVALID")
-    except Exception:
+    except Exception as error:
+        log_swallowed(
+            logger,
+            error,
+            action="cycle",
+            job=job.id,
+            kind=job.kind,
+            code="INTEGRITY_JOB_PROCESSING_FAILED",
+        )
         return WorkerCycleResult(job.id, job.kind, "INTEGRITY_JOB_PROCESSING_FAILED")
     return WorkerCycleResult(job.id, job.kind, "OK")
 
