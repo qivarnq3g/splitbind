@@ -15,9 +15,9 @@ export function VerificationSection() {
         </p>
         <p>
           Kết quả tách bạch hai câu hỏi về tính toàn vẹn: tệp có khớp chính xác
-          đến từng byte với một bản đã cấp phát hay không, và hồ sơ của bản đó có
-          bị sửa hay không. Những gì hệ thống chưa kết luận được thì nêu riêng,
-          không gộp vào một phán quyết chung.
+          đến từng byte với một bản đã cấp phát hay không, và hồ sơ của bản đó
+          có còn nguyên vẹn hay không. Những gì hệ thống chưa kết luận được thì
+          nêu riêng, không gộp vào một phán quyết chung.
         </p>
       </div>
     </section>

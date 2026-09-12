@@ -77,9 +77,6 @@
   letter-spacing: -0.02em;
   color: var(--color-ink);
 }
-.landing-section p {
-  color: var(--color-ink-2);
-}
 .landing-hero {
   padding-block: var(--space-3xl) var(--space-2xl);
 }

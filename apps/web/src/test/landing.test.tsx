@@ -97,6 +97,10 @@ describe("SplitBind landing page", () => {
 
     await screen.findByRole("banner", { name: "Giới thiệu SplitBind" });
     expect(document.querySelectorAll("[data-landing-section]")).toHaveLength(7);
+    expect(
+      Array.from(document.querySelectorAll<HTMLElement>("[data-landing-section]"))
+        .map((section) => section.dataset.landingSection),
+    ).toEqual(["01", "02", "03", "04", "05", "06", "07"]);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
   });
 
