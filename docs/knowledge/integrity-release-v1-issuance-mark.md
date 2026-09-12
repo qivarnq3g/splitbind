@@ -70,3 +70,26 @@ else:
 `visible_marker` is `integrity_mode`, so the two paths are mutually exclusive and `embed_fingerprint_v2` is unreachable in production. The honest phrasing is that production runs the visible-marker path and performs no fingerprint embedding at all; V2 is the generation the research codec belongs to, not something the running release executes.
 
 The distinction matters because these two lines are the ones a reader reaches for when asking "so what is actually deployed", and they say the opposite of the rest of the document.
+
+## The verify form accepts images the release can never match
+
+Found 2026-09-12 by reading source, and provable rather than probabilistic.
+
+`VerifyDocumentPage.tsx:113` advertises `accept="application/pdf,image/png,image/jpeg,.pdf,.png,.jpg,.jpeg"` and the help text at `:129` reads "PDF, PNG hoặc JPEG". But in integrity mode the whole of verification is one lookup, `verification.py:717-720`:
+
+```python
+Issuance.objects.select_for_update()
+    .filter(organization_id=organization_id, output_sha256=input_sha256)
+```
+
+`output_sha256` is the digest of the issued **PDF**. A PNG or JPEG cannot share a SHA-256 with a PDF, because the byte streams differ from their first bytes onward. So the probability that an uploaded image produces a match is not small, it is exactly zero. Every image upload returns "no matching issuance found", every time, by construction.
+
+Each half of this is individually defensible and together they mislead. The upload control is honest about what the research generation is designed to handle. The result copy is honest that no match means no issuance was located, not that the file was edited. What no screen says is that for this file type, under this release, the outcome was decided before the upload began.
+
+Options, recorded so the tradeoff is not re-derived:
+
+1. Narrow the accept list to PDF while `integrity_release_v1` is the active algorithm. One line, and the form then offers exactly what the release can answer.
+2. Keep the wider accept list and say, at the control rather than in the result, that image recovery belongs to the unreleased fingerprint path so an image will come back unmatched.
+3. Ship the research fingerprint path. Not available: V3 reaches 0.750 on JPEG-70 against a 0.95 release gate, `profile_promoted` is False, and its evidence scope is `research_measurement_only`.
+
+The general lesson, which outlives this release: an input control is a claim about capability. When a feature flag narrows what the backend can do, every control that fed the wider path has to narrow with it, or the product keeps inviting work it cannot do.

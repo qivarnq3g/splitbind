@@ -227,4 +227,52 @@ describe("verification browser workflow", () => {
     expect(await screen.findByText(expected)).toBeVisible();
     expect(screen.queryByText(/Bằng chứng sẽ xuất hiện/)).not.toBeInTheDocument();
   });
+
+  function stubCapabilities(algorithmLabel: string | null) {
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async (input) => {
+      const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
+      if (path === "/api/v1/demo/capabilities") {
+        return json(algorithmLabel === null ? { enabled: false } : { enabled: false, algorithm_label: algorithmLabel });
+      }
+      return json(session("verifier"));
+    }));
+  }
+
+  it("offers only PDF while the release can verify nothing else", async () => {
+    stubCapabilities("integrity_release_v1");
+    renderApp();
+
+    const input = await screen.findByLabelText("Tệp cần kiểm chứng");
+    await waitFor(() => expect(input).toHaveAttribute("accept", "application/pdf,.pdf"));
+    expect(input.getAttribute("accept")).not.toMatch(/image|png|jpe?g/i);
+    expect(screen.getByText(/^PDF · tối đa 10 MiB/)).toBeVisible();
+    expect(screen.getByText(/Kiểm tra ảnh thuộc đường nhận diện dấu vết/)).toBeVisible();
+  });
+
+  it("offers images again once the release can act on them", async () => {
+    stubCapabilities("experimental_unreleased_fingerprint_v2");
+    renderApp();
+
+    const input = await screen.findByLabelText("Tệp cần kiểm chứng");
+    await waitFor(() => expect(input.getAttribute("accept")).toMatch(/image\/png/));
+    expect(screen.getByText(/PDF, PNG hoặc JPEG/)).toBeVisible();
+    expect(screen.queryByText(/Kiểm tra ảnh thuộc đường nhận diện dấu vết/)).not.toBeInTheDocument();
+  });
+
+  it("narrows to PDF when the capability is unknown, rather than guessing wide", async () => {
+    stubCapabilities(null);
+    renderApp();
+
+    const input = await screen.findByLabelText("Tệp cần kiểm chứng");
+    await waitFor(() => expect(input).toHaveAttribute("accept", "application/pdf,.pdf"));
+  });
+
+  it("rejects an image in the validator, which drag and drop cannot bypass", () => {
+    const png = new File(["png"], "sample.png", { type: "image/png" });
+
+    expect(() => validateVerificationFile(png, true)).toThrow(/không phải PDF/);
+    expect(() => validateVerificationFile(png, false)).not.toThrow();
+    expect(() => validateVerificationFile(png)).not.toThrow();
+    expect(() => validateVerificationFile(new File(["pdf"], "s.pdf", { type: "application/pdf" }), true)).not.toThrow();
+  });
 });
