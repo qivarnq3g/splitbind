@@ -9,9 +9,9 @@ export function BoundarySection() {
         <p className="landing-eyebrow">05</p>
         <h2 id="bien-gioi-bang-chung">Những điều hệ thống không kết luận</h2>
         <p>
-          Bản đang chạy đối chiếu những tệp khớp chính xác. Khi không tìm được bản
-          cấp phát tương ứng, kết quả nói rằng chưa xác định được nguồn, và đó
-          không phải bằng chứng rằng tệp đã bị chỉnh sửa.
+          Bản đang chạy chỉ đối chiếu được những tệp khớp chính xác. Khi không tìm
+          được bản cấp phát tương ứng, kết quả cho biết chưa xác định được nguồn,
+          và đó không phải bằng chứng rằng tệp đã bị chỉnh sửa.
         </p>
         <p>
           Thủy vân số không bao giờ là bằng chứng tuyệt đối về người làm rò rỉ tài

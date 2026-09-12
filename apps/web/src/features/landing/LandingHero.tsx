@@ -14,7 +14,7 @@ export function LandingHero() {
         </h1>
         <p className="landing-lede">
           Mỗi người nhận được một bản riêng. Khi một tệp quay lại, hệ thống đối
-          chiếu nó với hồ sơ đã cấp phát và trả lời bằng bằng chứng kỹ thuật.
+          chiếu nó với hồ sơ đã cấp phát và trả lời kèm bằng chứng kỹ thuật.
         </p>
         <div className="landing-actions">
           <Link className="button button-primary" to="/login">

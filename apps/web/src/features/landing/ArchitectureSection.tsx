@@ -9,8 +9,8 @@ export function ArchitectureSection() {
         <p className="landing-eyebrow">06</p>
         <h2 id="he-thong-dung-bang-gi">Hệ thống dựng bằng gì</h2>
         <p>
-          Hệ thống chia thành các thành phần có vai trò tách bạch, để phần xử lý
-          nặng không nằm chung với phần phục vụ giao diện.
+          Các thành phần được chia theo vai trò tách bạch, để khối xử lý nặng
+          không nằm chung với khối phục vụ giao diện.
         </p>
         <dl className="landing-stack">
           <div>
@@ -30,8 +30,8 @@ export function ArchitectureSection() {
           <div>
             <dt>Hàng đợi xử lý bất đồng bộ</dt>
             <dd>
-              Việc dựng bản cấp phát và việc xác minh chạy nền, tách khỏi yêu cầu
-              của trình duyệt.
+              Dựng bản cấp phát và xác minh đều chạy nền, tách khỏi yêu cầu của
+              trình duyệt.
             </dd>
           </div>
           <div>
@@ -41,15 +41,15 @@ export function ArchitectureSection() {
           <div>
             <dt>Lưu trữ đối tượng</dt>
             <dd>
-              Tệp nằm ở kho lưu trữ đối tượng, chỉ mở bằng liên kết có thời hạn
-              ngắn.
+              Tệp gốc và tệp đã cấp phát nằm ở đây, chỉ mở bằng liên kết có thời
+              hạn ngắn.
             </dd>
           </div>
           <div>
             <dt>Caddy</dt>
             <dd>
-              Đứng ở biên, nhận kết nối đã mã hóa từ trình duyệt rồi chuyển
-              tiếp vào các dịch vụ bên trong.
+              Đứng ở biên, nhận kết nối đã mã hóa từ trình duyệt rồi chuyển tiếp
+              vào các dịch vụ bên trong.
             </dd>
           </div>
         </dl>
