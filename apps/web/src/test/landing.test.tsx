@@ -181,3 +181,41 @@ describe("SplitBind landing page", () => {
     expect(boundary?.style.opacity).not.toBe("0");
   });
 });
+
+describe("root route while the session is still resolving", () => {
+  it("never shows the landing page to a visitor who turns out to be signed in", async () => {
+    let releaseSession: (() => void) | null = null;
+    const held = new Promise<void>((resolve) => {
+      releaseSession = resolve;
+    });
+
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async (input) => {
+      const request = input instanceof Request ? input : new Request(input);
+      const url = new URL(request.url, "http://localhost");
+      if (url.pathname === "/api/v1/auth/session") {
+        await held;
+        return json({
+          authenticated: true,
+          user: {
+            id: USER_ID,
+            username: "issuer",
+            role: "issuer",
+            organization: { id: ORGANIZATION_ID, name: "SplitBind", slug: "splitbind" },
+          },
+        });
+      }
+      return json({ detail: "Not found." }, 404);
+    }));
+
+    renderApp("/");
+
+    // While the session is unknown the root route must hold, not guess.
+    expect(await screen.findByRole("status", { name: "Đang kiểm tra phiên đăng nhập" })).toBeVisible();
+    expect(screen.queryByRole("heading", { level: 1, name: /Tài liệu có nguồn/ })).toBeNull();
+
+    releaseSession!();
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Tạo bản cấp phát" })).toBeVisible();
+    expect(screen.queryByRole("heading", { level: 1, name: /Tài liệu có nguồn/ })).toBeNull();
+  });
+});

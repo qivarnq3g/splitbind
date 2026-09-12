@@ -30,8 +30,24 @@ function TitledOutlet() {
   );
 }
 
+function SessionHold() {
+  return (
+    <main
+      className="workspace-page session-skeleton"
+      role="status"
+      aria-label="Đang kiểm tra phiên đăng nhập"
+      aria-busy="true"
+    >
+      <span className="session-skeleton-line session-skeleton-title" />
+      <span className="session-skeleton-line" />
+      <span className="session-skeleton-line session-skeleton-short" />
+    </main>
+  );
+}
+
 function HomeRoute() {
   const session = useSession();
+  if (session.isPending) return <SessionHold />;
   if (session.data?.authenticated) {
     return <Navigate to={canCreateIssuance(session.data?.user?.role) ? "/issue" : "/verify"} replace />;
   }
@@ -41,19 +57,7 @@ function HomeRoute() {
 function SessionBoundary() {
   const session = useSession();
   const location = useLocation();
-  if (session.isPending)
-    return (
-      <main
-        className="workspace-page session-skeleton"
-        role="status"
-        aria-label="Đang kiểm tra phiên đăng nhập"
-        aria-busy="true"
-      >
-        <span className="session-skeleton-line session-skeleton-title" />
-        <span className="session-skeleton-line" />
-        <span className="session-skeleton-line session-skeleton-short" />
-      </main>
-    );
+  if (session.isPending) return <SessionHold />;
   if (session.error || !session.data?.authenticated) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
