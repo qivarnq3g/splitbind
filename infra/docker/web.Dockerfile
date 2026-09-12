@@ -12,6 +12,8 @@ RUN npm run build --workspace @splitbind/web
 
 FROM ${CADDY_BASE_IMAGE} AS runtime
 
+LABEL org.opencontainers.image.source="https://github.com/qivarnq3g/splitbind"
+
 RUN mkdir -p /data/caddy /config/caddy /srv/web \
     && chown -R 10002:10002 /data /config /srv/web
 COPY infra/caddy/Caddyfile /etc/caddy/Caddyfile
