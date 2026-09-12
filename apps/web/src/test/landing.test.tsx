@@ -138,4 +138,46 @@ describe("SplitBind landing page", () => {
     await screen.findByRole("banner", { name: "Giới thiệu SplitBind" });
     expect(fetchMock.mock.calls.filter(([input]) => String(input).includes("/api/v1"))).toHaveLength(0);
   });
+
+  it("leaves every section fully visible when reduced motion is requested", async () => {
+    vi.stubGlobal("matchMedia", vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes("reduce"),
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })));
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async () => json({
+      authenticated: false,
+      csrf_token: "csrf-token",
+      user: null,
+    })));
+
+    renderApp("/");
+
+    await screen.findByRole("banner", { name: "Giới thiệu SplitBind" });
+    const sections = Array.from(document.querySelectorAll<HTMLElement>("[data-landing-section]"));
+    expect(sections).toHaveLength(7);
+    for (const section of sections) {
+      expect(section.style.opacity).not.toBe("0");
+    }
+  });
+
+  it("never lowers the opacity of the evidence boundary section", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async () => json({
+      authenticated: false,
+      csrf_token: "csrf-token",
+      user: null,
+    })));
+
+    renderApp("/");
+
+    await screen.findByRole("banner", { name: "Giới thiệu SplitBind" });
+    const boundary = document.querySelector<HTMLElement>('[data-landing-section="05"]');
+    expect(boundary).not.toBeNull();
+    expect(boundary?.style.opacity).not.toBe("0");
+  });
 });

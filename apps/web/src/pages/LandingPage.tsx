@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { Link } from "react-router-dom";
 
 import { ArchitectureSection } from "../features/landing/ArchitectureSection";
@@ -7,11 +8,14 @@ import { LandingClosing } from "../features/landing/LandingClosing";
 import { LandingHero } from "../features/landing/LandingHero";
 import { ProblemSection } from "../features/landing/ProblemSection";
 import { VerificationSection } from "../features/landing/VerificationSection";
+import { useScrollReveal } from "../features/landing/useScrollReveal";
 import "../styles/landing.css";
 
 export function LandingPage() {
+  const root = useRef<HTMLDivElement>(null);
+  useScrollReveal(root);
   return (
-    <div className="landing">
+    <div className="landing" ref={root}>
       <a className="skip-link" href="#noi-dung-chinh">
         Đến nội dung chính
       </a>

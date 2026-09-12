@@ -44,6 +44,8 @@
   --dur-route: 260ms;
   --dur-stagger: 45ms;
   --dur-hover: 160ms;
+  --dur-reveal: 620ms;
+  --landing-reveal-shift: 18px;
   --color-rule-hover: oklch(48% 0.02 160);
   --radius-input: 6px;
   --container-max: 70rem;
