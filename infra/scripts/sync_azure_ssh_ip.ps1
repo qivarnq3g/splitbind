@@ -3,8 +3,8 @@ param(
     [string]$ResourceGroup = "rg-splitbind-prod",
     [string]$NsgName = "nsg-splitbind-prod",
     [string]$RuleName = "AllowSshFromAdmin",
-    [string]$VmHost = "PRODUCTION_VM_HOST",
-    [string]$AdminUser = "PRODUCTION_VM_ADMIN",
+    [string]$VmHost = $env:SPLITBIND_VM_HOST,
+    [string]$AdminUser = $env:SPLITBIND_VM_ADMIN_USER,
     [string]$SshKeyPath = "$env:USERPROFILE\.ssh\splitbind_azure_ed25519",
     [ValidateSet("32", "24", "16")]
     [string]$SubnetMask = "32"
@@ -12,6 +12,13 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+$missingTarget = @()
+if (-not $VmHost) { $missingTarget += "SPLITBIND_VM_HOST (or -VmHost)" }
+if (-not $AdminUser) { $missingTarget += "SPLITBIND_VM_ADMIN_USER (or -AdminUser)" }
+if ($missingTarget.Count -gt 0) {
+    throw "Missing deployment target settings: $($missingTarget -join ', '). The production host, administrator and endpoints are deliberately not stored in this repository; see infra/scripts/README.md."
+}
 
 Write-Host "Checking current workstation public IPv4 address..." -ForegroundColor Cyan
 $currentIp = (Invoke-RestMethod -Uri "https://api.ipify.org").Trim()

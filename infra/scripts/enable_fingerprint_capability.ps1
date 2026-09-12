@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
-    [string]$VmHost = "PRODUCTION_VM_HOST",
-    [string]$AdminUser = "PRODUCTION_VM_ADMIN",
+    [string]$VmHost = $env:SPLITBIND_VM_HOST,
+    [string]$AdminUser = $env:SPLITBIND_VM_ADMIN_USER,
     [string]$SshKeyPath = "$env:USERPROFILE\.ssh\splitbind_azure_ed25519",
     [ValidateSet("true", "false")]
     [string]$Enabled = "true",
@@ -10,6 +10,13 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+$missingTarget = @()
+if (-not $VmHost) { $missingTarget += "SPLITBIND_VM_HOST (or -VmHost)" }
+if (-not $AdminUser) { $missingTarget += "SPLITBIND_VM_ADMIN_USER (or -AdminUser)" }
+if ($missingTarget.Count -gt 0) {
+    throw "Missing deployment target settings: $($missingTarget -join ', '). The production host, administrator and endpoints are deliberately not stored in this repository; see infra/scripts/README.md."
+}
 
 $remoteRoot = "/home/$AdminUser/splitbind"
 $composeFile = "$remoteRoot/compose/compose.yaml"

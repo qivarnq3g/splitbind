@@ -1,15 +1,15 @@
 [CmdletBinding()]
 param(
-    [string]$VmHost = "PRODUCTION_VM_HOST",
-    [string]$AdminUser = "PRODUCTION_VM_ADMIN",
+    [string]$VmHost = $env:SPLITBIND_VM_HOST,
+    [string]$AdminUser = $env:SPLITBIND_VM_ADMIN_USER,
     [string]$SshKeyPath = "$env:USERPROFILE\.ssh\splitbind_azure_ed25519",
     [string]$Hostname = "splitbind.qivarn.id.vn",
-    [string]$AcmeEmail = "operator@example.invalid",
+    [string]$AcmeEmail = $env:SPLITBIND_ACME_EMAIL,
     [string]$ApiImage = "ghcr.io/qivarnq3g/splitbind-api@sha256:3f5fd3db7dd6f37fe655367bd68671b16a281f9cf054f262a5adb8e2298b6caa",
     [string]$WebImage = "ghcr.io/qivarnq3g/splitbind-web@sha256:532ef439f2343d3fb7c7cd49d300141a88c53ebb9f37e3d2f724930762961d68",
-    [string]$DatabaseHost = $(if ($env:SPLITBIND_DATABASE_HOST) { $env:SPLITBIND_DATABASE_HOST } else { "ep-production.neon.tech" }),
+    [string]$DatabaseHost = $env:SPLITBIND_DATABASE_HOST,
     [string]$DatabaseUrl = $env:SPLITBIND_DATABASE_URL,
-    [string]$R2Endpoint = $(if ($env:SPLITBIND_R2_ENDPOINT) { $env:SPLITBIND_R2_ENDPOINT } else { "https://R2ACCOUNTIDREDACTED000000000000.r2.cloudflarestorage.com" }),
+    [string]$R2Endpoint = $env:SPLITBIND_R2_ENDPOINT,
     [string]$R2Bucket = $(if ($env:SPLITBIND_R2_BUCKET) { $env:SPLITBIND_R2_BUCKET } else { "splitbind-storage" }),
     [string]$R2AccessKey = $env:SPLITBIND_R2_ACCESS_KEY,
     [string]$R2SecretKey = $env:SPLITBIND_R2_SECRET_KEY,
@@ -21,6 +21,16 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+$missingTarget = @()
+if (-not $VmHost) { $missingTarget += "SPLITBIND_VM_HOST (or -VmHost)" }
+if (-not $AdminUser) { $missingTarget += "SPLITBIND_VM_ADMIN_USER (or -AdminUser)" }
+if (-not $AcmeEmail) { $missingTarget += "SPLITBIND_ACME_EMAIL (or -AcmeEmail)" }
+if (-not $DatabaseHost) { $missingTarget += "SPLITBIND_DATABASE_HOST (or -DatabaseHost)" }
+if (-not $R2Endpoint) { $missingTarget += "SPLITBIND_R2_ENDPOINT (or -R2Endpoint)" }
+if ($missingTarget.Count -gt 0) {
+    throw "Missing deployment target settings: $($missingTarget -join ', '). The production host, administrator and endpoints are deliberately not stored in this repository; see infra/scripts/README.md."
+}
 
 if (-not $DatabaseUrl -or -not $R2AccessKey -or -not $R2SecretKey -or -not $AdminPassword) {
     throw "Missing required deployment credentials. Pass -DatabaseUrl, -R2AccessKey, -R2SecretKey, -AdminPassword or define their SPLITBIND_* environment variables."
