@@ -7,7 +7,7 @@ param(
     [string]$AdminUser = "PRODUCTION_VM_ADMIN",
     [string]$SshKeyPath = "$env:USERPROFILE\.ssh\splitbind_azure_ed25519",
     [ValidateSet("32", "24", "16")]
-    [string]$SubnetMask = "16"
+    [string]$SubnetMask = "32"
 )
 
 Set-StrictMode -Version Latest
