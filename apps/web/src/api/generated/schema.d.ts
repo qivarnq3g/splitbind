@@ -418,7 +418,7 @@ export interface components {
         Readiness: {
             status: components["schemas"]["ReadinessStatusEnum"];
             components: {
-                [key: string]: "up" | "down";
+                [key: string]: "up" | "down" | "not_applicable";
             };
         };
         /**

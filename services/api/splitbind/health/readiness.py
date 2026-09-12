@@ -5,6 +5,14 @@ from django.utils import timezone
 
 from splitbind.access.models import SigningKey, SigningKeyStatus, validate_ed25519_public_pem
 from splitbind.integrations.storage.s3 import S3ObjectStorage
+from splitbind.release.mode import integrity_release_enabled
+
+
+NOT_APPLICABLE = "not_applicable"
+
+
+def broker_required() -> bool:
+    return not integrity_release_enabled(getattr(settings, "SPLITBIND_RELEASE_MODE", None))
 
 
 def database_ready() -> bool:
@@ -45,17 +53,20 @@ def public_key_registry_ready() -> bool:
 def readiness() -> tuple[dict[str, object], int]:
     checks = {
         "database": database_ready,
-        "broker": broker_ready,
+        "broker": broker_ready if broker_required() else None,
         "storage_config": storage_configuration_ready,
         "public_key_registry": public_key_registry_ready,
     }
     components = {}
     for name, check in checks.items():
+        if check is None:
+            components[name] = NOT_APPLICABLE
+            continue
         try:
             components[name] = "up" if check() else "down"
         except Exception:
             components[name] = "down"
-    is_ready = all(value == "up" for value in components.values())
+    is_ready = all(value in ("up", NOT_APPLICABLE) for value in components.values())
     return {
         "status": "ready" if is_ready else "not_ready",
         "components": components,

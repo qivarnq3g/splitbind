@@ -175,6 +175,6 @@ SPECTACULAR_SETTINGS = {
         "JobKindEnum": ["issuance", "verification"],
         "HealthStatusEnum": ["ok"],
         "ReadinessStatusEnum": ["ready", "not_ready"],
-        "ComponentStatusEnum": ["up", "down"],
+        "ComponentStatusEnum": ["up", "down", "not_applicable"],
     },
 }

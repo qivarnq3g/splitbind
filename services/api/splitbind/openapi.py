@@ -174,7 +174,9 @@ class LiveSerializer(serializers.Serializer):
 
 class ReadinessSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=["ready", "not_ready"])
-    components = serializers.DictField(child=serializers.ChoiceField(choices=["up", "down"]))
+    components = serializers.DictField(
+        child=serializers.ChoiceField(choices=["up", "down", "not_applicable"])
+    )
 
 
 class DemoProcessingLimitsSerializer(serializers.Serializer):

@@ -1594,10 +1594,11 @@
                         "additionalProperties": {
                             "enum": [
                                 "up",
-                                "down"
+                                "down",
+                                "not_applicable"
                             ],
                             "type": "string",
-                            "description": "* `up` - up\n* `down` - down"
+                            "description": "* `up` - up\n* `down` - down\n* `not_applicable` - not_applicable"
                         }
                     }
                 },
