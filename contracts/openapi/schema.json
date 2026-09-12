@@ -1830,7 +1830,7 @@
                     },
                     "size_bytes": {
                         "type": "integer",
-                        "maximum": 10485760,
+                        "maximum": 104857600,
                         "minimum": 1
                     },
                     "sha256": {
