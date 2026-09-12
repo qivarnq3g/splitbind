@@ -124,6 +124,36 @@ if (-not $SkipComposeSync) {
     }
 }
 
+$requiredLimits = [ordered]@{
+    "MAX_PDF_BYTES"                          = "104857600"
+    "MAX_PDF_PAGES"                          = "50"
+    "MAX_IMAGE_PIXELS"                       = "40000000"
+    "MAX_DOCUMENT_RASTER_PIXELS"             = "120000000"
+    "JOB_TIMEOUT_SECONDS"                    = "600"
+    "WORKER_CONCURRENCY"                     = "1"
+    "RETENTION_RECONCILIATION_LEASE_SECONDS" = "600"
+}
+
+Write-Host "Reconciling required runtime limits in the API and worker environment files." -ForegroundColor Yellow
+foreach ($envName in @("api.env", "worker.env")) {
+    $envPath = "$remoteRoot/secrets/$envName"
+    Invoke-Remote "cp $envPath $rollbackDir/$envName.bak && chmod 600 $rollbackDir/$envName.bak" | Out-Null
+    $deletes = ($requiredLimits.Keys | ForEach-Object { "/^$_=/d" }) -join ";"
+    $appends = ($requiredLimits.GetEnumerator() | ForEach-Object { "echo '$($_.Key)=$($_.Value)'" }) -join "; "
+    Invoke-Remote "sed -i '$deletes' $envPath" | Out-Null
+    Invoke-Remote "{ $appends ; } >> $envPath" | Out-Null
+    Invoke-Remote "chmod 600 $envPath" | Out-Null
+    $observed = Invoke-Remote "grep -E '^(MAX_|JOB_TIMEOUT_SECONDS|WORKER_CONCURRENCY|RETENTION_)' $envPath | sort"
+    Write-Host "  ${envName}:"
+    foreach ($line in $observed) { Write-Host "    $line" }
+    foreach ($limit in $requiredLimits.GetEnumerator()) {
+        $expected = "$($limit.Key)=$($limit.Value)"
+        if (($observed -join "`n") -notmatch [regex]::Escape($expected)) {
+            throw "$envName is missing $expected after reconciliation; the API would refuse to start."
+        }
+    }
+}
+
 Write-Host "Pulling immutable container images on VM." -ForegroundColor Yellow
 Invoke-Remote "docker pull $ApiImage && docker pull $WebImage" | Out-Null
 Write-Host "Images pulled." -ForegroundColor Green
