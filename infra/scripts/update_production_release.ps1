@@ -22,6 +22,7 @@ $rollbackDir = "$remoteRoot/rollbacks/$ReleaseName"
 
 function Invoke-Remote {
     param([Parameter(Mandatory = $true)][string]$Command)
+    $Command = $Command -replace "`r", ""
     $previous = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     try {
@@ -96,7 +97,7 @@ python3 -m json.tool $rollbackDir/metadata.json > /dev/null && \
 echo BACKUP_SUCCESS
 "@
 $sshBackup = Invoke-Remote $backupCmd
-if ($sshBackup -notmatch "BACKUP_SUCCESS") {
+if (($sshBackup -join "`n") -notmatch "BACKUP_SUCCESS") {
     throw "Rollback backup failed on VM: $sshBackup"
 }
 Write-Host "Rollback state and metadata saved and validated." -ForegroundColor Green
