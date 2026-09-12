@@ -125,9 +125,17 @@ if (-not $SkipComposeSync) {
     }
 }
 
+Write-Host "Pulling immutable container images on VM." -ForegroundColor Yellow
+Invoke-Remote "docker pull $ApiImage && docker pull $WebImage" | Out-Null
+Write-Host "Images pulled." -ForegroundColor Green
+
 Write-Host "Reading the runtime limits the API image itself requires." -ForegroundColor Yellow
 $limitsJson = Invoke-Remote "docker run --rm --entrypoint python $ApiImage -c 'import json; from config.limits import PRODUCTION_RUNTIME_LIMITS as L; print(json.dumps(L))'"
-$requiredLimits = ($limitsJson -join "") | ConvertFrom-Json
+$limitsLine = @($limitsJson) | Where-Object { $_ -match '^\s*\{.*\}\s*$' } | Select-Object -Last 1
+if (-not $limitsLine) {
+    throw "The API image did not print a JSON limit table. Output was:`n$($limitsJson -join "`n")"
+}
+$requiredLimits = $limitsLine | ConvertFrom-Json
 if (-not $requiredLimits.PSObject.Properties.Name) {
     throw "The API image did not report PRODUCTION_RUNTIME_LIMITS; refusing to guess the runtime limits."
 }
@@ -151,10 +159,6 @@ foreach ($envName in @("api.env", "worker.env")) {
         }
     }
 }
-
-Write-Host "Pulling immutable container images on VM." -ForegroundColor Yellow
-Invoke-Remote "docker pull $ApiImage && docker pull $WebImage" | Out-Null
-Write-Host "Images pulled." -ForegroundColor Green
 
 $runApi = "docker run --rm --env-file $remoteRoot/secrets/api.env -e SPLITBIND_RELEASE_MODE=integrity_v1"
 Write-Host "Migration state before the release:" -ForegroundColor Yellow
