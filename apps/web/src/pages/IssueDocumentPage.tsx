@@ -8,6 +8,7 @@ import { canCreateIssuance, useSession } from "../features/auth/session";
 import { SafeApiError } from "../features/shared/apiError";
 import {
   MAX_PDF_LABEL,
+  MAX_PDF_PAGES,
   type UploadStage,
   uploadIssuancePdf,
   validatePdf,
@@ -135,7 +136,7 @@ export function IssueDocumentPage() {
                 {validationError ??
                   (file
                     ? `${formatBytes(file.size)} · Tệp được chọn trên thiết bị, chưa tải lên.`
-                    : `PDF · tối đa ${MAX_PDF_LABEL} · PDF tối đa 50 trang`)}
+                    : `PDF · tối đa ${MAX_PDF_LABEL} · PDF tối đa ${MAX_PDF_PAGES} trang`)}
               </p>
             </div>
             <div className="field">
