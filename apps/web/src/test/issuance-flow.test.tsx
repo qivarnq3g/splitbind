@@ -222,6 +222,7 @@ describe("issuance browser workflow", () => {
     fireEvent.change(screen.getByLabelText(/Email người nhận/i), { target: { value: "student@example.com" } });
     fireEvent.submit(screen.getByRole("button", { name: "Tạo bản cấp phát" }).closest("form")!);
 
+    // MAX_PDF_BYTES is 100 * 1000 * 1000, so the decimal SI label 100 MB is exact.
     expect(await screen.findByRole("alert")).toHaveTextContent("Tệp vượt quá giới hạn 100 MB");
     expect(screen.getByRole("button", { name: "Tạo bản cấp phát" })).toBeDisabled();
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));

@@ -77,25 +77,27 @@ export function DocumentFileInput({
               : "Kéo tệp vào đây hoặc chọn từ thiết bị"}
           </span>
         </div>
-        <label className="file-trigger" htmlFor={id}>
-          {filename ? "Đổi tệp" : "Chọn tệp"}
-        </label>
+        <div className="file-actions">
+          <label className="file-trigger" htmlFor={id}>
+            {filename ? "Đổi tệp" : "Chọn tệp"}
+          </label>
+          {filename ? (
+            <button
+              className="file-remove"
+              type="button"
+              disabled={disabled}
+              aria-label="Bỏ tệp đã chọn"
+              onClick={() => {
+                if (input.current) input.current.value = "";
+                onChange(undefined);
+              }}
+            >
+              <X size={14} aria-hidden="true" />
+              Bỏ tệp
+            </button>
+          ) : null}
+        </div>
       </div>
-      {filename ? (
-        <button
-          className="remove-file"
-          type="button"
-          disabled={disabled}
-          aria-label="Bỏ tệp đã chọn"
-          onClick={() => {
-            if (input.current) input.current.value = "";
-            onChange(undefined);
-          }}
-        >
-          <X size={14} aria-hidden="true" />
-          Bỏ tệp
-        </button>
-      ) : null}
     </>
   );
 }

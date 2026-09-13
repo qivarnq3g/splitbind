@@ -23,7 +23,7 @@ def test_production_requires_every_limit_and_rejects_above_ceiling():
     missing.pop("MAX_PDF_BYTES")
     with pytest.raises(ImproperlyConfigured, match="MAX_PDF_BYTES"):
         load_runtime_limits("production", missing)
-    unsafe = dict(complete, MAX_PDF_BYTES=str(100 * 1024 * 1024 + 1))
+    unsafe = dict(complete, MAX_PDF_BYTES=str(SAFETY_CEILINGS["MAX_PDF_BYTES"] + 1))
     with pytest.raises(ImproperlyConfigured, match="MAX_PDF_BYTES"):
         load_runtime_limits("production", unsafe)
 

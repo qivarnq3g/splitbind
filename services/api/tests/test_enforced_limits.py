@@ -28,7 +28,7 @@ def test_no_module_constant_shadows_a_configured_limit():
 @pytest.mark.parametrize(
     ("name", "expected"),
     [
-        ("MAX_PDF_BYTES", 100 * 1024 * 1024),
+        ("MAX_PDF_BYTES", 100 * 1000 * 1000),
         ("MAX_PDF_PAGES", 50),
         ("MAX_IMAGE_PIXELS", 40_000_000),
         ("MAX_DOCUMENT_RASTER_PIXELS", 140_000_000),
@@ -59,16 +59,22 @@ def test_single_image_cap_stays_below_the_document_budget():
 
 def test_browser_and_server_agree_on_the_byte_ceiling():
     source = (WEB_ROOT / "src" / "features" / "uploads" / "uploadIssuance.ts").read_text(encoding="utf-8")
-    match = re.search(r"export const MAX_PDF_BYTES = (\d+) \* 1024 \* 1024;", source)
+    match = re.search(r"export const MAX_PDF_BYTES = (\d+) \* 1000 \* 1000;", source)
     assert match, "the browser byte ceiling is no longer declared in the expected form"
-    assert int(match.group(1)) * 1024 * 1024 == settings.MAX_PDF_BYTES
+    assert int(match.group(1)) * 1000 * 1000 == settings.MAX_PDF_BYTES
+    assert "export const MAX_PDF_LABEL = formatBytes(MAX_PDF_BYTES);" in source, (
+        "the displayed limit must be derived from the enforced constant, never typed out, "
+        "so the words and the number cannot drift apart"
+    )
 
 
 @pytest.mark.parametrize("page", ["IssueDocumentPage.tsx", "VerifyDocumentPage.tsx"])
 def test_help_text_states_the_limits_actually_enforced(page):
     source = (WEB_ROOT / "src" / "pages" / page).read_text(encoding="utf-8")
-    megabytes = settings.MAX_PDF_BYTES // (1024 * 1024)
-    assert f"tối đa {megabytes} MB" in source
+    assert "tối đa ${MAX_PDF_LABEL}" in source, (
+        "the byte limit in the help text must interpolate the derived label rather than "
+        "hard-code a number that can fall out of step with the server"
+    )
     assert f"PDF tối đa {settings.MAX_PDF_PAGES} trang" in source
 
 
