@@ -14,7 +14,6 @@ class ReleaseImagesWorkflowContractTest(unittest.TestCase):
 
         required_fragments = (
             "name: release-images",
-            "feat/splitbind-mvp",
             "integrity-v*",
             "pull_request:",
             "runs-on: ubuntu-24.04",
@@ -48,6 +47,12 @@ class ReleaseImagesWorkflowContractTest(unittest.TestCase):
         for fragment in required_fragments:
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, workflow)
+
+        trigger_block = workflow.split("concurrency:", 1)[0]
+        self.assertIn("push:", trigger_block)
+        self.assertIn("tags:", trigger_block)
+        self.assertIn("- integrity-v*", trigger_block)
+        self.assertNotIn("branches:", trigger_block)
 
         action_shas = {
             "actions/checkout": "11bd71901bbe5b1630ceea73d27597364c9af683",

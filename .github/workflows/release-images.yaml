@@ -2,8 +2,6 @@ name: release-images
 
 on:
   push:
-    branches:
-      - feat/splitbind-mvp
     tags:
       - integrity-v*
   pull_request:
