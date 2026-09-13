@@ -43,6 +43,10 @@ class ReleaseImagesWorkflowContractTest(unittest.TestCase):
             "retention-days: 1",
             "group: ${{ github.workflow }}-${{ github.ref }}",
             "cancel-in-progress: true",
+            "platforms: linux/amd64,linux/arm64",
+            "severity: CRITICAL,HIGH",
+            "exit-code: '1'",
+            "ignore-unfixed: true",
         )
         for fragment in required_fragments:
             with self.subTest(fragment=fragment):
@@ -62,6 +66,8 @@ class ReleaseImagesWorkflowContractTest(unittest.TestCase):
             "docker/login-action": "74a5d142397b4f367a81961eba4e8cd7edddf772",
             "docker/build-push-action": "263435318d21b8e681c14492fe198d362a7d2c83",
             "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02",
+            "docker/setup-qemu-action": "1f40c72289eff860ee54a304f1438e3cff362e0a",
+            "aquasecurity/trivy-action": "ed142fd0673e97e23eac54620cfb913e5ce36c25",
         }
         for action, sha in action_shas.items():
             with self.subTest(action=action):
