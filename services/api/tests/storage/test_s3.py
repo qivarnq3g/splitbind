@@ -10,6 +10,7 @@ from splitbind.integrations.storage.base import (
     collect_bounded_bytes,
 )
 from splitbind.integrations.storage.fake import FakeObjectStorage
+from splitbind.integrations.storage import s3 as s3_module
 from splitbind.integrations.storage.s3 import S3ObjectStorage
 
 
@@ -465,3 +466,35 @@ def test_fake_explicit_byte_conversion_fails_before_metadata_mutation():
 
     assert key not in storage.objects
     assert key not in storage.object_bytes
+
+
+def test_s3_client_is_built_with_bounded_timeouts_and_capped_retries(monkeypatch):
+    captured = {}
+
+    class _Boto3Stub:
+        @staticmethod
+        def client(service, **kwargs):
+            captured["service"] = service
+            captured["kwargs"] = kwargs
+            return object()
+
+    monkeypatch.setitem(__import__("sys").modules, "boto3", _Boto3Stub)
+    monkeypatch.setattr(
+        S3ObjectStorage, "validate_configuration", classmethod(lambda cls, **kwargs: None)
+    )
+
+    monkeypatch.setattr(
+        s3_module.settings, "OBJECT_STORAGE_ENDPOINT", "https://example.invalid", raising=False
+    )
+    monkeypatch.setattr(s3_module.settings, "OBJECT_STORAGE_BUCKET", "bucket", raising=False)
+    monkeypatch.setattr(s3_module.settings, "OBJECT_STORAGE_ACCESS_KEY", "key", raising=False)
+    monkeypatch.setattr(s3_module.settings, "OBJECT_STORAGE_SECRET_KEY", "secret", raising=False)
+
+    S3ObjectStorage.from_settings()
+
+    config = captured["kwargs"]["config"]
+    assert config.connect_timeout == s3_module.CONNECT_TIMEOUT_SECONDS
+    assert config.read_timeout == s3_module.READ_TIMEOUT_SECONDS
+    assert config.retries["max_attempts"] == s3_module.MAX_ATTEMPTS
+    assert config.retries["mode"] == "standard"
+    assert config.connect_timeout < 60 and config.read_timeout < 60
