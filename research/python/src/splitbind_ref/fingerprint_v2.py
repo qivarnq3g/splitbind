@@ -14,7 +14,7 @@ from numpy.typing import NDArray
 
 from splitbind_bench.metrics import compute_quality_metrics
 
-from .ecc import EccDecodeError, decode_ecc_with_erasures, encode_ecc
+from .ecc import EccDecodeError, decode_ecc_with_erasures, encode_ecc, erasure_ladder
 from .fingerprint_v2_codec import CodewordEvidence, embed_codeword_v2, extract_codeword_v2
 from .fingerprint_v2_profile import (
     FingerprintV2Profile,
@@ -263,10 +263,14 @@ def _decide_payload_votes(
 def _decode_payload_vote(
     evidence: CodewordEvidence, candidate_id: bytes, tile_ordinal: int
 ) -> _PayloadVoteV2 | None:
-    try:
-        payload = decode_ecc_with_erasures(evidence.codeword, evidence.erase_positions)
-        decoded = decode_payload(payload)
-    except (EccDecodeError, ValueError):
+    for erasures in erasure_ladder(evidence.erase_positions, evidence.erasure_ranking):
+        try:
+            payload = decode_ecc_with_erasures(evidence.codeword, erasures)
+            decoded = decode_payload(payload)
+        except (EccDecodeError, ValueError):
+            continue
+        break
+    else:
         return None
     expected = encode_ecc(payload)
     observed_bits = np.unpackbits(np.frombuffer(evidence.codeword, dtype=np.uint8), bitorder="big")

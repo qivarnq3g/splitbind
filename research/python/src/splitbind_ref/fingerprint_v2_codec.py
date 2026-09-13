@@ -10,6 +10,7 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
+from .ecc import rank_erasure_candidates
 from .dwt_dct_qim import dct2, haar_dwt2, haar_idwt2, idct2, qim_embed_pair, qim_extract_pair
 from .fingerprint_v2_profile import FingerprintV2Profile, candidate_identifier_v2
 
@@ -27,6 +28,7 @@ class CodewordEvidence:
     erase_positions: tuple[int, ...]
     mean_confidence: float
     bit_error_hint: float | None
+    erasure_ranking: tuple[int, ...] = ()
 
 
 def embed_codeword_v2(
@@ -85,6 +87,7 @@ def extract_codeword_v2(
     bit_count = _CODEWORD_BYTES * _BITS_PER_BYTE
     recovered_bits = np.empty(bit_count, dtype=np.uint8)
     erasures: set[int] = set()
+    byte_confidence = np.full(_CODEWORD_BYTES, np.inf, dtype=np.float64)
     confidence_sum = 0.0
     disagreement_sum = 0
     for bit_index in range(bit_count):
@@ -99,14 +102,19 @@ def extract_codeword_v2(
         recovered_bits[bit_index] = winner
         confidence_sum += winning_confidence
         disagreement_sum += int(np.count_nonzero(values != winner))
+        byte_index = bit_index // _BITS_PER_BYTE
+        byte_confidence[byte_index] = min(
+            byte_confidence[byte_index], winning_confidence
+        )
         if winning_confidence < profile.bit_confidence_min:
-            erasures.add(bit_index // _BITS_PER_BYTE)
+            erasures.add(byte_index)
 
     return CodewordEvidence(
         codeword=np.packbits(recovered_bits, bitorder="big").tobytes(),
         erase_positions=tuple(sorted(erasures)),
         mean_confidence=confidence_sum / bit_count,
         bit_error_hint=disagreement_sum / len(replica_bits),
+        erasure_ranking=rank_erasure_candidates(byte_confidence),
     )
 
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import numpy as np
+from numpy.typing import NDArray
 from reedsolo import RSCodec, ReedSolomonError
 
 from .contracts import payload_profile
@@ -9,6 +11,53 @@ from .contracts import payload_profile
 
 class EccDecodeError(ValueError):
     """Raised when a Reed-Solomon codeword cannot be decoded safely."""
+
+
+def erasure_budget() -> int:
+    """Return the most erasures the frozen Reed-Solomon contract can absorb."""
+
+    return int(payload_profile()["reed_solomon"]["parity_symbols"])
+
+
+def rank_erasure_candidates(byte_confidence: NDArray[np.float64]) -> tuple[int, ...]:
+    """Order codeword byte positions from least to most reliable."""
+
+    order = np.lexsort((np.arange(byte_confidence.size), byte_confidence))
+    return tuple(int(position) for position in order)
+
+
+def erasure_ladder(
+    erase_positions: tuple[int, ...],
+    erasure_ranking: tuple[int, ...],
+) -> tuple[tuple[int, ...], ...]:
+    """Yield erasure sets from the receiver's own claim down to none.
+
+    A receiver that declares more erasures than the code has parity symbols has
+    guaranteed its own failure rather than been cautious, so an over-eager
+    confidence estimate is retried against the weakest bytes the budget can
+    afford. The reported claim is always attempted first, so nothing that
+    decodes today decodes differently, and callers still validate every attempt
+    against the payload CRC.
+    """
+
+    budget = erasure_budget()
+    counts = [budget]
+    while counts[-1] > 0:
+        counts.append(counts[-1] // 2)
+    attempts: list[tuple[int, ...]] = [tuple(erase_positions)]
+    attempts.extend(
+        tuple(sorted(erasure_ranking[:count]))
+        for count in counts
+        if count <= len(erasure_ranking)
+    )
+    ordered: list[tuple[int, ...]] = []
+    seen: set[tuple[int, ...]] = set()
+    for attempt in attempts:
+        if attempt in seen:
+            continue
+        seen.add(attempt)
+        ordered.append(attempt)
+    return tuple(ordered)
 
 
 def interleave(data: bytes, depth: int) -> bytes:

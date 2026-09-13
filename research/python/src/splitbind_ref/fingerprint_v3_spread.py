@@ -10,6 +10,7 @@ from typing import Literal
 import numpy as np
 from numpy.typing import NDArray
 
+from .ecc import rank_erasure_candidates
 from .fingerprint_v3_profile import FingerprintV3Profile, candidate_identifier_v3
 
 
@@ -25,6 +26,7 @@ class SpreadCodewordEvidence:
     erase_positions: tuple[int, ...]
     mean_confidence: float
     polarity: Literal["darken", "lighten"]
+    erasure_ranking: tuple[int, ...] = ()
 
 
 def embed_spread_codeword_v3(
@@ -72,6 +74,7 @@ def extract_spread_codeword_v3(
     samples = tile.reshape(-1)
     bits = np.empty(_CODEWORD_BYTES * _BITS_PER_BYTE, dtype=np.uint8)
     erasures: set[int] = set()
+    byte_confidence = np.full(_CODEWORD_BYTES, np.inf, dtype=np.float64)
     confidence_sum = 0.0
     for bit_index, (group_a, group_b) in enumerate(groups):
         difference = float(np.mean(samples[list(group_a)]) - np.mean(samples[list(group_b)]))
@@ -81,14 +84,17 @@ def extract_spread_codeword_v3(
             bits[bit_index] = 0 if difference > 0.0 else 1
         confidence = min(1.0, abs(difference) / profile.spread_delta)
         confidence_sum += confidence
+        byte_index = bit_index // _BITS_PER_BYTE
+        byte_confidence[byte_index] = min(byte_confidence[byte_index], confidence)
         if confidence < profile.bit_confidence_min:
-            erasures.add(bit_index // _BITS_PER_BYTE)
+            erasures.add(byte_index)
 
     return SpreadCodewordEvidence(
         codeword=np.packbits(bits, bitorder="big").tobytes(),
         erase_positions=tuple(sorted(erasures)),
         mean_confidence=confidence_sum / len(bits),
         polarity=polarity,
+        erasure_ranking=rank_erasure_candidates(byte_confidence),
     )
 
 
