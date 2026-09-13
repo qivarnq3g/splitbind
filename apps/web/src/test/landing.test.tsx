@@ -86,6 +86,47 @@ describe("SplitBind landing page", () => {
     expect(await screen.findByRole("banner", { name: "Giới thiệu SplitBind" })).toBeVisible();
   });
 
+  it("offers the workbench rather than a login prompt once signed in", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async () => json({
+      authenticated: true,
+      csrf_token: "csrf-token",
+      user: {
+        id: USER_ID,
+        username: "issuer.demo",
+        role: "issuer",
+        organization_id: ORGANIZATION_ID,
+      },
+    })));
+
+    renderApp("/about");
+
+    await screen.findByRole("banner", { name: "Giới thiệu SplitBind" });
+    const entries = await screen.findAllByRole("link", {
+      name: "Vào không gian làm việc",
+    });
+    expect(entries.length).toBeGreaterThanOrEqual(2);
+    for (const entry of entries) expect(entry).toHaveAttribute("href", "/issue");
+    expect(screen.queryByRole("link", { name: "Đăng nhập" })).not.toBeInTheDocument();
+  });
+
+  it("still prompts an unauthenticated visitor to sign in", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async () => json({
+      authenticated: false,
+      csrf_token: "csrf-token",
+      user: null,
+    })));
+
+    renderApp("/about");
+
+    await screen.findByRole("banner", { name: "Giới thiệu SplitBind" });
+    const prompts = screen.getAllByRole("link", { name: "Đăng nhập" });
+    expect(prompts.length).toBeGreaterThanOrEqual(2);
+    for (const prompt of prompts) expect(prompt).toHaveAttribute("href", "/login");
+    expect(
+      screen.queryByRole("link", { name: "Vào không gian làm việc" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("renders seven sections under one page heading", async () => {
     vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async () => json({
       authenticated: false,
