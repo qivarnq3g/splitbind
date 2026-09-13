@@ -1,4 +1,4 @@
-ARG PYTHON_BASE_IMAGE=python:3.11.9-slim-bookworm@sha256:8fb099199b9f2d70342674bd9dbccd3ed03a258f26bbd1d556822c6dfc60c317
+ARG PYTHON_BASE_IMAGE=python:3.11-slim-bookworm@sha256:528257d48c1da0dcecc2e725d1ae34498d60c965f1241e39cd6a85a8859bdf84
 FROM ${PYTHON_BASE_IMAGE} AS builder
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
@@ -31,10 +31,18 @@ ENV ENVIRONMENT=production \
     PYTHONUNBUFFERED=1 \
     SPLITBIND_ALGORITHM_CONTRACTS=/app/contracts/algorithm
 
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd --gid 10001 splitbind \
     && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin splitbind
 
 COPY --from=builder /opt/venv /opt/venv
+
+RUN /opt/venv/bin/python -m pip uninstall -y pip setuptools wheel \
+    && /usr/local/bin/python -m pip uninstall -y pip setuptools wheel
+
 WORKDIR /app/services/api
 COPY --chown=10001:10001 services/api/manage.py ./manage.py
 COPY --chown=10001:10001 services/api/config ./config
