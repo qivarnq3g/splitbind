@@ -77,5 +77,20 @@ class ReleaseImagesWorkflowContractTest(unittest.TestCase):
         self.assertNotIn("secrets.", workflow.replace("secrets.GITHUB_TOKEN", ""))
 
 
+class TrivyIgnoreContractTest(unittest.TestCase):
+    def test_every_suppression_is_scoped_and_dated(self):
+        import yaml
+
+        path = ROOT / ".trivyignore.yaml"
+        self.assertTrue(path.is_file(), "the scan suppression file must exist")
+        entries = yaml.safe_load(path.read_text(encoding="utf-8"))["vulnerabilities"]
+        self.assertTrue(entries, "an empty suppression file should be deleted, not kept")
+        for entry in entries:
+            with self.subTest(cve=entry.get("id")):
+                self.assertIn("expired_at", entry)
+                self.assertIn("statement", entry)
+                self.assertEqual(entry.get("paths"), ["usr/bin/caddy"])
+
+
 if __name__ == "__main__":
     unittest.main()

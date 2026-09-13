@@ -1,0 +1,98 @@
+# Findings we cannot fix at our layer, kept narrow and dated.
+#
+# Every entry is scoped to usr/bin/caddy and carries an expiry. A new advisory
+# against the Caddy binary is not listed here, so it still fails the release gate.
+# When this file expires, re-run the scan against the current Caddy release and
+# delete whatever upstream has fixed instead of extending the date.
+
+vulnerabilities:
+  - id: CVE-2026-27145
+    paths:
+      - "usr/bin/caddy"
+    expired_at: 2026-12-13
+    statement: >-
+      Compiled into the upstream Caddy release binary. Caddy 2.11.4 is the current release and still links these module versions, so there is no package-level or base-image fix available to us. Scoped to the Caddy binary only, and dated so the suppression expires rather than becoming permanent.
+  - id: CVE-2026-33818
+    paths:
+      - "usr/bin/caddy"
+    expired_at: 2026-12-13
+    statement: >-
+      Compiled into the upstream Caddy release binary. Caddy 2.11.4 is the current release and still links these module versions, so there is no package-level or base-image fix available to us. Scoped to the Caddy binary only, and dated so the suppression expires rather than becoming permanent.
+  - id: CVE-2026-39821
+    paths:
+      - "usr/bin/caddy"
+    expired_at: 2026-12-13
+    statement: >-
+      Compiled into the upstream Caddy release binary. Caddy 2.11.4 is the current release and still links these module versions, so there is no package-level or base-image fix available to us. Scoped to the Caddy binary only, and dated so the suppression expires rather than becoming permanent.
+  - id: CVE-2026-39822
+    paths:
+      - "usr/bin/caddy"
+    expired_at: 2026-12-13
+    statement: >-
+      Compiled into the upstream Caddy release binary. Caddy 2.11.4 is the current release and still links these module versions, so there is no package-level or base-image fix available to us. Scoped to the Caddy binary only, and dated so the suppression expires rather than becoming permanent.
+  - id: CVE-2026-42504
+    paths:
+      - "usr/bin/caddy"
+    expired_at: 2026-12-13
+    statement: >-
+      Compiled into the upstream Caddy release binary. Caddy 2.11.4 is the current release and still links these module versions, so there is no package-level or base-image fix available to us. Scoped to the Caddy binary only, and dated so the suppression expires rather than becoming permanent.
+  - id: CVE-2026-46600
+    paths:
+      - "usr/bin/caddy"
+    expired_at: 2026-12-13
+    statement: >-
+      Compiled into the upstream Caddy release binary. Caddy 2.11.4 is the current release and still links these module versions, so there is no package-level or base-image fix available to us. Scoped to the Caddy binary only, and dated so the suppression expires rather than becoming permanent.
+  - id: CVE-2026-56852
+    paths:
+      - "usr/bin/caddy"
+    expired_at: 2026-12-13
+    statement: >-
+      Compiled into the upstream Caddy release binary. Caddy 2.11.4 is the current release and still links these module versions, so there is no package-level or base-image fix available to us. Scoped to the Caddy binary only, and dated so the suppression expires rather than becoming permanent.
+  - id: CVE-2026-56853
+    paths:
+      - "usr/bin/caddy"
+    expired_at: 2026-12-13
+    statement: >-
+      Compiled into the upstream Caddy release binary. Caddy 2.11.4 is the current release and still links these module versions, so there is no package-level or base-image fix available to us. Scoped to the Caddy binary only, and dated so the suppression expires rather than becoming permanent.
+  - id: CVE-2026-56854
+    paths:
+      - "usr/bin/caddy"
+    expired_at: 2026-12-13
+    statement: >-
+      Compiled into the upstream Caddy release binary. Caddy 2.11.4 is the current release and still links these module versions, so there is no package-level or base-image fix available to us. Scoped to the Caddy binary only, and dated so the suppression expires rather than becoming permanent.
+  - id: CVE-2026-56858
+    paths:
+      - "usr/bin/caddy"
+    expired_at: 2026-12-13
+    statement: >-
+      Compiled into the upstream Caddy release binary. Caddy 2.11.4 is the current release and still links these module versions, so there is no package-level or base-image fix available to us. Scoped to the Caddy binary only, and dated so the suppression expires rather than becoming permanent.
+  - id: CVE-2026-56859
+    paths:
+      - "usr/bin/caddy"
+    expired_at: 2026-12-13
+    statement: >-
+      Compiled into the upstream Caddy release binary. Caddy 2.11.4 is the current release and still links these module versions, so there is no package-level or base-image fix available to us. Scoped to the Caddy binary only, and dated so the suppression expires rather than becoming permanent.
+  - id: CVE-2026-56860
+    paths:
+      - "usr/bin/caddy"
+    expired_at: 2026-12-13
+    statement: >-
+      Compiled into the upstream Caddy release binary. Caddy 2.11.4 is the current release and still links these module versions, so there is no package-level or base-image fix available to us. Scoped to the Caddy binary only, and dated so the suppression expires rather than becoming permanent.
+  - id: CVE-2026-56862
+    paths:
+      - "usr/bin/caddy"
+    expired_at: 2026-12-13
+    statement: >-
+      Compiled into the upstream Caddy release binary. Caddy 2.11.4 is the current release and still links these module versions, so there is no package-level or base-image fix available to us. Scoped to the Caddy binary only, and dated so the suppression expires rather than becoming permanent.
+  - id: CVE-2026-84304
+    paths:
+      - "usr/bin/caddy"
+    expired_at: 2026-12-13
+    statement: >-
+      Compiled into the upstream Caddy release binary. Caddy 2.11.4 is the current release and still links these module versions, so there is no package-level or base-image fix available to us. Scoped to the Caddy binary only, and dated so the suppression expires rather than becoming permanent.
+  - id: CVE-2026-84445
+    paths:
+      - "usr/bin/caddy"
+    expired_at: 2026-12-13
+    statement: >-
+      Compiled into the upstream Caddy release binary. Caddy 2.11.4 is the current release and still links these module versions, so there is no package-level or base-image fix available to us. Scoped to the Caddy binary only, and dated so the suppression expires rather than becoming permanent.
