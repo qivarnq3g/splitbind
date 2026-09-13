@@ -111,6 +111,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/issuances/{id}/manifest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Return the public manifest, its detached signature and the signing key, so a third party can verify the issuance without trusting this API. The projection omits the recipient and the source digest by construction. */
+        get: operations["issuance_manifest_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/issuances/{id}/result": {
         parameters: {
             query?: never;
@@ -359,6 +376,16 @@ export interface components {
             /** Format: uuid */
             correlation_id: string;
         };
+        /** @description The externally shareable projection: never carries recipient or source. */
+        IssuanceManifest: {
+            /** @description Canonical public manifest, exactly the bytes the signature covers. */
+            payload: string;
+            /** @description Detached Ed25519 signature envelope over the payload. */
+            signature: {
+                [key: string]: unknown;
+            };
+            public_key: components["schemas"]["ManifestPublicKey"];
+        };
         IssuanceResult: {
             /** Format: uri */
             download_url: string;
@@ -412,6 +439,19 @@ export interface components {
         LoginRequest: {
             username: string;
             password: string;
+        };
+        ManifestPublicKey: {
+            key_id: string;
+            algorithm: string;
+            /** @description Ed25519 public key, standard SPKI PEM. */
+            public_key: string;
+            status: string;
+            /** Format: date-time */
+            valid_from: string;
+            /** Format: date-time */
+            valid_until: string | null;
+            /** Format: date-time */
+            revoked_at: string | null;
         };
         /** @enum {unknown} */
         NullEnum: null;
@@ -516,6 +556,11 @@ export interface components {
             completed_at: string | null;
             /** @description SHA-256 of the file that was submitted for checking. */
             input_sha256: string | null;
+            /**
+             * Format: uuid
+             * @description Issuance this file was recovered to, when one was identified. Fetch its public manifest to verify the match independently.
+             */
+            matched_issuance_id: string | null;
             evidence: components["schemas"]["VerificationEvidence"];
             metrics: components["schemas"]["VerificationMetrics"];
         };
@@ -824,6 +869,63 @@ export interface operations {
             };
             /** @description Resource not found in the caller's scope. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DetailError"];
+                };
+            };
+        };
+    };
+    issuance_manifest_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuanceManifest"];
+                };
+            };
+            /** @description Authentication, permission, or CSRF denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DetailError"];
+                };
+            };
+            /** @description Resource not found in the caller's scope. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DetailError"];
+                };
+            };
+            /** @description Workflow state or idempotency conflict. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CodeError"];
+                };
+            };
+            /** @description Request throttled. */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

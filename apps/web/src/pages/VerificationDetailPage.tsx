@@ -127,6 +127,7 @@ export function VerificationDetailPage() {
                   evidence={data.evidence}
                   showConclusion={false}
                   inputSha256={data.input_sha256}
+                  matchedIssuanceId={data.matched_issuance_id}
                 />
               </div>
             </>

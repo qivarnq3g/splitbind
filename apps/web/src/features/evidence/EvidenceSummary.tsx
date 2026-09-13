@@ -33,11 +33,13 @@ export function EvidenceSummary({
   evidence,
   showConclusion = true,
   inputSha256 = null,
+  matchedIssuanceId = null,
 }: {
   status: VerificationStatus;
   evidence: Evidence;
   showConclusion?: boolean;
   inputSha256?: string | null;
+  matchedIssuanceId?: string | null;
 }) {
   if (evidence.algorithm_label === "integrity_release_v1") {
     return (
@@ -46,6 +48,7 @@ export function EvidenceSummary({
         evidence={evidence}
         showConclusion={showConclusion}
         inputSha256={inputSha256}
+        matchedIssuanceId={matchedIssuanceId}
       />
     );
   }

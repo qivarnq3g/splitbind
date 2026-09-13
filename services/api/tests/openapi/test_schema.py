@@ -19,6 +19,7 @@ def test_schema_publishes_every_current_browser_facing_route(schema):
         "/api/v1/demo/capabilities",
         "/api/v1/issuances",
         "/api/v1/issuances/{id}",
+        "/api/v1/issuances/{id}/manifest",
         "/api/v1/issuances/{id}/result",
         "/api/v1/jobs",
         "/api/v1/jobs/{id}",

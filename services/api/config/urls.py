@@ -7,6 +7,7 @@ from splitbind.health.views import live, ready
 from splitbind.documents.views import (
     IssuanceCreateView,
     IssuanceDetailView,
+    IssuanceManifestView,
     IssuanceResultView,
     VerificationCreateView,
     VerificationDetailView,
@@ -28,6 +29,7 @@ urlpatterns = [
     path("api/v1/uploads/<uuid:id>/complete", UploadCompleteView.as_view(), name="upload-complete"),
     path("api/v1/issuances", IssuanceCreateView.as_view(), name="issuance-create"),
     path("api/v1/issuances/<uuid:id>", IssuanceDetailView.as_view(), name="issuance-detail"),
+    path("api/v1/issuances/<uuid:id>/manifest", IssuanceManifestView.as_view(), name="issuance-manifest"),
     path("api/v1/issuances/<uuid:id>/result", IssuanceResultView.as_view(), name="issuance-result"),
     path("api/v1/verifications", VerificationCreateView.as_view(), name="verification-create"),
     path("api/v1/verifications/<uuid:id>", VerificationDetailView.as_view(), name="verification-detail"),

@@ -92,6 +92,28 @@ class IssuanceResultSerializer(serializers.Serializer):
     expires_at = serializers.DateTimeField()
 
 
+class ManifestPublicKeySerializer(serializers.Serializer):
+    key_id = serializers.CharField()
+    algorithm = serializers.CharField()
+    public_key = serializers.CharField(help_text="Ed25519 public key, standard SPKI PEM.")
+    status = serializers.CharField()
+    valid_from = serializers.DateTimeField()
+    valid_until = serializers.DateTimeField(allow_null=True)
+    revoked_at = serializers.DateTimeField(allow_null=True)
+
+
+class IssuanceManifestSerializer(serializers.Serializer):
+    """The externally shareable projection: never carries recipient or source."""
+
+    payload = serializers.CharField(
+        help_text="Canonical public manifest, exactly the bytes the signature covers.",
+    )
+    signature = serializers.DictField(
+        help_text="Detached Ed25519 signature envelope over the payload.",
+    )
+    public_key = ManifestPublicKeySerializer()
+
+
 class SuspiciousRegionSerializer(serializers.Serializer):
     x = serializers.FloatField(min_value=0, max_value=1)
     y = serializers.FloatField(min_value=0, max_value=1)
@@ -146,6 +168,13 @@ class VerificationSerializer(serializers.Serializer):
     input_sha256 = serializers.CharField(
         allow_null=True,
         help_text="SHA-256 of the file that was submitted for checking.",
+    )
+    matched_issuance_id = serializers.UUIDField(
+        allow_null=True,
+        help_text=(
+            "Issuance this file was recovered to, when one was identified. Fetch its "
+            "public manifest to verify the match independently."
+        ),
     )
     evidence = VerificationEvidenceSerializer()
     metrics = VerificationMetricsSerializer()
@@ -277,6 +306,21 @@ issuance_result_schema = extend_schema(
         409: CODE_409,
         429: DETAIL_429,
         503: CODE_503,
+    },
+)
+issuance_manifest_schema = extend_schema(
+    operation_id="issuance_manifest_retrieve",
+    description=(
+        "Return the public manifest, its detached signature and the signing key, so a "
+        "third party can verify the issuance without trusting this API. The projection "
+        "omits the recipient and the source digest by construction."
+    ),
+    responses={
+        200: IssuanceManifestSerializer,
+        403: DETAIL_403,
+        404: DETAIL_404,
+        409: CODE_409,
+        429: DETAIL_429,
     },
 )
 verification_create_schema = extend_schema(
