@@ -23,6 +23,8 @@ RUN python -m pip install \
 ARG PYTHON_BASE_IMAGE
 FROM ${PYTHON_BASE_IMAGE} AS runtime
 
+LABEL org.opencontainers.image.source="https://github.com/qivarnq3g/splitbind"
+
 ENV ENVIRONMENT=production \
     PATH=/opt/venv/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \

@@ -15,8 +15,13 @@
 # quản trị. File vẫn nằm trên đĩa để dùng nội bộ, chỉ không được publish.
 /docs/evaluation/integrity-release-0.1.md
 
-# Ghi username quản trị SSH của production.
-/docs/superpowers/plans/2026-08-17-azure-vm-provisioning.md
+# Tài liệu plan kỹ thuật nội bộ: ghi lại cách công việc được lập kế hoạch và
+# thực thi, không mô tả sản phẩm. Không thuộc phạm vi publish.
+/docs/superpowers/
+/docs/project-context.md
+/docs/runbooks/frontend-refinement-report.md
+/docs/knowledge/task-*.md
+/.hallmark/
 
 # Agent operating contract and tooling state - local to each machine.
 .claude/
