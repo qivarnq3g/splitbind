@@ -96,3 +96,9 @@ vulnerabilities:
     expired_at: 2026-12-13
     statement: >-
       Compiled into the upstream Caddy release binary. Caddy 2.11.4 is the current release and still links these module versions, so there is no package-level or base-image fix available to us. Scoped to the Caddy binary only, and dated so the suppression expires rather than becoming permanent.
+  - id: GHSA-hrxh-6v49-42gf
+    paths:
+      - "usr/bin/caddy"
+    expired_at: 2026-12-13
+    statement: >-
+      Compiled into the upstream Caddy release binary. Caddy 2.11.4 is the current release and still links these module versions, so there is no package-level or base-image fix available to us. Scoped to the Caddy binary only, and dated so the suppression expires rather than becoming permanent.
