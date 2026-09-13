@@ -8,11 +8,13 @@ import { canCreateVerification, useSession } from "../features/auth/session";
 import { getDemoCapabilities } from "../features/demo/capabilities";
 import { SafeApiError } from "../features/shared/apiError";
 import {
+  MAX_PDF_LABEL,
   type UploadStage,
   uploadVerificationPdf,
   validateVerificationFile,
 } from "../features/uploads/uploadIssuance";
 import { createVerification } from "../features/verifications/verifications";
+import { formatBytes } from "../features/shared/formatBytes";
 
 export function VerifyDocumentPage() {
   const session = useSession();
@@ -140,10 +142,10 @@ export function VerifyDocumentPage() {
               >
                 {validationError ??
                   (file
-                    ? `${Math.max(1, Math.ceil(file.size / 1024))} KiB · Tệp được chọn trên thiết bị, chưa tải lên.`
+                    ? `${formatBytes(file.size)} · Tệp được chọn trên thiết bị, chưa tải lên.`
                     : exactOnly
-                      ? "PDF · tối đa 100 MB · PDF tối đa 50 trang"
-                      : "PDF, PNG hoặc JPEG · tối đa 100 MB · PDF tối đa 50 trang")}
+                      ? `PDF · tối đa ${MAX_PDF_LABEL} · PDF tối đa 50 trang`
+                      : `PDF, PNG hoặc JPEG · tối đa ${MAX_PDF_LABEL} · PDF tối đa 50 trang`)}
               </p>
               {exactOnly ? (
                 <p className="field-help">

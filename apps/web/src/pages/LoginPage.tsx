@@ -4,6 +4,13 @@ import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import { useLogin, useSession } from "../features/auth/session";
 
+const SPECIMEN = [
+  ["Mã cấp phát", "SB-2F9C-41A7"],
+  ["Bản", "07 / 12"],
+  ["Băm SHA-256", "9f2a1c…e40b"],
+  ["Chữ ký", "Ed25519"],
+] as const;
+
 export function LoginPage() {
   const session = useSession();
   const login = useLogin();
@@ -33,20 +40,33 @@ export function LoginPage() {
         <p className="login-intro-title">
           Tài liệu có nguồn.
           <br />
-          Niềm tin có cơ sở.
+          <span>Niềm tin có cơ sở.</span>
         </p>
-        <p>Cấp phát và kiểm tra tài liệu trong một nơi.</p>
-        <div className="login-principle">
-          <span>01</span>
-          <p>Tạo bản cấp phát riêng cho từng người nhận.</p>
-        </div>
-        <div className="login-principle">
-          <span>02</span>
-          <p>Đối chiếu tệp, đọc kết luận, kiểm tra bằng chứng.</p>
-        </div>
-        <p className="login-note">
-          Chữ ký số · Toàn vẹn tệp · Hồ sơ kiểm chứng
+        <p className="login-lede">
+          Cấp phát và kiểm tra tài liệu trong một nơi.
         </p>
+        <ol className="login-principles">
+          <li className="login-principle">
+            <span>01</span>
+            <p>Tạo bản cấp phát riêng cho từng người nhận.</p>
+          </li>
+          <li className="login-principle">
+            <span>02</span>
+            <p>Đối chiếu tệp, đọc kết luận, kiểm tra bằng chứng.</p>
+          </li>
+        </ol>
+        <figure className="login-specimen">
+          <figcaption>Bản mẫu</figcaption>
+          <dl>
+            {SPECIMEN.map(([term, value]) => (
+              <div key={term}>
+                <dt>{term}</dt>
+                <dd>{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </figure>
+        <p className="login-note">Chữ ký số · Toàn vẹn tệp · Hồ sơ kiểm chứng</p>
       </aside>
       <section className="login-panel" aria-labelledby="login-heading">
         <div className="login-panel-header">
@@ -99,11 +119,20 @@ export function LoginPage() {
             </div>
           </div>
           {session.isPending ? (
-            <p className="form-error" role="status">Đang chuẩn bị đăng nhập…</p>
+            <p className="form-status" role="status">
+              Đang chuẩn bị đăng nhập…
+            </p>
           ) : session.error ? (
-            <div>
-              <p className="form-error" role="alert">Không thể chuẩn bị phiên đăng nhập. Vui lòng thử lại.</p>
-              <button className="button button-secondary" type="button" disabled={session.isFetching} onClick={() => void session.refetch()}>
+            <div className="login-retry">
+              <p className="form-error" role="alert">
+                Không thể chuẩn bị phiên đăng nhập. Vui lòng thử lại.
+              </p>
+              <button
+                className="button button-secondary"
+                type="button"
+                disabled={session.isFetching}
+                onClick={() => void session.refetch()}
+              >
                 Thử lại kết nối
               </button>
             </div>

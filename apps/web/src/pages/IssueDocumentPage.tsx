@@ -7,11 +7,13 @@ import { WorkflowSteps } from "../components/WorkflowSteps";
 import { canCreateIssuance, useSession } from "../features/auth/session";
 import { SafeApiError } from "../features/shared/apiError";
 import {
+  MAX_PDF_LABEL,
   type UploadStage,
   uploadIssuancePdf,
   validatePdf,
 } from "../features/uploads/uploadIssuance";
 import { createIssuance } from "../features/issuances/issuances";
+import { formatBytes } from "../features/shared/formatBytes";
 export function IssueDocumentPage() {
   const session = useSession();
   const navigate = useNavigate();
@@ -132,8 +134,8 @@ export function IssueDocumentPage() {
               >
                 {validationError ??
                   (file
-                    ? `${Math.max(1, Math.ceil(file.size / 1024))} KiB · Tệp được chọn trên thiết bị, chưa tải lên.`
-                    : "PDF · tối đa 100 MB · PDF tối đa 50 trang")}
+                    ? `${formatBytes(file.size)} · Tệp được chọn trên thiết bị, chưa tải lên.`
+                    : `PDF · tối đa ${MAX_PDF_LABEL} · PDF tối đa 50 trang`)}
               </p>
             </div>
             <div className="field">

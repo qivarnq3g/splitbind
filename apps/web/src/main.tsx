@@ -6,7 +6,7 @@ import { RouterProvider } from "react-router-dom";
 import { queryClient } from "./app/queryClient";
 import { router } from "./app/router";
 import "@fontsource-variable/inter";
-import "@fontsource-variable/manrope";
+import "@fontsource-variable/source-serif-4";
 import "./styles/app.css";
 
 const root = document.getElementById("root");

@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { Link } from "react-router-dom";
 
+import { AtmosphereLayer } from "../features/landing/AtmosphereLayer";
 import { ArchitectureSection } from "../features/landing/ArchitectureSection";
 import { BoundarySection } from "../features/landing/BoundarySection";
 import { IssuanceSection } from "../features/landing/IssuanceSection";
@@ -9,13 +10,18 @@ import { LandingHero } from "../features/landing/LandingHero";
 import { ProblemSection } from "../features/landing/ProblemSection";
 import { VerificationSection } from "../features/landing/VerificationSection";
 import { useScrollReveal } from "../features/landing/useScrollReveal";
+import { useSmoothScroll } from "../features/landing/useSmoothScroll";
+import { useTilt } from "../features/shared/useTilt";
 import "../styles/landing.css";
 
 export function LandingPage() {
   const root = useRef<HTMLDivElement>(null);
+  useSmoothScroll();
   useScrollReveal(root);
+  useTilt(root, ".landing-stack > div");
   return (
     <div className="landing" ref={root}>
+      <AtmosphereLayer />
       <a className="skip-link" href="#main-content">
         Đến nội dung chính
       </a>
