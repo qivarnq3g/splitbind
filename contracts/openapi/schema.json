@@ -394,6 +394,83 @@
                 }
             }
         },
+        "/api/v1/issuances/{id}/manifest": {
+            "get": {
+                "operationId": "issuance_manifest_retrieve",
+                "description": "Return the public manifest, its detached signature and the signing key, so a third party can verify the issuance without trusting this API. The projection omits the recipient and the source digest by construction.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/IssuanceManifest"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Authentication, permission, or CSRF denied."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Resource not found in the caller's scope."
+                    },
+                    "409": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CodeError"
+                                }
+                            }
+                        },
+                        "description": "Workflow state or idempotency conflict."
+                    },
+                    "429": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DetailError"
+                                }
+                            }
+                        },
+                        "description": "Request throttled."
+                    }
+                }
+            }
+        },
         "/api/v1/issuances/{id}/result": {
             "get": {
                 "operationId": "issuance_result_retrieve",
@@ -1432,6 +1509,29 @@
                     "upload_id"
                 ]
             },
+            "IssuanceManifest": {
+                "type": "object",
+                "description": "The externally shareable projection: never carries recipient or source.",
+                "properties": {
+                    "payload": {
+                        "type": "string",
+                        "description": "Canonical public manifest, exactly the bytes the signature covers."
+                    },
+                    "signature": {
+                        "type": "object",
+                        "additionalProperties": {},
+                        "description": "Detached Ed25519 signature envelope over the payload."
+                    },
+                    "public_key": {
+                        "$ref": "#/components/schemas/ManifestPublicKey"
+                    }
+                },
+                "required": [
+                    "payload",
+                    "public_key",
+                    "signature"
+                ]
+            },
             "IssuanceResult": {
                 "type": "object",
                 "properties": {
@@ -1576,6 +1676,47 @@
                 "required": [
                     "password",
                     "username"
+                ]
+            },
+            "ManifestPublicKey": {
+                "type": "object",
+                "properties": {
+                    "key_id": {
+                        "type": "string"
+                    },
+                    "algorithm": {
+                        "type": "string"
+                    },
+                    "public_key": {
+                        "type": "string",
+                        "description": "Ed25519 public key, standard SPKI PEM."
+                    },
+                    "status": {
+                        "type": "string"
+                    },
+                    "valid_from": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "valid_until": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "revoked_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    }
+                },
+                "required": [
+                    "algorithm",
+                    "key_id",
+                    "public_key",
+                    "revoked_at",
+                    "status",
+                    "valid_from",
+                    "valid_until"
                 ]
             },
             "NullEnum": {
@@ -1896,6 +2037,12 @@
                         "nullable": true,
                         "description": "SHA-256 of the file that was submitted for checking."
                     },
+                    "matched_issuance_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "nullable": true,
+                        "description": "Issuance this file was recovered to, when one was identified. Fetch its public manifest to verify the match independently."
+                    },
                     "evidence": {
                         "$ref": "#/components/schemas/VerificationEvidence"
                     },
@@ -1911,6 +2058,7 @@
                     "input_sha256",
                     "job_id",
                     "job_status",
+                    "matched_issuance_id",
                     "metrics",
                     "status"
                 ]

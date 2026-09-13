@@ -1,6 +1,7 @@
 import uuid
 from datetime import timedelta
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
 from django.utils import timezone
 from django.utils.decorators import method_decorator
@@ -26,6 +27,7 @@ from splitbind.documents.serializers import (
     serialize_issuance,
     serialize_verification,
 )
+from splitbind.documents.manifests import shareable_public_manifest
 from splitbind.documents.services import get_issuance, get_verification
 from splitbind.integrations.storage.base import StorageUnavailable, UploadRejected
 from splitbind.jobs.services import (
@@ -37,6 +39,7 @@ from splitbind.jobs.services import (
 from splitbind.openapi import (
     issuance_create_schema,
     issuance_detail_schema,
+    issuance_manifest_schema,
     issuance_result_schema,
     verification_create_schema,
     verification_detail_schema,
@@ -45,6 +48,18 @@ from splitbind.uploads.services import get_storage
 
 
 ISSUANCE_RESULT_TTL = timedelta(minutes=5)
+
+
+def _manifest_audit(actor, target, outcome, *, safe_error_code=None):
+    metadata = {}
+    if safe_error_code is not None:
+        metadata["safe_error_code"] = safe_error_code
+    action = {
+        AuditOutcome.SUCCEEDED: "issuance.manifest_shared",
+        AuditOutcome.DENIED: "issuance.manifest_denied",
+        AuditOutcome.FAILED: "issuance.manifest_failed",
+    }[outcome]
+    record_event(actor, action, target, outcome, uuid.uuid4(), metadata)
 
 
 def _result_download_audit(actor, target, outcome, *, safe_error_code=None, attempt=None):
@@ -118,6 +133,46 @@ class IssuanceDetailView(APIView):
         except WorkflowNotFound:
             raise Http404
         return Response(serialize_issuance(record))
+
+
+@method_decorator(never_cache, name="dispatch")
+class IssuanceManifestView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [AccountRateThrottle, SourceIPRateThrottle]
+
+    @issuance_manifest_schema
+    def get(self, request, id):
+        try:
+            record = get_issuance(request.user, id)
+        except WorkflowNotFound:
+            _manifest_audit(
+                request.user,
+                request.user,
+                AuditOutcome.DENIED,
+                safe_error_code="WORKFLOW_NOT_FOUND",
+            )
+            raise Http404
+        manifest = getattr(record, "manifest", None)
+        if manifest is None:
+            _manifest_audit(
+                request.user,
+                record,
+                AuditOutcome.DENIED,
+                safe_error_code="MANIFEST_UNAVAILABLE",
+            )
+            return Response({"code": "MANIFEST_UNAVAILABLE"}, status=409)
+        try:
+            projection = shareable_public_manifest(manifest)
+        except DjangoValidationError:
+            _manifest_audit(
+                request.user,
+                record,
+                AuditOutcome.FAILED,
+                safe_error_code="MANIFEST_NOT_SHAREABLE",
+            )
+            return Response({"code": "MANIFEST_NOT_SHAREABLE"}, status=409)
+        _manifest_audit(request.user, record, AuditOutcome.SUCCEEDED)
+        return Response(projection)
 
 
 @method_decorator(never_cache, name="dispatch")

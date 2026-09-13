@@ -53,6 +53,18 @@ export async function getIssuance(id: string, signal?: AbortSignal) {
   return result.data;
 }
 
+export async function getIssuanceManifest(id: string, signal?: AbortSignal) {
+  const result = await api.GET("/api/v1/issuances/{id}/manifest", {
+    params: { path: { id } },
+    signal,
+    cache: "no-store",
+  });
+  if (!result.data) {
+    throw new SafeApiError(safeApiMessage(result.response.status, result.error));
+  }
+  return result.data;
+}
+
 export async function getIssuanceResult(id: string, signal?: AbortSignal) {
   const result = await api.GET("/api/v1/issuances/{id}/result", {
     params: { path: { id } },

@@ -191,6 +191,11 @@ def serialize_verification(record, job=None):
         "created_at": record.created_at.isoformat(),
         "completed_at": record.completed_at.isoformat() if record.completed_at else None,
         "input_sha256": demo_result.input_sha256 if demo_result else None,
+        "matched_issuance_id": (
+            str(demo_result.recovered_issuance_id)
+            if demo_result and demo_result.recovered_issuance_id
+            else None
+        ),
         "evidence": _contract_evidence(record.evidence),
         "metrics": _contract_metrics(record.metrics),
     }
