@@ -19,6 +19,10 @@ from .base import (
     verified_object_bytes,
 )
 
+CONNECT_TIMEOUT_SECONDS = 5
+READ_TIMEOUT_SECONDS = 30
+MAX_ATTEMPTS = 3
+
 
 class S3ObjectStorage:
     """R2-compatible, exact-key S3 adapter. It intentionally has no list operation."""
@@ -41,6 +45,7 @@ class S3ObjectStorage:
             managed_hint=getattr(settings, "OBJECT_STORAGE_ENDPOINT_HINT", ""),
         )
         import boto3
+        from botocore.config import Config
 
         return cls(
             bucket=bucket,
@@ -50,6 +55,11 @@ class S3ObjectStorage:
                 aws_access_key_id=access_key,
                 aws_secret_access_key=secret_key,
                 region_name="auto",
+                config=Config(
+                    connect_timeout=CONNECT_TIMEOUT_SECONDS,
+                    read_timeout=READ_TIMEOUT_SECONDS,
+                    retries={"max_attempts": MAX_ATTEMPTS, "mode": "standard"},
+                ),
             ),
         )
 
