@@ -1,92 +1,36 @@
-# Local course materials and private project evidence
+# Internal material. Never published.
+#
+# Agent operating contract and working knowledge live on the operator's
+# machine. They describe how the assistant works, not what the product is,
+# and they carry diagnostic notes, host details and local paths.
+/docs/knowledge/
+/docs/internal/
+# Contains the production host, personal email and cloud identifiers.
+/docs/evaluation/integrity-release-0.1.md
+/docs/project-context.md
+/docs/superpowers/
+/artifacts/
+.hallmark/
+.neon
+tmp/
 /AGENTS.md
 /**/AGENTS.md
 /CLAUDE.md
 /**/CLAUDE.md
-/*.pdf
-/*.docx
-/*.xlsx
-/note.txt
-/docs/course/
-/docs/internal/
-/docs/project/lecturer-email-summary.md
-
-# Ghi IP production, email cá nhân, Azure subscription, endpoint R2 và username
-# quản trị. File vẫn nằm trên đĩa để dùng nội bộ, chỉ không được publish.
-/docs/evaluation/integrity-release-0.1.md
-
-# Tài liệu plan kỹ thuật nội bộ: ghi lại cách công việc được lập kế hoạch và
-# thực thi, không mô tả sản phẩm. Không thuộc phạm vi publish.
-/docs/superpowers/
-/docs/project-context.md
-/docs/runbooks/frontend-refinement-report.md
-/docs/knowledge/task-*.md
-/.hallmark/
-
-# Agent operating contract and tooling state - local to each machine.
 .claude/
 .codex/
 .antigravity/
 .cursor/
-/skills/
-/.superpowers/
-/.worktrees/
+.agents/
 
-# Environment and secrets
+# Local environment and build output
 .env
 .env.*
 !.env.example
-*.pem
-*.key
-*.p12
-*.pfx
-secrets/
-
-# Editors and operating systems
-.idea/
-.vscode/
-.DS_Store
-Thumbs.db
-Desktop.ini
-desktop.ini
-
-# Python
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.venv/
-venv/
-
-# Rust
-/target/
-**/target/
-
-# Node.js and frontend
 node_modules/
 dist/
-build/
-out/
-coverage/
-*.tsbuildinfo
-
-# Runtime and disposable outputs
-*.log
-tmp/
-temp/
-.cache/
-artifacts/
-reports/
-*.swp
-*.tmp
-scratch/
-.scratch/
-*.scratch.*
-
-# Local infrastructure state
-/.neon
-.lima/
-.terraform/
-*.tfstate
-*.tfstate.*
+.venv/
+venv/
+__pycache__/
+*.pyc
+.vite/
