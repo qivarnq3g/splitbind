@@ -1,9 +1,11 @@
 import { api } from "../../api/client";
 import { SafeApiError, safeApiMessage } from "../shared/apiError";
 import { formatBytes } from "../shared/formatBytes";
+import { UNKNOWN_PAGE_COUNT, countPdfPages } from "./pdfPageCount";
 
 export const MAX_PDF_BYTES = 100 * 1000 * 1000;
 export const MAX_PDF_LABEL = formatBytes(MAX_PDF_BYTES);
+export const MAX_PDF_PAGES = 50;
 
 export type UploadStage = "hashing" | "intent" | "uploading" | "finalizing";
 
@@ -69,6 +71,17 @@ export async function uploadPdf(
   if (kind === "issuance_input") validatePdf(file);
   else validateVerificationFile(file, exactOnly);
   const contentType = normalizedContentType(file, kind, exactOnly)!;
+
+  if (contentType === "application/pdf") {
+    const pages = await countPdfPages(file);
+    if (pages !== UNKNOWN_PAGE_COUNT && pages > MAX_PDF_PAGES) {
+      throw new SafeApiError(
+        `Tệp có ${pages.toLocaleString("vi-VN")} trang, vượt giới hạn ${MAX_PDF_PAGES} trang. ` +
+          "Chọn tệp ngắn hơn hoặc tách bớt trang rồi thử lại.",
+      );
+    }
+  }
+
   onStage("hashing");
   const checksum = await sha256(file);
 

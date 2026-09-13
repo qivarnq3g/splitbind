@@ -9,6 +9,7 @@ import { getDemoCapabilities } from "../features/demo/capabilities";
 import { SafeApiError } from "../features/shared/apiError";
 import {
   MAX_PDF_LABEL,
+  MAX_PDF_PAGES,
   type UploadStage,
   uploadVerificationPdf,
   validateVerificationFile,
@@ -144,8 +145,8 @@ export function VerifyDocumentPage() {
                   (file
                     ? `${formatBytes(file.size)} · Tệp được chọn trên thiết bị, chưa tải lên.`
                     : exactOnly
-                      ? `PDF · tối đa ${MAX_PDF_LABEL} · PDF tối đa 50 trang`
-                      : `PDF, PNG hoặc JPEG · tối đa ${MAX_PDF_LABEL} · PDF tối đa 50 trang`)}
+                      ? `PDF · tối đa ${MAX_PDF_LABEL} · PDF tối đa ${MAX_PDF_PAGES} trang`
+                      : `PDF, PNG hoặc JPEG · tối đa ${MAX_PDF_LABEL} · PDF tối đa ${MAX_PDF_PAGES} trang`)}
               </p>
               {exactOnly ? (
                 <p className="field-help">

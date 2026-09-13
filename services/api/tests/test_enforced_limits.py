@@ -67,6 +67,13 @@ def test_browser_and_server_agree_on_the_byte_ceiling():
         "so the words and the number cannot drift apart"
     )
 
+    pages = re.search(r"export const MAX_PDF_PAGES = (\d+);", source)
+    assert pages, "the browser page ceiling is no longer declared in the expected form"
+    assert int(pages.group(1)) == settings.MAX_PDF_PAGES, (
+        "the browser rejects a PDF by page count before uploading it, so its ceiling "
+        "must equal the one the worker enforces or it rejects files the server accepts"
+    )
+
 
 @pytest.mark.parametrize("page", ["IssueDocumentPage.tsx", "VerifyDocumentPage.tsx"])
 def test_help_text_states_the_limits_actually_enforced(page):
@@ -75,7 +82,9 @@ def test_help_text_states_the_limits_actually_enforced(page):
         "the byte limit in the help text must interpolate the derived label rather than "
         "hard-code a number that can fall out of step with the server"
     )
-    assert f"PDF tối đa {settings.MAX_PDF_PAGES} trang" in source
+    assert "PDF tối đa ${MAX_PDF_PAGES} trang" in source, (
+        "the page limit in the help text must interpolate the derived constant"
+    )
 
 
 def test_committed_result_constraint_admits_every_page_the_limit_allows():

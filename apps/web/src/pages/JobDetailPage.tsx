@@ -10,6 +10,7 @@ import {
   TERMINAL_JOB_STATUSES,
   useJob,
 } from "../features/jobs/useJob";
+import { describeJobError } from "../features/shared/jobErrors";
 gsap.registerPlugin(useGSAP);
 export function JobDetailPage() {
   const { id } = useParams();
@@ -181,7 +182,8 @@ export function JobDetailPage() {
             ) : null}
             {data.safe_error_code ? (
               <p className="form-error" role="alert">
-                Mã lỗi an toàn: {data.safe_error_code}
+                {describeJobError(data.safe_error_code)}
+                <span className="field-code">{data.safe_error_code}</span>
               </p>
             ) : null}
             <div className="job-actions">

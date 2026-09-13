@@ -5,6 +5,7 @@ import { CompactIdentifier } from "../components/CompactIdentifier";
 import { STATUS_COPY } from "../features/evidence/copy";
 import { JOB_LABELS } from "../features/jobs/useJob";
 import { useJobList } from "../features/jobs/useJobList";
+import { describeJobError } from "../features/shared/jobErrors";
 
 export function HistoryPage() {
   const [kindFilter, setKindFilter] = useState<"issuance" | "verification" | null>(null);
@@ -137,9 +138,12 @@ export function HistoryPage() {
                     </div>
                   ) : null}
                   {item.safe_error_code ? (
-                    <div className="history-field">
-                      <span className="field-title">Lỗi an toàn:</span>
-                      <span className="field-error">{item.safe_error_code}</span>
+                    <div className="history-field history-field-error">
+                      <span className="field-title">Lý do:</span>
+                      <span className="field-error">
+                        {describeJobError(item.safe_error_code)}
+                        <span className="field-code">{item.safe_error_code}</span>
+                      </span>
                     </div>
                   ) : null}
                 </div>
