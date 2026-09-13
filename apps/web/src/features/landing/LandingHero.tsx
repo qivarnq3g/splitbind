@@ -2,7 +2,12 @@ import { Link } from "react-router-dom";
 
 import { HeroDocumentStack } from "./HeroDocumentStack";
 
-export function LandingHero() {
+type Props = {
+  signedIn: boolean;
+  workbench: string;
+};
+
+export function LandingHero({ signedIn, workbench }: Props) {
   return (
     <section
       className="landing-section landing-hero"
@@ -21,8 +26,11 @@ export function LandingHero() {
             thuật.
           </p>
           <div className="landing-actions">
-            <Link className="button button-primary" to="/login">
-              Đăng nhập
+            <Link
+              className="button button-primary"
+              to={signedIn ? workbench : "/login"}
+            >
+              {signedIn ? "Vào không gian làm việc" : "Đăng nhập"}
             </Link>
             <a className="button button-secondary" href="#evidence-boundary">
               Xem cách hoạt động
