@@ -1,29 +1,101 @@
-# TÀI LIỆU CƠ SỞ TRI THỨC BÁO CÁO BÀI TẬP LỚN AN TOÀN THÔNG TIN
-## ĐỀ TÀI: TÌM HIỂU VÀ ĐỀ XUẤT HỆ THỐNG TRUY VẾT TOÀN VẸN VĂN BẢN (SPLITBIND)
-### Nhóm 9 - lớp học phần: 012012303303 - giảng viên hướng dẫn: TS. Hồ Đăng Thế
-
+---
+lang: vi
 ---
 
-> **MỤC ĐÍCH TÀI LIỆU:**
-> Tài liệu này là Nguồn Chân lý Duy nhất (Single Source of Truth - SSOT) đúc kết toàn bộ cơ sở lý thuyết, kết quả thực nghiệm, thiết kế kiến trúc và số liệu đo lường đã được đóng băng kỹ thuật (Technical Content Freeze). Thành viên phụ trách làm Slide Thuyết trình (PPTX) và Báo cáo Thuyết minh (DOCX/PDF) bắt buộc phải bám sát cấu trúc, thuật ngữ, số liệu và các nhãn phân định cấp độ tri thức trong tài liệu này; tuyệt đối không tự ý suy diễn hoặc phóng đại tính năng hệ thống.
+# MỤC LỤC
 
----
+```{=openxml}
+<w:sdt><w:sdtPr><w:docPartObj><w:docPartGallery w:val="Table of Contents"/><w:docPartUnique/></w:docPartObj></w:sdtPr><w:sdtContent><w:p><w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r><w:r><w:instrText xml:space="preserve"> TOC \o "1-3" \h \z \u </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>Nhấn chuột phải vào đây và chọn Update Field để sinh mục lục.</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p></w:sdtContent></w:sdt>
+```
 
-## HỆ THỐNG NHÃN PHÂN ĐỊNH CẤP ĐỘ TRI THỨC (EPISTEMIC LABELS)
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
 
-Mọi nội dung, khẳng định kỹ thuật và số liệu trong tài liệu này đều được gắn một trong 5 nhãn định chuẩn nhận thức sau:
+# DANH MỤC TỪ VIẾT TẮT VÀ THUẬT NGỮ
 
-1. `[Established theory]`: Tri thức khoa học kinh điển trích xuất từ giáo trình an toàn thông tin, sách chuyên khảo, bài báo khoa học hoặc tiêu chuẩn quốc tế (RFC, ISO, FIPS).
-2. `[Implemented]`: Tính năng, mô hình hoặc thuật toán đã được cài đặt thành mã nguồn cụ thể trong kho lưu trữ của dự án.
-3. `[Experimentally observed]`: Kết quả đo lường, metric kiểm thử được sinh ra từ các kịch bản thực nghiệm benchmark có artifact lưu vết và mã băm SHA-256 xác thực trên đĩa.
-4. `[Production]`: Tính năng đang hoạt động thực tế trên môi trường máy chủ đám mây Azure (`https://splitbind.qivarn.id.vn`) trong phiên bản phát hành hiện hành (Integrity Release 0.1).
-5. `[Limitation]`: Giới hạn kỹ thuật đã được nhận diện, các ranh giới thất bại của thuật toán, hoặc tính năng được chủ động khóa lại / chưa đưa lên môi trường production.
+| Từ viết tắt / thuật ngữ | Nghĩa đầy đủ |
+|---|---|
+| **BCH** | Bose-Chaudhuri-Hocquenghem, một họ mã sửa lỗi khối |
+| **BER** | Bit Error Rate, tỉ lệ lỗi bit |
+| **BTL** | Bài tập lớn |
+| **canvas** | Khung ảnh chuẩn tắc mà mọi trang tài liệu được đưa về trước khi nhúng |
+| **corpus** | Bộ trang tài liệu mẫu cố định dùng cho mọi phép đo, để các lần chạy so sánh được với nhau |
+| **CRC** | Cyclic Redundancy Check, mã kiểm dư vòng |
+| **DCT** | Discrete Cosine Transform, biến đổi cosin rời rạc |
+| **DWT** | Discrete Wavelet Transform, biến đổi sóng con rời rạc |
+| **ECC** | Error-Correcting Code, mã sửa lỗi |
+| **fixture** | Một trang tài liệu cụ thể trong corpus, đóng vai trò mẫu thử |
+| **HMAC** | Hash-based Message Authentication Code |
+| **IoU** | Intersection over Union, tỉ số giao trên hợp |
+| **JCS** | JSON Canonicalization Scheme (RFC 8785) |
+| **JPEG** | Joint Photographic Experts Group, chuẩn nén ảnh có tổn hao; JPEG-70 nghĩa là nén ở mức chất lượng 70 |
+| **letterbox** | Dải viền trơn mà ảnh chụp màn hình thêm vào hai bên khung ảnh khi tỉ lệ không khớp |
+| **MAC** | Message Authentication Code, mã xác thực thông điệp dùng khóa bí mật chung |
+| **manifest** | Hồ sơ toàn vẹn: tệp mô tả một lần cấp phát, được ký số để chống sửa đổi |
+| **ORB** | Oriented FAST and Rotated BRIEF |
+| **payload** | Chuỗi bit mang thông tin định danh được nhúng vào ảnh |
+| **pre-gate** | Vòng sàng lọc chạy trước cổng phát hành, dùng để loại sớm các bộ tham số kém |
+| **PSNR** | Peak Signal-to-Noise Ratio, tỉ số tín hiệu trên nhiễu đỉnh |
+| **QIM** | Quantization Index Modulation, điều chế chỉ số lượng tử |
+| **RANSAC** | Random Sample Consensus |
+| **RBAC** | Role-Based Access Control, kiểm soát truy cập theo vai trò |
+| **RSS** | Resident Set Size, dung lượng bộ nhớ thường trú |
+| **SSIM** | Structural Similarity Index Measure |
+| **SSOT** | Single Source of Truth, nguồn chân lý duy nhất |
+| **tile** | Ô ảnh: vùng hình chữ nhật mà thuật toán chia trang ra để nhúng payload |
+| **WM** | Watermark, thủy vân số |
 
----
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
 
-# PHẦN 1: ĐỀ TÀI VÀ QUY ƯỚC NGỮ NGHĨA TOÀN BỘ BÀI BÁO CÁO
+# DANH MỤC CÁC BẢNG
 
-### 1.1. Thông tin đề tài chính thức
+| Số hiệu | Tên bảng |
+|---|---|
+| Bảng 3.1 | Ma trận so sánh sáu kỹ thuật bảo vệ toàn vẹn trên bảy tiêu chí an ninh |
+| Bảng 4.1 | Các số liệu thực nghiệm đã khóa của thế hệ V1 |
+| Bảng 4.2 | Đối chiếu thế hệ V1 và V3 trên cùng một corpus |
+| Bảng 4.3 | Phân rã số trang trượt theo từng phép tấn công so với phép đo không tấn công |
+| Bảng 4.4 | Thời gian xử lý, bộ nhớ đỉnh và dung lượng tệp tạm đo trên 352 hàng |
+| Bảng 4.5 | Chất lượng ảnh sau khi nhúng, đo trên 192 hàng có PSNR hữu hạn |
+| Bảng 4.6 | Tỉ lệ khôi phục chính xác toàn bộ payload, đối chiếu SplitBind với ba hệ thống mã nguồn mở |
+| Bảng 4.7 | Tác động của bước chuẩn hóa khung ảnh, đo trên trang tài liệu của SplitBind |
+| Bảng 4.8 | Quét cường độ nhúng đối chiếu độ bền với độ trung thực, trên trang tài liệu của SplitBind |
+| Bảng 4.9 | Năm phép thử thủy vân trên môi trường production |
+| Bảng 4.10 | Ảnh hưởng của loại vật mang tới khả năng giải mã, ba vật mang trên năm điều kiện |
+| Bảng 4.11 | Đối chiếu khả năng sinh giả thuyết hình học với tỉ lệ truy vết đo được |
+| Bảng 4.12 | Ba lớp nguyên nhân thất bại và biện pháp tương ứng |
+
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
+
+# DANH MỤC CÁC HÌNH
+
+| Số hiệu | Tên hình |
+|---|---|
+| Hình 4.1 | Giao diện cấp phát tài liệu trên hệ thống đang vận hành |
+| Hình 4.2 | Kết quả xác minh khi tệp khớp bản cấp phát: mã SHA-256 trùng khớp và chữ ký hồ sơ hợp lệ |
+| Hình 4.3 | Kết quả xác minh khi tệp đã bị chỉnh sửa: hệ thống báo không khớp và không quy kết hành vi cho bất kỳ ai |
+| Hình 4.4 | Tỉ lệ giải mã của thế hệ V1 và V3 trên cùng hợp đồng corpus, cùng định nghĩa cổng |
+| Hình 4.5 | Tỉ lệ truy vết của 13 phép biến đổi, phân theo ba lớp nguyên nhân thất bại |
+| Hình 4.6 | Hiệu quả của bước bóc viền letterbox trước khi giải mã, đo trên 12 trang dương tính |
+
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
+
+# LỜI MỞ ĐẦU
+
+Tài liệu điện tử ngày nay rò rỉ chủ yếu qua các kênh làm mất tính toàn vẹn bit: chụp ảnh màn hình, in ra rồi quét lại, hoặc chụp lại bằng điện thoại. Chữ ký số bảo vệ rất tốt biểu diễn số nguyên bản, nhưng chỉ cần một byte thay đổi là phép xác minh thất bại, và nó không cung cấp cơ chế nào để đối chiếu một bản sao đã qua biến đổi tín hiệu với hồ sơ phát hành gốc. Khoảng trống đó là lý do nhóm chọn đề tài này.
+
+Báo cáo bám sát bốn nội dung được giao. Chương 1 trình bày lý thuyết kỹ thuật Digital Watermarking. Chương 2 trình bày ứng dụng thủy vân trong truy vết thay đổi hình ảnh. Chương 3 gồm hai phần: ứng dụng ký số trong bảo vệ thông tin truy vết, và so sánh với các kỹ thuật xác minh toàn vẹn khác. Chương 4 trình bày hệ thống SplitBind mà nhóm đã hiện thực, đo đạc và đề xuất cải tiến.
+
+Nhóm chủ trương công bố giới hạn thay vì che giấu. Mọi khẳng định kỹ thuật trong báo cáo đều được gắn một trong năm nhãn phân định cấp độ tri thức, in nghiêng ngay trước nội dung: *lý thuyết đã công bố* cho lý thuyết kinh điển, *đã hiện thực trong mã nguồn* cho tính năng đã có mã nguồn, *số liệu đo thực nghiệm* cho kết quả đo có artifact và mã băm xác thực, *đang vận hành trên hệ thống thật* cho tính năng đang chạy thực tế, và *giới hạn đã nhận diện* cho ranh giới thất bại đã xác định. Các kết quả âm tính và các giả thuyết đã bị bác bỏ đều được trình bày đầy đủ, vì chúng là một phần của đóng góp khoa học chứ không phải điều cần giấu.
+
+### Thông tin đề tài chính thức
 * **Tên đề tài BTL:** Tìm hiểu và đề xuất hệ thống truy vết toàn vẹn văn bản.
 * **Đơn vị thực hiện:** Nhóm 9 - lớp học phần An toàn thông tin.
 * **Bốn yêu cầu cốt lõi của giảng viên:**
@@ -32,8 +104,7 @@ Mọi nội dung, khẳng định kỹ thuật và số liệu trong tài liệu
   3. Ứng dụng ký số trong bảo vệ thông tin truy vết hình ảnh.
   4. So sánh với các kỹ thuật xác minh bảo vệ tính toàn vẹn khác.
 
-### 1.2. Thống nhất ngữ nghĩa: "văn bản" (document) vs "hình ảnh" (image)
-`[Established theory]` & `[Implemented]`
+### Thống nhất ngữ nghĩa: "văn bản" (document) vs "hình ảnh" (image)
 
 * **Nghịch lý ban đầu:** Đề tài yêu cầu xây dựng hệ thống truy vết toàn vẹn cho *văn bản*, nhưng các yêu cầu kỹ thuật chi tiết lại yêu cầu nghiên cứu và ứng dụng thủy vân trên *hình ảnh*.
 * **Bản chất đường ống xử lý thực tế của SplitBind:**
@@ -44,20 +115,21 @@ Mọi nội dung, khẳng định kỹ thuật và số liệu trong tài liệu
 * **Phát biểu chuẩn mực dùng xuyên suốt slide và báo cáo:**
   > *"Hệ thống truy vết và bảo vệ tính toàn vẹn tài liệu văn bản thông qua kỹ thuật thủy vân số trên biểu diễn ảnh trang (Page-Image Document Watermarking) kết hợp chữ ký số trên hồ sơ cấp phát."*
 
----
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
 
-# PHẦN 2: CƠ SỞ LÝ THUYẾT DIGITAL WATERMARKING (PHỤC VỤ YÊU CẦU 1)
+# CHƯƠNG 1. CƠ SỞ LÝ THUYẾT KỸ THUẬT DIGITAL WATERMARKING
 
-### 2.1. Khái niệm và định nghĩa chuẩn mực
-`[Established theory]` (tổng hợp từ [2] và [3])
+## 1.1. Khái niệm và định nghĩa chuẩn mực
+*Lý thuyết đã công bố* (tổng hợp từ [2] và [3])
 
 * **Thủy vân số (Digital Watermarking):** Là kỹ thuật nhúng một lượng thông tin số xác định (gọi là thủy vân hoặc watermark - như định danh bản quyền, mã số cấp phát, nhãn toàn vẹn) trực tiếp vào trong dữ liệu đa phương tiện vật mang (ảnh, tài liệu, âm thanh, video) bằng cách hiệu chỉnh các đặc trưng tín hiệu của vật mang.
 * **Mục tiêu an ninh:** Thông tin thủy vân gắn liền chặt chẽ với nội dung vật mang; mức độ bền vững (tồn tại qua các phép xử lý tín hiệu) hoặc mức độ dễ vỡ (bị phá hủy khi có can thiệp) được thiết kế có chủ đích nhằm phục vụ mục tiêu an ninh cụ thể (như truy vết bản quyền hoặc phát hiện sửa đổi).
 
-### 2.2. Phân loại kỹ thuật thủy vân số
-`[Established theory]`
+## 1.2. Phân loại kỹ thuật thủy vân số
 
-#### A. Phân loại theo miền nhúng (Embedding Domain)
+### 1.2.1. Phân loại theo miền nhúng (Embedding Domain)
 1. **Miền không gian (Spatial Domain):**
    * *Nguyên lý:* Biến đổi trực tiếp giá trị độ sáng hoặc màu sắc của các điểm ảnh (pixel).
    * *Kỹ thuật tiêu biểu:* LSB (Least Significant Bit - thay thế các bit trọng số thấp nhất), Patchwork, dịch chuyển khối tương quan.
@@ -70,7 +142,7 @@ Mọi nội dung, khẳng định kỹ thuật và số liệu trong tài liệu
      * **DFT (Discrete Fourier Transform):** Biến đổi Fourier rời rạc. Phép tịnh tiến trong miền không gian làm biến đổi phổ pha nhưng độ lớn phổ biên độ (Fourier magnitude spectrum) có tính chất bất biến đối với phép tịnh tiến.
    * *Vị trí nhúng tối ưu:* Hệ số tần số trung bình (Middle-frequency band). Nhúng vào tần số thấp dễ gây biến dạng trực quan nhận thấy được; nhúng vào tần số cao thường bị các thuật toán nén lossy (như JPEG) loại bỏ. Do đó, dải trung tần là vùng dung hòa / thỏa hiệp phổ biến (standard engineering trade-off) giữa độ vô hình và độ bền vững trong các thiết kế truyền thống.
 
-#### B. Phân loại theo mức độ bền vững và mục đích sử dụng
+### 1.2.2. Phân loại theo mức độ bền vững và mục đích sử dụng
 1. **Thủy vân bền vững (Robust Watermark):**
    * *Mục đích:* Được thiết kế để sống sót qua một tập hợp xác định các phép biến đổi và tấn công xử lý tín hiệu thông thường (nén lossy, cắt cúp, co giãn, in-scan) trong phạm vi ngưỡng thiết kế, phục vụ truy vết hoặc chứng minh quyền sở hữu.
    * *Ứng dụng:* Bảo vệ bản quyền tác giả (Copyright Protection), truy vết người làm rò rỉ tài liệu (Traitor Tracing / Leak Attribution).
@@ -81,8 +153,8 @@ Mọi nội dung, khẳng định kỹ thuật và số liệu trong tài liệu
    * *Mục đích:* Chấp nhận (sống sót qua) các phép biến đổi bảo toàn nội dung thông thường (nén JPEG nhẹ, chuyển đổi định dạng), nhưng bị phá hủy và cảnh báo khi có sự can thiệp làm thay đổi ngữ nghĩa nội dung (sửa chữ số, xóa đoạn văn, chèn con dấu giả).
    * *Ứng dụng:* Kiểm tra tính toàn vẹn và định vị vùng bị can thiệp sửa đổi (Tamper Detection & Localization).
 
-### 2.3. Tam giác đánh đổi cốt lõi (The Fundamental Trade-off Triangle)
-`[Established theory]` (Cox et al., Digital Watermarking and Steganography)
+## 1.3. Tam giác đánh đổi cốt lõi (The Fundamental Trade-off Triangle)
+*Lý thuyết đã công bố* (Cox et al., Digital Watermarking and Steganography)
 
 Trong thiết kế bất kỳ hệ thống thủy vân số nào, tồn tại một ràng buộc đánh đổi kỹ thuật (Engineering / Design Trade-off) giữa ba yếu tố thường cạnh tranh lẫn nhau:
 
@@ -93,8 +165,8 @@ $$\text{Robustness (Độ bền vững)} \longleftrightarrow \text{Imperceptibil
 * **Dung lượng (Capacity):** Số lượng bit thông tin có thể nhúng thành công trên một đơn vị diện tích tài liệu.
 * *Bản chất đánh đổi kỹ thuật:* Khi tăng cường độ nhúng để tăng độ bền vững (Robustness), chất lượng ảnh dễ bị suy giảm (Fidelity giảm). Nếu tăng dung lượng nhúng (Capacity cao), khoảng cách giữa các trạng thái lượng tử hóa bị thu hẹp, làm giảm khả năng chịu nhiễu. Do đó, kỹ sư an toàn thông tin phải xác định điểm cân bằng phù hợp với mô hình đe dọa cụ thể.
 
-### 2.4. Kỹ thuật điều chế chỉ số lượng tử hóa (QIM - Quantization Index Modulation)
-`[Established theory]` (Chen & Wornell, IEEE Transactions on Information Theory, 2001)
+## 1.4. Kỹ thuật điều chế chỉ số lượng tử hóa (QIM - Quantization Index Modulation)
+*Lý thuyết đã công bố* (Chen & Wornell, IEEE Transactions on Information Theory, 2001)
 
 * **Nguyên lý:** QIM là phương pháp nhúng thông tin có sự tham gia của vật mang (Informed Embedding). Thay vì cộng tín hiệu giả ngẫu nhiên vào ảnh (như Spread Spectrum), QIM chia miền giá trị của các hệ số biến đổi thành tập hợp các lưới lượng tử hóa rời rạc (Lattices) so le nhau.
 * **Cơ chế Parity-QIM (Lưới chẵn/lẻ):**
@@ -103,21 +175,22 @@ $$\text{Robustness (Độ bền vững)} \longleftrightarrow \text{Imperceptibil
     Trong đó $\Delta$ là bước lượng tử hóa (Quantization Step / Delta).
   * Khi giải mã, phía nhận chỉ cần lượng tử hóa hệ số nhận được và kiểm tra tính chẵn/lẻ của chỉ số lượng tử, hoàn toàn không cần ảnh gốc (Blind Extraction).
 
----
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
 
-# PHẦN 3: ỨNG DỤNG THỦY VÂN TRONG TRUY VẾT & TOÀN VẸN HÌNH ẢNH (PHỤC VỤ YÊU CẦU 2)
+# CHƯƠNG 2. ỨNG DỤNG THỦY VÂN TRONG TRUY VẾT VÀ TOÀN VẸN HÌNH ẢNH
 
 Nhóm 9 đã tiếp cận và triển khai thực nghiệm cả hai bài toán ứng dụng độc lập trong an toàn thông tin hình ảnh:
 1. **Bài toán A:** Ứng dụng thủy vân bền vững trong truy vết nguồn phát hành (Traitor Tracing / Source Attribution).
-2. **Bài toán B:** Ứng dụng thủy vân bán dễ vỡ trong phát hiện & định vị sửa đổi (Tamper Detection & Localization).
+2. **Bài toán B:** Ứng dụng thủy vân bán dễ vỡ trong phát hiện và định vị sửa đổi (Tamper Detection & Localization).
 
 ---
 
-### 3.1. Bài toán A: truy vết nguồn phát hành (Traitor Tracing)
-`[Implemented]` & `[Experimentally observed]`
+## 2.1. Bài toán A: truy vết nguồn phát hành (Traitor Tracing)
 
-#### A. Cấu trúc payload thực tế trong mã nguồn
-`[Implemented]` (Tệp `research/python/src/splitbind_ref/payload.py: L18-L69` & `contracts/algorithm/payload-profile.v1.json`)
+### 2.1.1. Cấu trúc payload thực tế trong mã nguồn
+*Đã hiện thực trong mã nguồn* (Tệp `research/python/src/splitbind_ref/payload.py: L18-L69` và `contracts/algorithm/payload-profile.v1.json`)
 
 * **Tổng chiều dài:** Đúng 23 byte (184 bit nhị phân).
 * **Các trường dữ liệu theo hợp đồng chuẩn hóa:**
@@ -133,8 +206,8 @@ Nhóm 9 đã tiếp cận và triển khai thực nghiệm cả hai bài toán �
 * **Mã sửa lỗi Reed-Solomon (ECC):** 23 byte thông điệp kết hợp với 16 byte kiểm tra chẵn lẻ Reed-Solomon trên trường $GF(256)$ tạo thành từ mã (codeword) 39 byte, cho phép tự sửa lỗi tối đa 8 ký hiệu byte bị suy biến trong quá trình giải mã.
 * *Kiểm chứng thực tế:* Bộ test suite `test_payload.py` vượt qua 10/10 ca kiểm thử về đóng gói, mã hóa và phục hồi nguyên vẹn `issuance_id`.
 
-#### B. Pipeline nhúng và trích xuất thủy vân DWT-DCT-QIM
-`[Implemented]` (`dwt_dct_qim.py`)
+### 2.1.2. Pipeline nhúng và trích xuất thủy vân DWT-DCT-QIM
+*Đã hiện thực trong mã nguồn* (`dwt_dct_qim.py`)
 
 1. Trang tài liệu PDF được render thành ảnh độ phân giải cao; tách lấy kênh độ sáng (Luminance).
 2. Chia ảnh thành các khối vuông (Tile Layout) và sinh vị trí nhúng bằng bộ sinh số giả ngẫu nhiên an toàn mật mã (CSPRNG).
@@ -143,8 +216,8 @@ Nhóm 9 đã tiếp cận và triển khai thực nghiệm cả hai bài toán �
 5. Mã hóa payload cùng mã sửa lỗi Reed-Solomon (khả năng tự sửa lỗi bit) và nhúng vào hệ số DCT bằng Parity-QIM.
 6. Trích xuất và lưu mẫu đồng bộ hình học (SyncTemplate) gồm các điểm đặc trưng ORB tự nhiên của trang tài liệu; khi giải mã, bộ giải mã phát hiện các đặc trưng ORB trên trang bị biến dạng và sử dụng thuật toán RANSAC để ước lượng ma trận biến đổi phối cảnh (Homography), hiệu chỉnh và căn chỉnh trang ảnh về tọa độ chuẩn trước khi trích xuất thủy vân.
 
-#### C. Số liệu thực nghiệm đo lường thật từ benchmark V1
-`[Experimentally observed]` (`docs/evaluation/fingerprint-profile-v1.md`)
+### 2.1.3. Số liệu thực nghiệm đo lường thật từ benchmark V1
+*Số liệu đo thực nghiệm* (`docs/evaluation/fingerprint-profile-v1.md`)
 
 * **Quy mô thực nghiệm:** 22 trang tài liệu $\times$ 48 cấu hình thuật toán $\times$ 31 kịch bản tấn công = 32.736 hàng thực nghiệm.
 * **Độ trung thực cảm nhận (Imperceptibility):**
@@ -153,8 +226,7 @@ Nhóm 9 đã tiếp cận và triển khai thực nghiệm cả hai bài toán �
   *(Lưu ý: Đây là chỉ số đo lường trên các mảng điểm ảnh thử nghiệm trước khi tấn công của bộ giải mã nghiên cứu).*
 * **Tỷ lệ gán sai nguồn (False Attribution Rate):** 0.00% (0 / 682 hàng) trên toàn bộ 48 ứng viên. Trong 682 trường hợp benchmark đã xét, không quan sát thấy trường hợp false attribution nào (hệ thống trích xuất chính xác định danh người nhận hoặc báo lỗi kiểm tra CRC-32 / Reed-Solomon và từ chối giải mã, không gán nhầm sang định danh người nhận khác).
 
-#### D. Ranh giới giới hạn kỹ thuật thực tế (Limitations)
-`[Limitation]`
+### 2.1.4. Ranh giới giới hạn kỹ thuật thực tế (Limitations)
 
 * Mặc dù được thiết kế theo hướng bền vững (Robust), thuật toán nghiên cứu chưa đạt tiêu chuẩn bền vững mức độ Production:
   * **Nén JPEG chất lượng 70 (JPEG-70):** Tỷ lệ giải mã thành công đạt $0 / 12$ ($0\%$). Nén JPEG làm suy biến nặng nề các lưới lượng tử hóa QIM.
@@ -164,11 +236,10 @@ Nhóm 9 đã tiếp cận và triển khai thực nghiệm cả hai bài toán �
 
 ---
 
-### 3.2. Bài toán B: thủy vân bán dễ vỡ phát hiện & định vị sửa đổi (Tamper Localization)
-`[Implemented]` & `[Experimentally observed]`
+## 2.2. Bài toán B: thủy vân bán dễ vỡ phát hiện và định vị sửa đổi (Tamper Localization)
 
-#### A. Kiến trúc thuật toán semi-fragile phân tán
-`[Implemented]` (`research/python/src/splitbind_ref/integrity.py`)
+### 2.2.1. Kiến trúc thuật toán semi-fragile phân tán
+*Đã hiện thực trong mã nguồn* (`research/python/src/splitbind_ref/integrity.py`)
 
 1. **Phân vùng ảnh:** Trang tài liệu được chia thành lưới các khối vuông kích thước $128 \times 128$ pixel.
 2. **Trích xuất đặc trưng nội dung (Feature Extraction):**
@@ -182,14 +253,13 @@ Nhóm 9 đã tiếp cận và triển khai thực nghiệm cả hai bài toán �
    * Dùng hàm băm có khóa ánh xạ mỗi khối tới 3 khối đối tác khác trên trang tài liệu.
 5. **Nhúng thẻ:** Nhúng 3 bản sao của thẻ xác thực vào 3 khối đối tác bằng Parity-QIM ($\Delta = 48.0$).
 
-#### B. Cơ chế xác minh và định vị
-`[Implemented]`
+### 2.2.2. Cơ chế xác minh và định vị
 
 * Khi kiểm tra, hệ thống trích xuất thẻ từ các khối đối tác và so khớp với thẻ tính lại từ nội dung khối hiện tại.
 * Nếu có ít nhất 2 trong 3 bản sao đối tác báo không khớp, khối đó được đánh dấu là khối nghi vấn (`suspicious`) và hệ thống xuất ra tọa độ hình chữ nhật chuẩn hóa `NormalizedRect(x, y, width, height)` để khoanh vùng can thiệp tiềm năng.
 
-#### C. Số liệu đo lường thực nghiệm thật
-`[Experimentally observed]` (`docs/evaluation/integrity-profile-v1.md`)
+### 2.2.3. Số liệu đo lường thực nghiệm thật
+*Số liệu đo thực nghiệm* (`docs/evaluation/integrity-profile-v1.md`)
 
 * **Bộ dữ liệu thử nghiệm:** 12 trang tài liệu $\times$ 4 loại tấn công can thiệp = 48 hàng thực nghiệm.
 * **Bốn loại tấn công can thiệp được đánh giá:**
@@ -205,8 +275,7 @@ Nhóm 9 đã tiếp cận và triển khai thực nghiệm cả hai bài toán �
     * `replace_text`: $\text{IoU} = \mathbf{0.054687}$ (9 hàng bị kích hoạt giới hạn).
     * `cover_region`: $\text{IoU} = \mathbf{0.000000}$ (12/12 hàng bị kích hoạt giới hạn).
 
-#### D. Giải thích nguyên nhân kỹ thuật và giới hạn thực nghiệm
-`[Limitation]` & `[Established theory]`
+### 2.2.4. Giải thích nguyên nhân kỹ thuật và giới hạn thực nghiệm
 
 * **Không được dùng từ "định vị tốt" hay "chính xác cao":** Kết quả IoU ~ 0.09 là mức độ nhận diện khiêm tốn ở giai đoạn nghiên cứu ban đầu.
 * **Nguyên nhân chính dẫn đến IoU ~ 0.09 (Cơ chế Fail-safe):**
@@ -215,12 +284,16 @@ Nhóm 9 đã tiếp cận và triển khai thực nghiệm cả hai bài toán �
   * Trong thực nghiệm, do các phép tấn công can thiệp chiếm diện tích đáng kể, 38 trên tổng số 48 hàng thử nghiệm đã kích hoạt cơ chế hạn chế này, làm giảm mạnh giá trị IoU trung bình toàn bộ tập mẫu.
 * **Ý nghĩa học thuật:** Kết quả thực nghiệm phản ánh trung thực năng lực và ranh giới kỹ thuật thực tế của phương pháp Semi-fragile phân tán dựa trên khối DCT truyền thống: mô hình minh chứng quy trình phát hiện và định vị can thiệp trên ảnh trang tài liệu, nhưng độ chính xác định vị hình học (IoU) còn rất hạn chế trong điều kiện can thiệp diện tích lớn do bị chi phối bởi cơ chế fail-safe bảo vệ trước nén mạnh. Ranh giới này khẳng định sự cần thiết của các nghiên cứu sâu hơn về phân rã đặc trưng đa tỉ lệ hoặc mạng nơ-ron học sâu trong bài toán bảo vệ tính toàn vẹn hình ảnh.
 
----
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
 
-# PHẦN 4: ỨNG DỤNG KÝ SỐ TRONG BẢO VỆ THÔNG TIN TRUY VẾT (PHỤC VỤ YÊU CẦU 3)
+# CHƯƠNG 3. ỨNG DỤNG CHỮ KÝ SỐ VÀ SO SÁNH CÁC KỸ THUẬT TOÀN VẸN
 
-### 4.1. Phân định ba cấp độ kiến trúc (Bắt buộc không đánh đồng)
-`[Established theory]`, `[Implemented]` & `[Production]`
+## 3.1. Ứng dụng chữ ký số trong bảo vệ thông tin truy vết
+
+#### 3.1.0.1. Phân định ba cấp độ kiến trúc (Bắt buộc không đánh đồng)
+*Lý thuyết đã công bố*, *Đã hiện thực trong mã nguồn* và *Đang vận hành trên hệ thống thật*
 
 Để bảo vệ bài báo cáo trước hội đồng chuyên môn, nhóm phân định rạch ròi ba cấp độ:
 
@@ -230,8 +303,8 @@ Nhóm 9 đã tiếp cận và triển khai thực nghiệm cả hai bài toán �
 
 ---
 
-### 4.2. Kiến trúc hồ sơ toàn vẹn (Signed Manifest)
-`[Implemented]` & `[Production]` (Tệp `services/api/splitbind/release/manifest.py: L58-L119`)
+#### 3.1.0.2. Kiến trúc hồ sơ toàn vẹn (Signed Manifest)
+*Đã hiện thực trong mã nguồn* và *Đang vận hành trên hệ thống thật* (Tệp `services/api/splitbind/release/manifest.py: L58-L119`)
 
 Hệ thống không ký trực tiếp lên file PDF nhị phân, mà sử dụng mô hình Hồ sơ toàn vẹn chuẩn hóa (Signed Manifest) nhằm thiết lập liên kết mật mã (cryptographic binding) chặt chẽ giữa tài liệu phát hành và các siêu dữ liệu truy vết nghiệp vụ (`issuance_id`, `recipient_id`, `source_sha256`, `output_sha256`, `signing_key_id`...), được chuẩn tắc hóa qua RFC 8785 và ký bằng Ed25519:
 
@@ -263,8 +336,8 @@ Hệ thống không ký trực tiếp lên file PDF nhị phân, mà sử dụng
 
 ---
 
-### 4.3. Giải quyết "Mâu thuẫn giữa thủy vân số và chữ ký số"
-`[Established theory]` (Giải quyết thắc mắc của Giảng viên TS. Hồ Đăng Thế)
+#### 3.1.0.3. Giải quyết "Mâu thuẫn giữa thủy vân số và chữ ký số"
+*Lý thuyết đã công bố* (Giải quyết thắc mắc của Giảng viên TS. Hồ Đăng Thế)
 
 * **Vấn đề giảng viên nêu ra:** *"Chữ ký số đòi hỏi tính toàn vẹn từng bit (1 bit đổi là hỏng chữ ký). Thủy vân số lại chủ động làm thay đổi điểm ảnh/dữ liệu của tệp. Hai kỹ thuật này có mâu thuẫn triệt tiêu lẫn nhau không?"*
 * **Lời giải kỹ thuật của Nhóm 9 (Nguyên lý Phân tầng Trách nhiệm):**
@@ -281,8 +354,7 @@ Hệ thống không ký trực tiếp lên file PDF nhị phân, mà sử dụng
 
 ---
 
-### 4.4. Minh bạch ngữ nghĩa trạng thái trên production (`NO_WATERMARK`)
-`[Production]` & `[Limitation]`
+#### 3.1.0.4. Minh bạch ngữ nghĩa trạng thái trên production (`NO_WATERMARK`)
 
 * Trên backend API, trạng thái tra cứu mã băm không khớp trả về mã enum nội bộ là `NO_WATERMARK` kèm thông điệp hạn chế `integrity.transformed_attribution_unavailable`.
 * **Trên giao diện Web người dùng (`apps/web`):** Hệ thống không dùng từ "Không có watermark", mà hiển thị chuẩn mực:
@@ -291,13 +363,13 @@ Hệ thống không ký trực tiếp lên file PDF nhị phân, mà sử dụng
   * Thông báo phạm vi: *"Kiểm tra này đối chiếu toàn bộ tệp bằng SHA-256 và xác minh chữ ký của hồ sơ cấp phát trong tổ chức. Không định vị vùng chỉnh sửa hay xác định người chỉnh sửa, làm lộ hoặc phát tán tài liệu."*
 * Điều này chứng minh tính trung thực kỹ thuật, không ngụy tạo việc đã chạy bộ quét thủy vân trên production khi thực tế chỉ kiểm tra tính toàn vẹn tệp chính xác.
 
----
+## 3.2. So sánh với các kỹ thuật xác minh bảo vệ tính toàn vẹn khác
 
-# PHẦN 5: MA TRẬN SO SÁNH CÁC KỸ THUẬT TOÀN VẸN (PHỤC VỤ YÊU CẦU 4)
+*Lý thuyết đã công bố* (tổng hợp từ [1], [2], [14] và [15])
 
-`[Established theory]` (tổng hợp từ [1], [2], [14] và [15])
+#### 3.2.0.1. Bảng ma trận so sánh đa chiều toàn diện (7 Tiêu chí $\times$ 6 Kỹ thuật)
 
-### 5.1. Bảng ma trận so sánh đa chiều toàn diện (7 Tiêu chí $\times$ 6 Kỹ thuật)
+**Bảng 3.1:** Ma trận so sánh sáu kỹ thuật bảo vệ toàn vẹn trên bảy tiêu chí an ninh
 
 | Tiêu chí so sánh | Hàm băm mật mã (Cryptographic Hash) | Mã xác thực thông điệp (HMAC / MAC) | Chữ ký số (Digital Signature) | Thủy vân bền vững (Robust Watermark) | Thủy vân bán dễ vỡ (Semi-fragile WM) | Giấu tin bí mật (Steganography) |
 |---|---|---|---|---|---|---|
@@ -311,24 +383,27 @@ Hệ thống không ký trực tiếp lên file PDF nhị phân, mà sử dụng
 
 ---
 
-### 5.2. Phân tích tương phản chuyên sâu giữa các cặp kỹ thuật
+#### 3.2.0.2. Phân tích tương phản chuyên sâu giữa các cặp kỹ thuật
 
-#### A. Thủy vân số (Watermarking) vs giấu tin bí mật (Steganography)
+##### Thủy vân số (Watermarking) vs giấu tin bí mật (Steganography)
 * **Điểm tương đồng:** Cùng sử dụng kỹ thuật nhúng dữ liệu vào vật mang đa phương tiện mà không làm thay đổi cảm nhận trực quan của con người.
 * **Sự khác biệt cốt lõi:**
   * *Steganography:* Mục tiêu tối thượng là giấu sự tồn tại của hành vi truyền tin (kẻ nghe lén không được biết có thông điệp ẩn). Các yếu tố dung lượng (capacity), khả năng chống phân tích ẩn mật (steganalysis resistance) và độ bền vững (robustness) là các bài toán đánh đổi phụ thuộc vào mục tiêu thiết kế của từng sơ đồ; nếu kênh truyền bị can thiệp làm mất dữ liệu nhúng, liên lạc bí mật có thể thất bại.
   * *Watermarking:* Sự tồn tại của thủy vân có thể được công bố công khai. Mục tiêu tối thượng là gắn chặt thông điệp vào vật mang; thuật toán được thiết kế để gây khó khăn tối đa cho kẻ tấn công khi cố loại bỏ thủy vân mà không làm suy giảm nghiêm trọng giá trị sử dụng của vật mang trong ngưỡng thiết kế xác định. Tuy nhiên, không có thủy vân nào mặc nhiên bất khả xóa trong mọi điều kiện tấn công tùy ý.
 
-#### B. Thủy vân số (Watermarking) vs chữ ký số (Digital Signature)
+##### Thủy vân số (Watermarking) vs chữ ký số (Digital Signature)
 * **Digital Signature:** Bảo vệ văn bản trên biểu diễn số nguyên bản (exact representation). Bất kỳ sự thay đổi byte nào đều khiến chữ ký ban đầu không còn hợp lệ; chữ ký số không tự cung cấp cơ chế so khớp hay phục hồi đối với các bản chuyển đổi analog/lossy (như in-scan, chụp ảnh màn hình).
 * **Watermarking:** Tồn tại trên kênh tín hiệu trực quan (Visual representation). Về mặt lý thuyết thiết kế, thủy vân bền vững hướng tới cung cấp cơ chế trích xuất định danh để làm cầu nối đối chiếu ngay cả khi tài liệu đã bị biến đổi qua kênh analog/lossy (cắt xén, in-scan, chụp lại màn hình). Trong thực nghiệm của SplitBind, năng lực này phụ thuộc thế hệ thuật toán. Ở thế hệ V1, giải mã bị phá vỡ hoàn toàn trước JPEG-70 và Resize-0.75 (0/12 cả hai) và chỉ khôi phục một phần dưới Crop-0.25. Ở thế hệ nghiên cứu V3, đo trên đúng cùng corpus và cùng bộ cổng, giải mã đạt 9/12 với JPEG-70, 9/12 với Crop-0.25 và 8/12 với Resize-0.75; đáng chú ý là JPEG-70 và Crop-0.25 không gây mất mát nào so với kênh không bị tấn công (chi tiết phân rã ở Mục 4.2.1). Dù vậy V3 vẫn không đạt cổng phát hành 0.95 và mang phạm vi bằng chứng `research_measurement_only`, nên phân hệ thủy vân bền vững chưa qua cổng phát hành. Từ 12/09/2026 nhóm đã bật nó trên chính hệ thống đang chạy để đo thực tế, và kết quả ở Mục 4.2.3 cho thấy nó chưa truy vết được bản biến đổi nào. Số liệu đầy đủ và ranh giới ở Mục 4.2.1 và 4.2.3.
 
----
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
 
-# PHẦN 6: CASE STUDY HỆ THỐNG SPLITBIND VÀ KIẾN TRÚC THỰC THI
+# CHƯƠNG 4. HỆ THỐNG SPLITBIND: HIỆN THỰC, THỰC NGHIỆM VÀ ĐỀ XUẤT
 
-### 6.1. Sơ đồ kiến trúc hệ thống SplitBind
-`[Production]` & `[Implemented]`
+## 4.1. Kiến trúc và hiện thực hệ thống
+
+#### 4.1.0.1. Sơ đồ kiến trúc hệ thống SplitBind
 
 Hệ thống được tổ chức thành hai phân hệ độc lập:
 
@@ -354,29 +429,28 @@ Hệ thống được tổ chức thành hai phân hệ độc lập:
                   └───────────────────────────────► (PDF Objects)
 
 ─────────────────────────────────────────────────────────────────────────────
-                TẦNG NGHIÊN CỨU & KIỂM THỬ THUẬT TOÁN (RESEARCH)
+                TẦNG NGHIÊN CỨU và KIỂM THỬ THUẬT TOÁN (RESEARCH)
   [ Python Reference Codec ] ──► [ Synthetic Corpus ] ──► [ Attack Matrix ]
     - DWT-DCT-QIM Fingerprint                             - 31 Image Attacks
     - Semi-fragile HMAC Tamper                            - 4 Tamper Attacks
 ```
 
-### 6.2. Hai quy trình nghiệp vụ cốt lõi
-`[Production]`
+#### 4.1.0.2. Hai quy trình nghiệp vụ cốt lõi
 
 1. **Quy trình cấp phát tài liệu (Issuance Workflow):**
    * Quản trị viên tải lên tệp PDF nguồn $\rightarrow$ hệ thống sinh mã cấp phát ngẫu nhiên `issuance_id` $\rightarrow$ in lên mỗi trang một nhãn cấp phát nhìn thấy được dạng `SB1-<base32(issuance_id)>` $\rightarrow$ tính toán mã băm SHA-256 của tệp nguồn và tệp phát hành $\rightarrow$ tạo cấu trúc Manifest chuẩn hóa theo RFC 8785 $\rightarrow$ ký số bằng khóa riêng Ed25519 $\rightarrow$ lưu trữ hồ sơ cấp phát và cung cấp link tải an toàn.
 2. **Quy trình xác minh tính toàn vẹn (Verification Workflow):**
    * Người kiểm tra tải lên tệp PDF nghi vấn $\rightarrow$ hệ thống tính toán mã băm SHA-256 của tệp $\rightarrow$ tra cứu đối chiếu với cơ sở dữ liệu cấp phát $\rightarrow$ xác minh chữ ký số Ed25519 của Manifest $\rightarrow$ trả về kết quả: `VERIFIED_INTACT` (Khớp hoàn toàn) hoặc `Chưa tìm thấy bản cấp phát khớp`.
 
----
-
-# PHẦN 7: BẢNG TỔNG HỢP SỐ LIỆU THỰC NGHIỆM ĐÃ KHÓA (FROZEN METRICS)
+## 4.2. Kết quả thực nghiệm
 
 Mọi con số trình bày trên slide thuyết trình và báo cáo bắt buộc phải sử dụng chính xác các giá trị sau.
 
 > **Lưu ý phạm vi:** bảng dưới đây là số liệu của thế hệ thuật toán V1. Kết quả đo của thế hệ V3 nằm riêng ở Mục 4.2.1 và không thay thế bất kỳ giá trị nào trong bảng này. Khi trích dẫn độ bền thủy vân, luôn nói rõ đang nói về thế hệ nào.
 
-| Số liệu thực nghiệm | Giá trị khóa chính xác | Nguồn gốc tệp artifact (SHA-256) | Đối tượng đo lường & pipeline | Ý nghĩa chứng minh kỹ thuật |
+**Bảng 4.1:** Các số liệu thực nghiệm đã khóa của thế hệ V1
+
+| Số liệu thực nghiệm | Giá trị khóa chính xác | Nguồn gốc tệp artifact (SHA-256) | Đối tượng đo lường và pipeline | Ý nghĩa chứng minh kỹ thuật |
 |---|---|---|---|---|
 | **PSNR trang PDF** | **`41.69 dB`** | `artifacts/task-1-fidelity/fidelity-report.json` | 1 trang tài liệu PDF kết quả thực tế ở độ phân giải 144 DPI. | Thể hiện mức độ suy biến tín hiệu thấp theo chỉ số đo lường khách quan ($\text{PSNR} > 40\text{ dB}$ trên ảnh render), dù không thay thế cho nghiên cứu cảm nhận thị giác chủ quan (MOS / User Study). |
 | **SSIM trang PDF** | **`0.9825`** | `artifacts/task-1-fidelity/fidelity-report.json` | Đo cấu trúc ảnh giữa trang PDF gốc và trang PDF đã xử lý ở 144 DPI. | Thể hiện mức độ tương đồng cấu trúc ký tự rất cao ($\text{SSIM} > 0.98$) theo mô hình đánh giá cấu trúc khách quan. |
@@ -386,13 +460,12 @@ Mọi con số trình bày trên slide thuyết trình và báo cáo bắt buộ
 | **Tỷ lệ gán sai (False Attribution)** | **`0.00%` (0 / 682)** | `fingerprint-profile-v1.md` | 682 hàng kiểm tra trên 48 ứng viên thuật toán. | Trong toàn bộ 682 trường hợp benchmark đã xét, không quan sát thấy bất kỳ ca gán sai định danh nào (hệ thống giải mã đúng hoặc từ chối giải mã do lỗi CRC-32 / Reed-Solomon). |
 | **Quy mô benchmark can thiệp** | **`48 hàng`** | `docs/evaluation/integrity-profile-v1.md` | 12 trang $\times$ 4 loại tấn công can thiệp (`replace_text`, `cover_region`, `copy_move`, `insert_object`). | Quy mô thực nghiệm đánh giá khả năng định vị sửa đổi của thuật toán Semi-fragile. |
 | **IoU định vị can thiệp** | **`0.089981` (~0.09)** | `docs/evaluation/integrity-profile-v1.md` | Chỉ số giao trên hợp (IoU) tổng hợp trên toàn bộ 48 hàng thử nghiệm. | Minh bạch giới hạn thuật toán: 38/48 hàng kích hoạt cơ chế fail-safe bảo vệ trước nén mạnh, làm giảm IoU. |
-| **Tỷ lệ giải mã JPEG-70 & Resize** | **`0%` (0 / 12)** | `fingerprint-profile-v1.md` | Thực nghiệm dưới nén JPEG Q=70 và co giãn 0.75x. | Minh chứng lý do thuật toán được giữ ở tầng nghiên cứu. Từ 12/09/2026 phân hệ này được bật trên production để đo thực tế; kết quả ở Mục 4.2.3. |
+| **Tỷ lệ giải mã JPEG-70 và Resize** | **`0%` (0 / 12)** | `fingerprint-profile-v1.md` | Thực nghiệm dưới nén JPEG Q=70 và co giãn 0.75x. | Minh chứng lý do thuật toán được giữ ở tầng nghiên cứu. Từ 12/09/2026 phân hệ này được bật trên production để đo thực tế; kết quả ở Mục 4.2.3. |
 
 ---
 
-## 7.2. BỔ SUNG: KẾT QUẢ ĐO THẾ HỆ V3 (KHÔNG THAY THẾ FROZEN METRICS V1)
+### 4.2.1. BỔ SUNG: KẾT QUẢ ĐO THẾ HỆ V3 (KHÔNG THAY THẾ FROZEN METRICS V1)
 
-`[Experimentally observed]` `[Limitation]`
 
 Bảng Frozen Metrics ở trên là số liệu của thế hệ thuật toán V1. Dự án đã phát triển tiếp lên V3 và có một lần chạy benchmark hoàn chỉnh chưa được đưa vào bảng khóa. Mục này trình bày kết quả đó dưới nhãn riêng; mọi con số V1 ở mục 7.1 giữ nguyên, không sửa đổi.
 
@@ -402,9 +475,11 @@ Nguồn: `reports/fingerprint-pregate-v3/`, ngày 2026-09-06, `status: complete`
 - `results_csv_sha256`: `e0b1ba7d90b7c5c4ca9a4212a4abe5cbf29232286eda68bdba6a4f5e543bf983`
 - `results_sha256`: `69de7db807a69217dade43426d7f9f9e021a9073cfa78fb0d9eb5df489632938`
 
-### 7.2.1. Đối chiếu V1 và V3 trên cùng một corpus
+#### 4.2.1.1. Đối chiếu V1 và V3 trên cùng một corpus
 
 Ứng viên tốt nhất của V3: `da34231d8ae5b50c0271cd5d06a794a780c0a1c051d791d9e1d7d778ce1e9d56`.
+
+**Bảng 4.2:** Đối chiếu thế hệ V1 và V3 trên cùng một corpus
 
 | Chỉ số | V1 tốt nhất | V3 tốt nhất | Mẫu số |
 |---|---:|---:|---:|
@@ -420,9 +495,11 @@ Nguồn: `reports/fingerprint-pregate-v3/`, ngày 2026-09-06, `status: complete`
 
 **Đánh đổi chất lượng.** PSNR tối thiểu giảm từ 69.31 dB xuống 42.47 dB và SSIM tối thiểu từ 0.99992 xuống 0.9554. Cả hai vẫn vượt ngưỡng cổng chất lượng (38 dB PSNR, 0.95 SSIM), nên đánh đổi nằm trong ngân sách thiết kế. Cần nói chính xác: phần giảm chất lượng này phát sinh ở bước V1 → V2 (đổi dải nhúng `HL → LL` và nâng bước lượng tử), còn phần tăng độ bền lại đến ở bước V2 → V3 (thêm trải phổ). V2 đã chứng minh rằng chỉ nâng bước lượng tử thì trả giá chất lượng mà không thu được độ bền (xem Câu hỏi 9).
 
-### 7.2.2. Phân rã: 0.750 là trần của kênh sạch, không phải thiệt hại do tấn công
+#### 4.2.1.2. Phân rã: 0.750 là trần của kênh sạch, không phải thiệt hại do tấn công
 
 Đọc 9/12 thành "V3 sống sót 75% trước JPEG-70" là sai. Phân rã 88 hàng của ứng viên tốt nhất theo trang bị trượt:
+
+**Bảng 4.3:** Phân rã số trang trượt theo từng phép tấn công so với phép đo không tấn công
 
 | Tấn công | Số trang trượt | Trùng đúng các trang mà `identity` trượt? | Trượt thêm so với `identity` |
 |---|---:|---|---:|
@@ -437,9 +514,11 @@ Phát biểu đúng là: dưới JPEG-70 và cắt cúp trung tâm 0.25, V3 gi�
 
 Điều này khớp với bất biến sắp xếp tile chống cắt cúp: tiền tố payload phải giữ được tối thiểu `max(2, ceil(0.60 × payload_repetitions))` tile nguyên vẹn. Với `payload_repetitions = 3`, ngưỡng là 2 phiếu, còn `pdf-multi-mixed` chỉ cho 1. Fixture này phơi bày đúng ràng buộc đặt tile - khuyết tật nằm ở vị trí đặt, không phải ở tái dựng hình học và cũng không phải ở độ bền kênh truyền.
 
-### 7.2.3. Hiệu năng và tài nguyên đo được
+#### 4.2.1.3. Hiệu năng và tài nguyên đo được
 
 Đo trên toàn bộ 352 hàng:
+
+**Bảng 4.4:** Thời gian xử lý, bộ nhớ đỉnh và dung lượng tệp tạm đo trên 352 hàng
 
 | Chỉ số | n | Trung bình | Trung vị | P95 | Lớn nhất |
 |---|---:|---:|---:|---:|---:|
@@ -449,6 +528,8 @@ Phát biểu đúng là: dưới JPEG-70 và cắt cúp trung tâm 0.25, V3 gi�
 
 Chất lượng ảnh sau khi nhúng, đo trên 192 hàng có PSNR hữu hạn bằng cách so ảnh gốc với ảnh đã nhúng thủy vân trước khi tấn công, thang dữ liệu 255:
 
+**Bảng 4.5:** Chất lượng ảnh sau khi nhúng, đo trên 192 hàng có PSNR hữu hạn
+
 | Chỉ số | Nhỏ nhất | Trung bình | Lớn nhất |
 |---|---:|---:|---:|
 | PSNR (dB) | 42.32 | 43.40 | 44.14 |
@@ -456,9 +537,8 @@ Chất lượng ảnh sau khi nhúng, đo trên 192 hàng có PSNR hữu hạn b
 
 Dung lượng tệp tạm bằng 0 ở mọi hàng vì toàn bộ pipeline tấn công và giải mã chạy trong bộ nhớ, không ghi tệp tạm.
 
-### 7.2.4. Ranh giới bắt buộc phải nêu kèm
+#### 4.2.1.4. Ranh giới bắt buộc phải nêu kèm
 
-`[Limitation]`
 
 - Phạm vi bằng chứng của lần chạy được đánh dấu là chỉ dùng cho đo đạc nghiên cứu (`evidence_scope = research_measurement_only`). Chính bản tóm tắt tuyên bố V3 pre-gate là bộ lọc kiểm soát chi phí có tính tất định, không phải bằng chứng phát hành, và chỉ đo `identity`, JPEG 70, resize 0.75, cắt cúp trung tâm 0.25.
 - Không hồ sơ tham số nào được đề bạt và danh sách ứng viên đạt chuẩn rỗng (`profile_promoted: False`, `qualified_candidate_ids: []`), vì 0.750 và 0.667 không đạt cổng 0.95. V3 không đủ điều kiện đưa lên hệ thống vận hành thật trên bằng chứng này.
@@ -467,15 +547,17 @@ Dung lượng tệp tạm bằng 0 ở mọi hàng vì toàn bộ pipeline tấn
 
 ---
 
-## 7.3. ĐỊNH VỊ KẾT QUẢ CỦA NHÓM SO VỚI CÁC CÔNG TRÌNH MÃ NGUỒN MỞ
+### 4.2.2. ĐỊNH VỊ KẾT QUẢ CỦA NHÓM SO VỚI CÁC CÔNG TRÌNH MÃ NGUỒN MỞ
 
 *Số liệu đo thực nghiệm* và *giới hạn đã nhận diện*
 
 Một kết quả thực nghiệm chỉ có ý nghĩa khi biết nó đứng ở đâu. Mục này đối chiếu độ bền của SplitBind với ba hệ thống thủy vân mã nguồn mở đang được xem là hiện đại nhất, sau đó tách phần nhóm còn thiếu thành hai loại có bản chất khác hẳn nhau.
 
-### 7.3.1. Cơ sở đối chiếu và tính so sánh được của tiêu chí
+#### 4.2.2.1. Cơ sở đối chiếu và tính so sánh được của tiêu chí
 
 Bộ đo `wmbench` [16] chấm ba hệ thống Adobe TrustMark [17], Meta PixelSeal và Meta Watermark Anything [18] trên 18 ảnh, dưới 38 phép biến đổi. Điều khiến bộ đo này so sánh được trực tiếp với công trình của nhóm là tiêu chí thành công của nó trùng khít với cổng phát hành mà nhóm tự đặt ra: một lần giải mã chỉ được tính là thành công khi khôi phục chính xác toàn bộ payload, sai một bit cũng bị tính là trượt. Đây không phải độ chính xác theo bit.
+
+**Bảng 4.6:** Tỉ lệ khôi phục chính xác toàn bộ payload, đối chiếu SplitBind với ba hệ thống mã nguồn mở
 
 | Hệ thống | Nén JPEG mạnh | Thu nhỏ mạnh | Cắt còn 80% | Cắt còn 50% | Xoay 5 độ | Chụp màn hình | Chụp lại màn hình |
 |---|---|---|---|---|---|---|---|
@@ -486,9 +568,11 @@ Bộ đo `wmbench` [16] chấm ba hệ thống Adobe TrustMark [17], Meta PixelS
 
 Nguồn của ba dòng đầu là tệp `results/results.json` công bố kèm [16]; nhóm đọc lại tệp này chứ không tự tái lập phép đo. Dòng SplitBind lấy từ Mục 4.2.1 của báo cáo, đo trên bộ ngữ liệu và bộ tấn công riêng của dự án, nên các ô không tương đương tuyệt đối về cường độ tấn công và chỉ nên đọc theo bậc độ lớn.
 
-### 7.3.2. Hai loại thất bại có bản chất khác nhau
+#### 4.2.2.2. Hai loại thất bại có bản chất khác nhau
 
 Bảng trên cho thấy nén và thu nhỏ là bài toán đã được giải trong công trình công khai. Để xác định vì sao cùng một lớp tấn công lại chặn được SplitBind, nhóm dựng một thí nghiệm đối chứng trên chính trang tài liệu do hệ thống render (tỉ lệ 2.0, kích thước 1190 x 1684 điểm ảnh), dùng một bộ mã hóa thủy vân DWT-DCT-SVD-QIM độc lập [19] thay cho bộ của dự án, payload 64 bit. Mỗi ảnh bị tấn công được giải hai lần: một lần ở đúng kích thước kẻ tấn công để lại, một lần sau khi đã phóng khung ảnh về kích thước nhúng ban đầu.
+
+**Bảng 4.7:** Tác động của bước chuẩn hóa khung ảnh, đo trên trang tài liệu của SplitBind
 
 | Phép tấn công | Giải ở kích thước bị tấn công | Giải sau khi phục hồi khung |
 |---|---|---|
@@ -508,9 +592,11 @@ Kết quả tách bạch hai loại thất bại vốn bị gộp chung dưới 
 
 Hai loại thất bại cộng dồn khi đi cùng nhau: tổ hợp thu nhỏ rồi nén vẫn trượt ngay cả sau khi phục hồi khung.
 
-### 7.3.3. Kiểm chứng lại kết luận đã bác bỏ hướng tinh chỉnh tham số
+#### 4.2.2.3. Kiểm chứng lại kết luận đã bác bỏ hướng tinh chỉnh tham số
 
 Tham số `d1` của bộ thủy vân đối chứng [19] là bước lượng tử QIM, cùng loại tham số với bước lượng tử của SplitBind. Ở `d1` bằng 36, trang đã nhúng đo được 41.73 dB PSNR, lệch 0.04 dB so với giá trị 41.69 dB đã khóa của V1 ở Bảng 4.1, nên phép so sánh diễn ra ở cùng mức độ trung thực thị giác.
+
+**Bảng 4.8:** Quét cường độ nhúng đối chiếu độ bền với độ trung thực, trên trang tài liệu của SplitBind
 
 | `d1` | PSNR (dB) | JPEG Q=70 | JPEG Q=50 | JPEG Q=30 | Thu nhỏ 0.5x sau khi phục khung |
 |---|---|---|---|---|---|
@@ -524,7 +610,7 @@ Khả năng sống sót qua nén JPEG không đơn điệu theo bước lượng
 
 Đây là một phép thăm dò chỉ báo, không phải một chiến dịch đo lường: một vật mang, một payload, một hạt giống ngẫu nhiên. Giá trị của nó nằm ở chỗ nó được tạo ra bên ngoài mã nguồn của nhóm mà vẫn đồng thuận với kết luận của nhóm.
 
-### 7.3.4. Bốn hệ quả rút ra
+#### 4.2.2.4. Bốn hệ quả rút ra
 
 1. **Chuẩn hóa khung ảnh là bước đi đúng và rẻ.** Bảng 4.7 chứng minh Loại A được giải triệt để chỉ bằng một phép biến đổi hình học, không cần đổi thuật toán thủy vân, không tốn thêm độ trung thực.
 2. **Vị thế của SplitBind thuận lợi hơn các thư viện công khai ở đúng điểm này.** Một công cụ thủy vân mù buộc phải suy đoán hình học gốc: thư viện [19] dò vét 200 mốc tỉ lệ trong dải 0.5 đến 2.0 bằng tương quan chuẩn hóa, và hàm ước lượng tham số cắt của nó còn đòi hỏi ảnh gốc. SplitBind giữ hồ sơ cấp phát nên có thể render lại trang gốc bất kỳ lúc nào; thứ mà thư viện phải đoán thì hệ thống của nhóm chỉ việc tra ra.
@@ -533,11 +619,11 @@ Khả năng sống sót qua nén JPEG không đơn điệu theo bước lượng
 
 Một quan sát bổ sung đáng lưu ý cho tầng sửa lỗi: PixelSeal đạt 0% khôi phục chính xác khi không bật biến thể mã sửa lỗi BCH, và 89 đến 94% khi bật. Dưới tiêu chí khớp payload tuyệt đối, mã sửa lỗi không phải phần tô điểm thêm lên một bộ giải mã đã hoạt động, mà là điều kiện làm cho khôi phục chính xác trở nên khả thi. Kết luận này cần được đặt cạnh tầng Reed-Solomon 23 sang 39 byte của SplitBind trước khi quy bất kỳ thất bại nào cho cường độ nhúng.
 
-### 7.3.5. Khoảng trống mà dự án đang lấp
+#### 4.2.2.5. Khoảng trống mà dự án đang lấp
 
 Khảo sát mã nguồn mở cho thấy toàn bộ kết quả công khai về thủy vân bền vững đều nhắm vào ảnh tự nhiên. Các truy vấn về thủy vân cho tài liệu PDF hoặc truy vết theo hồ sơ phát hành không trả về cài đặt nào có quy mô tương đương. Bài toán mà SplitBind giải, tức gắn định danh phát hành vào tài liệu văn bản và truy vết trở lại hồ sơ cấp phát đã ký số, hiện chưa có lời giải mã nguồn mở nào để đối chiếu trực tiếp.
 
-## 7.4. BẬT THỦY VÂN TRÊN HỆ THỐNG ĐANG CHẠY: ĐO THỰC TẾ VÀ NGUYÊN NHÂN GỐC THỨ HAI
+### 4.2.3. BẬT THỦY VÂN TRÊN HỆ THỐNG ĐANG CHẠY: ĐO THỰC TẾ VÀ NGUYÊN NHÂN GỐC THỨ HAI
 
 *Số liệu đo thực nghiệm* và *giới hạn đã nhận diện*
 
@@ -545,9 +631,11 @@ Ngày 12/09/2026 nhóm đưa phân hệ thủy vân lên chính hệ thống đa
 
 Câu trả lời là một kết quả âm tính, và nó dẫn tới một chẩn đoán nguyên nhân gốc thứ hai, độc lập với chẩn đoán hình học ở Mục 4.3.
 
-### 7.4.1. Năm phép thử trên môi trường production
+#### 4.2.3.1. Năm phép thử trên môi trường production
 
 Mọi phép thử chạy qua giao diện công khai, trên tài liệu tổng hợp do nhóm tự sinh.
+
+**Bảng 4.9:** Năm phép thử thủy vân trên môi trường production
 
 | Hình học trang | Phép tấn công | Trạng thái giải mã | Phiếu hợp lệ | Độ tin cậy hình học |
 |---|---|---|---|---|
@@ -567,7 +655,7 @@ Thứ ba, hai kiểu trượt khác nhau và sự khác nhau đó có ý nghĩa.
 
 Một tính chất giữ nguyên suốt năm phép thử: hệ thống không bao giờ quy kết sai. Trượt thì trả 0 phiếu và im lặng, đúng với tỉ lệ gán sai 0.00% đo trên 352 hàng V3 ở Mục 4.2.1.
 
-### 7.4.2. Giả thuyết đã bị bác bỏ: mẫu đồng bộ ORB
+#### 4.2.3.2. Giả thuyết đã bị bác bỏ: mẫu đồng bộ ORB
 
 Phần bổ sung kết quả V3 ghi rằng harness nghiên cứu cấp mẫu đồng bộ ORB cho bộ giải mã còn đường production thì không. Đọc mã xác nhận đúng: `splitbind_bench/runner.py` dựng `sync_template` ngay lúc nhúng rồi truyền thẳng lại cho bộ giải mã, vì trong benchmark hai bước nằm chung một tiến trình. Trên production, cấp phát và xác minh là hai công việc riêng nên bộ giải mã luôn chạy với `orb_template=None`.
 
@@ -575,9 +663,11 @@ Giả thuyết vì thế rất hợp lý: chỉ cần lưu mẫu đồng bộ v�
 
 Giả thuyết này đã bị bác bỏ bằng thực nghiệm. Đo trực tiếp qua `decode_fingerprint_v3`, trên các trang được canonical hóa đúng như đường production, với ba loại vật mang và năm điều kiện tấn công, giải mã có mẫu đồng bộ và không có mẫu đồng bộ cho ra trạng thái giống hệt nhau ở cả ba mươi ô. Mẫu đồng bộ không phải mảnh còn thiếu.
 
-### 7.4.3. Nguyên nhân gốc thứ hai: vật mang quyết định, không phải thuật toán
+#### 4.2.3.3. Nguyên nhân gốc thứ hai: vật mang quyết định, không phải thuật toán
 
 Cũng chính phép đo đó lộ ra điều quan trọng hơn nhiều.
+
+**Bảng 4.10:** Ảnh hưởng của loại vật mang tới khả năng giải mã, ba vật mang trên năm điều kiện
 
 | Vật mang | không tấn công | JPEG q70 | JPEG q50 | thu nhỏ 0.75 | thu nhỏ 0.50 |
 |---|---|---|---|---|---|
@@ -595,7 +685,7 @@ Hệ quả trực tiếp: mọi tài liệu thật mà sản phẩm này cấp p
 
 Chẩn đoán này giải thích được điều mà ba thế hệ tinh chỉnh tham số không giải thích nổi. Nhóm đã lần lượt bác bỏ ba hướng chỉnh tham số ở Mục 4.3, rồi chẩn đoán nút thắt nằm ở tập giả thuyết hình học. Chẩn đoán đó đúng cho lớp thất bại do mất đồng bộ. Nhưng nó không cứu được tình huống mà payload chưa bao giờ sống sót qua khâu trích, và đó mới là tình huống thực tế của dự án trên chính tài liệu của mình.
 
-### 7.4.4. Hệ quả cho kiến trúc V4
+#### 4.2.3.4. Hệ quả cho kiến trúc V4
 
 Ba điều chỉnh so với đề xuất ở Mục 4.3.
 
@@ -605,322 +695,159 @@ Bước đầu tiên phải là chọn lại vật mang hoặc miền nhúng cho
 
 Và tiêu chí nghiệm thu phải đổi: mọi cổng phát hành về sau phải đo trên corpus gồm trang văn bản render từ PDF thật, không phải gradient hay hình vector. Một con số đo trên vật mang không đại diện là một con số không dùng được, dù quy mô benchmark có lớn đến đâu.
 
-### 7.4.5. Ranh giới của kết luận này
+#### 4.2.3.5. Ranh giới của kết luận này
 
 Đây là phép đo trên một hệ thống thật với năm phép thử, cộng một phép thăm dò ba vật mang nhân năm điều kiện. Nó đủ để bác bỏ một giả thuyết cụ thể và đủ để nêu một chẩn đoán, nhưng chưa phải một chiến dịch đo lường có quy mô thống kê. Nhóm công bố nó vì kết quả âm tính là một phần của đóng góp khoa học, và vì nó thay đổi hướng đi của V4.
 
-# PHẦN 8: SỔ TAY HƯỚNG DẪN TRẢ LỜI PHẢN BIỆN (DEFENSE Q&A CHEATSHEET)
+## 4.3. Đề xuất kiến trúc V4: chẩn đoán nguyên nhân gốc
 
-Dành cho các thành viên tham gia buổi bảo vệ trước hội đồng và giảng viên:
 
-### Câu hỏi 1: Tại sao lại kết hợp thủy vân số và chữ ký số? Hai cơ chế này có mâu thuẫn không khi thủy vân làm đổi bit còn chữ ký số yêu cầu toàn vẹn bit?
-* **Trả lời trọng tâm:**
-  1. *Về mặt kỹ thuật:* Không hề có mâu thuẫn về thứ tự thực thi. Kiến trúc tích hợp đề xuất áp dụng nguyên tắc "Nhúng trước, ký sau": Thuật toán nhúng thông tin thủy vân vào tài liệu trước, sau đó mới tính toán mã băm SHA-256 trên tệp đã nhúng hoàn chỉnh để đóng gói vào hồ sơ Manifest chuẩn tắc RFC 8785 và ký số Ed25519:
-     $$h_{\text{output}} = \text{SHA-256}(W(D))$$
-     $$M = \text{JCS}(\{\text{"schema\_version"}: 1, \text{"issuance\_id"}: \text{id}, \dots, \text{"output\_sha256"}: h_{\text{output}}, \dots\})$$
-     $$S = \text{Ed25519.Sign}(sk, M)$$
-     Chữ ký số Ed25519 ký trên hồ sơ Manifest chuẩn hóa độc lập với thư viện tuần tự hóa, bảo vệ tính toàn vẹn và chống giả mạo của mã băm văn bản đã mang thủy vân dưới các giả định an toàn mật mã.
-  2. *Về mặt kiến trúc:* Hai cơ chế giải quyết hai mô hình đe dọa (threat models) khác nhau:
-     * Chữ ký số trên Manifest bảo vệ tính toàn vẹn bit và chống chối bỏ trên kênh truyền số nguyên bản (Exact-bit digital channel). Nếu tệp bị sửa đổi hoặc nén lại, chữ ký trên Manifest gốc vẫn hoàn toàn hợp lệ (chứng minh Manifest không bị giả mạo), nhưng mã băm của tệp nghi vấn không còn khớp với `output_sha256` ghi trong Manifest.
-     * Về mặt lý thuyết thiết kế, thủy vân số bền vững đóng vai trò là cơ chế chủ động (proactive) hướng tới khả năng sống sót qua các kênh rò rỉ biến đổi tín hiệu (Analog/lossy leak channels như in ra giấy, quét lại, chụp màn hình điện thoại) làm mất tính toàn vẹn bit thô, cho phép giải mã lấy lại `issuance_id` để làm cầu nối tra cứu hồ sơ Manifest gốc đã ký trong hệ thống. Cần lưu ý rằng khả năng này phụ thuộc thế hệ thuật toán: thế hệ V1 không vượt qua JPEG-70 và Resize-0.75 (0/12 cả hai), còn thế hệ nghiên cứu V3 đo trên cùng corpus đạt 9/12 với JPEG-70, 9/12 với Crop-0.25 và 8/12 với Resize-0.75. Dù vậy V3 vẫn dưới cổng phát hành 0.95. Phân hệ đã được bật trên production từ 12/09/2026 để đo thực tế và chưa truy vết được bản biến đổi nào (xem Mục 4.2.1, Mục 4.2.3 và phần hỏi đáp phản biện).
-  * *Kết luận:* Hai cơ chế tạo thành chiến lược phòng thủ theo chiều sâu (Defense-in-Depth).
+Đề bài yêu cầu "tìm hiểu và đề xuất" một hệ thống. Phần này là đóng góp đề xuất của nhóm: một chẩn đoán nguyên nhân gốc dựa trên số đo, một phép kiểm chứng đã thực hiện, và kiến trúc V4 rút ra từ đó.
 
-### Câu hỏi 2: Tại sao kết quả định vị can thiệp (IoU) trong báo cáo chỉ đạt xấp xỉ 0.09? Thuật toán có sử dụng được trong thực tế không?
-* **Trả lời trọng tâm:**
-  * Chỉ số IoU tổng hợp ~ 0.09 là kết quả thực nghiệm trung thực từ 48 kịch bản tấn công trên 12 trang tài liệu benchmark.
-  * Nguyên nhân kỹ thuật cốt lõi: Thuật toán cài đặt cơ chế an toàn chủ động (Fail-safe): Khi tỷ lệ khối không khớp trên trang vượt quá 10% (`mismatch_ratio >= 0.10`), hệ thống nhận diện đây là biến đổi toàn cục (nén JPEG mạnh hoặc lỗi hình học) chứ không phải can thiệp cục bộ, và chủ động xóa danh sách vùng nghi vấn (`suspicious = ()`) để tránh cảnh báo sai cho người dùng.
-  * Trong thực nghiệm, do các kịch bản can thiệp có diện tích tương đối lớn so với kích thước khối $128 \times 128$, có tới 38 / 48 hàng thử nghiệm đã kích hoạt cơ chế fail-safe này, dẫn đến giá trị IoU tính trên toàn bộ tập mẫu bị kéo giảm.
-  * *Bài học học thuật:* Kết quả phản ánh rõ ranh giới kỹ thuật của phương pháp Semi-fragile dựa trên khối DCT truyền thống: thuật toán nhạy cảm với diện tích can thiệp lớn và dễ nhầm lẫn giữa can thiệp diện rộng với nén ảnh toàn cục. Đây là căn cứ khoa học cho thấy cần phát triển tiếp lên các mô hình trích xuất đặc trưng đa tỉ lệ hoặc mạng nơ-ron học sâu.
+### 4.3.1. Chẩn đoán: nút thắt nằm ở tập giả thuyết hình học, không ở thủy vân
 
-### Câu hỏi 3: Trên hệ thống chạy thực tế (Production), tính năng thủy vân số đã hoạt động như thế nào?
-* **Trả lời trọng tâm:**
-  * Nhóm áp dụng quy trình kiểm soát chất lượng phần mềm nghiêm ngặt (Release Gate): Chỉ những thuật toán đạt độ bền vững $\ge 95\%$ trước các kênh biến đổi thực tế mới được phép đưa vào quy trình tự động trên môi trường vận hành máy chủ.
-  * Ứng viên tốt nhất hiện nay thuộc thế hệ V3, đạt 9/12 (0.750) với JPEG-70, 9/12 với Crop-0.25 và 8/12 (0.667) với Resize-0.75. Các con số này vượt xa thế hệ V1 nhưng vẫn dưới cổng phát hành $\ge 95\%$, nên phiên bản Production Release 0.1 hiện chỉ kích hoạt cơ chế xác thực toàn vẹn tệp chính xác bằng chữ ký số Ed25519 và mã băm SHA-256 trên đám mây Azure (`https://splitbind.qivarn.id.vn`). Đây là quyết định kỷ luật kỹ thuật: cổng chất lượng không được hạ xuống cho vừa kết quả.
-  * Phân hệ thủy vân DWT-DCT-QIM và định vị can thiệp Semi-fragile được tổ chức và kiểm định hoàn chỉnh trong tầng nghiên cứu (Research Benchmark Suite).
-  * Trên giao diện người dùng web (`apps/web`), hệ thống hiển thị minh bạch nhãn *"Chưa tìm thấy bản cấp phát khớp"* chứ không tuyên bố sai lệch rằng đã thực hiện quét thủy vân tự động.
+Đọc hàm tìm kiếm hình học `search_geometry_v3` trong mã nguồn, bộ giải mã chỉ sinh ứng viên chuẩn tắc từ đúng ba nguồn:
 
-### Câu hỏi 3b: Báo cáo ghi tỷ lệ giải mã 0% trước JPEG-70. Vậy thủy vân của nhóm có hoạt động không?
+1. `identity` - chỉ khi raster bị tấn công có đúng kích thước chuẩn tắc.
+2. `pure_resize` - chỉ khi hai trục co giãn cùng một tỉ lệ, sai số `geometry_ratio_tolerance = 0.001`.
+3. `center_crop` - chỉ cho các tỉ lệ nằm trong `profile.crop_retained_scales`, vốn bị đóng băng ở đúng một giá trị `0.8660254037844386`.
 
-* **Trả lời trọng tâm:**
-  * Con số 0/12 là của thế hệ V1, không phải kết quả cuối cùng của nhóm. Nhóm đã lặp qua ba thế hệ thuật toán, và thế hệ V3 đo trên đúng cùng một corpus (`e5837cd4…88a77ef`), cùng bộ cổng và cùng mẫu số 12 cho kết quả khác hẳn:
+Ngoài ba trường hợp đó, bộ giải mã không sinh được giả thuyết hình học nào, nên tầng payload không bao giờ được chạy tới - bất kể vật mang mạnh đến đâu.
 
-    | Chỉ số | V1 | V3 |
-    |---|---:|---:|
-    | JPEG-70 | 0/12 | **9/12** |
-    | Resize-0.75 | 0/12 | **8/12** |
-    | Crop-0.25 | 1/3 | **9/12** |
-    | Lỗi thực thi | 31/682 | **0/352** |
+### 4.3.2. Bằng chứng: tương quan hoàn hảo giữa "có giả thuyết" và "truy vết được"
 
-  * **Điểm mạnh nhất nằm ở phân rã, không ở con số 0.750.** Khi tách 88 hàng của ứng viên tốt nhất theo trang bị trượt, JPEG-70 và Crop-0.25 trượt đúng ba trang mà phép đo không tấn công (`identity`) cũng trượt - không thêm hàng nào. Nghĩa là dưới nén JPEG chất lượng 70 và cắt cúp trung tâm 25%, thuật toán giải mã đúng bằng mức nó đạt trên kênh sạch. Chỉ Resize-0.75 gây thiệt hại thật, và đúng một hàng.
-  * Ba trang trượt đó thuộc cùng một fixture `pdf-multi-mixed`, đều có `outcome: partial`, `valid_vote_count: 1` và `bit_error_rate: 0.0` - bộ giải mã khôi phục payload không sai một bit nào rồi chủ động từ chối kết luận vì mới có 1 trong 3 lần lặp payload cho phiếu hợp lệ. Đây là fail-safe đúng thiết kế, không phải giải mã sai. Nguyên nhân là ràng buộc đặt tile: tiền tố payload cần tối thiểu `max(2, ceil(0.60 × 3)) = 2` tile nguyên vẹn, fixture này chỉ cho 1.
-  * **Giá phải trả:** V3 hạ PSNR tối thiểu từ 69.31 dB xuống 42.47 dB và SSIM từ 0.99992 xuống 0.9554 để đổi lấy độ bền. Cả hai vẫn trên ngưỡng cổng (38 dB, 0.95). Đây chính là bài toán đánh đổi dung lượng-độ bền-tính vô hình được thể hiện bằng số đo thật.
-  * **Ranh giới phải nêu:** phạm vi bằng chứng chỉ dùng cho đo đạc nghiên cứu, không hồ sơ tham số nào được đề bạt, danh sách ứng viên đạt chuẩn rỗng. V3 chưa đủ điều kiện promote, và production không nhúng fingerprint ở bất kỳ thế hệ nào. Nhóm không hạ cổng 0.95 để tuyên bố thành công.
-  * **Không gán sai một lần nào** trong toàn bộ 352 hàng V3 và 682 hàng V1. Thuộc tính này quan trọng hơn tỷ lệ giải mã đối với bài toán truy vết: hệ thống thà từ chối kết luận còn hơn chỉ sai người.
+Đo trên 286 hàng, 0 lỗi thực thi (`run_v5_envelope.py`, 2026-09-11):
 
-### Câu hỏi 4: Sự khác nhau căn bản giữa thủy vân số (Watermarking) và giấu tin bí mật (Steganography) là gì?
-* **Trả lời trọng tâm:**
-  * Sự khác biệt cốt lõi nằm ở Mục tiêu an ninh và Độ bền vững trước tấn công:
-    * *Steganography:* Mục tiêu tối thượng là giấu giếm sự tồn tại của hành vi truyền tin (kẻ nghe lén không được biết có thông điệp ẩn). Thiết kế tập trung vào việc giảm thiểu khả năng bị phát hiện bởi các thuật toán phân tích ẩn mật (steganalysis resistance); các yếu tố dung lượng nhúng và độ bền vững là những bài toán đánh đổi phụ thuộc vào mục tiêu cụ thể của từng lược đồ giấu tin.
-    * *Watermarking:* Sự tồn tại của dấu vết có thể được công bố công khai. Mục tiêu tối thượng là gắn chặt thông điệp vào vật mang; về mặt lý thuyết thiết kế, thủy vân bền vững (Robust Watermark) hướng tới việc khó bị gỡ bỏ trong phạm vi mô hình đe dọa và các ngưỡng biến đổi xác định (nếu cố tình làm suy biến tín hiệu vượt ngưỡng để hủy thủy vân thì thường làm suy giảm nghiêm trọng chất lượng thị giác của vật mang), tuy nhiên không bảo đảm bất khả xóa trong mọi điều kiện tấn công tùy ý. (Trên prototype nghiên cứu của SplitBind, độ bền vững hiện mới được kiểm chứng thành công một phần trước phép cắt cúp 25% và thất bại trước JPEG-70 cũng như Resize-0.75). Ưu tiên độ bền vững trước các phép xử lý tín hiệu.
+**Bảng 4.11:** Đối chiếu khả năng sinh giả thuyết hình học với tỉ lệ truy vết đo được
 
-### Câu hỏi 5: Phân biệt kỹ thuật thủy vân số (Watermarking) nói chung và kỹ thuật đánh dấu định danh (Fingerprinting / Traitor Tracing)?
-* **Trả lời trọng tâm:**
-  * *Thủy vân số truyền thống (Bảo vệ bản quyền - Copyright Watermarking):* Nhúng cùng một thông tin bản quyền (ví dụ tên tác giả hoặc mã bản quyền của tổ chức) vào mọi bản sao phân phối. Mục tiêu là chứng minh quyền sở hữu tài sản trí tuệ.
-  * *Kỹ thuật đánh dấu định danh (Fingerprinting / Traitor Tracing):* Nhúng các thông tin định danh khác nhau (`issuance_id` riêng biệt) vào từng bản sao được cấp phát cho từng người nhận cụ thể. Khi tài liệu bị phát tán trái phép ra ngoài, nếu thủy vân được trích xuất thành công và `issuance_id` ánh xạ tới bản ghi cấp phát hợp lệ trong cơ sở dữ liệu, hệ thống sẽ xác định được bản sao rò rỉ xuất phát từ lần cấp phát nào, phục vụ công tác truy cứu trách nhiệm rò rỉ thông tin nội bộ.
+| Phép biến đổi | Kích thước ra | Giả thuyết **đúng** có sẵn? | `decode_status` chủ đạo | Truy vết được |
+|---|---|---|---|---:|
+| crop 0.10 (cạnh 0.9487) | 1457×2914 | **không** (0.9486 ∉ {0.8660}) | `partial` 5, `payload_not_detected` 5 | 2/12 |
+| crop 0.25 (cạnh 0.8660) | 1330×2660 | **có** (`center_crop`) | `decoded` 7, `partial` 5, **`payload_not_detected` 0** | **7/12** |
+| crop 0.50 (cạnh 0.7071) | 1086×2172 | **không** | `payload_not_detected` 12 | 0/12 |
+| JPEG 50 | không đổi | **có** (`identity`) | `payload_not_detected` 12 | 0/12 |
+| resize 0.75 / 0.50 / 1.50 | co giãn đều | **có** (`pure_resize`) | phần lớn `decoded` | 10 / 9 / 11 /12 |
+| screenshot 1920×1080 | 1080×1920 | **không** (tỉ lệ khung lệch) | `payload_not_detected` 7, `insufficient_sync` 5 | 0/12 |
+| screenshot 1366×768 | 768×1366 | **không** | `insufficient_sync_evidence` 12 | 0/12 |
 
-### Câu hỏi 6: Tại sao SplitBind lại chia làm hai thuật toán thủy vân riêng biệt (Robust Watermark và Semi-fragile Watermark)? Không thể gộp thành một thuật toán được sao?
-* **Trả lời trọng tâm:**
-  * Việc phân tách xuất phát từ bài toán đánh đổi kỹ thuật (Engineering / Design Trade-off) giữa các mục tiêu an ninh thường cạnh tranh lẫn nhau:
-    * *Robust Watermark (DWT-DCT-QIM):* Ưu tiên tối đa hóa khả năng sống sót qua các phép biến đổi tín hiệu để khôi phục toàn vẹn 128 bit định danh `issuance_id`.
-    * *Semi-fragile Watermark (Block DCT + HMAC):* Ưu tiên độ nhạy cảm cục bộ với các thay đổi ngữ nghĩa nội dung để phát hiện các dấu hiệu can thiệp, đánh dấu khối nghi vấn và hỗ trợ khoanh vùng vị trí can thiệp.
-  * Trong thực tế, việc thiết kế một thuật toán vừa có khả năng bỏ qua biến đổi trên diện rộng vừa nhạy bén khoanh vùng can thiệp cục bộ là thách thức kỹ thuật rất lớn. Việc phân tách thành hai bài toán độc lập là lựa chọn kiến trúc có chủ đích và phù hợp của nhóm nhằm đảm bảo tính khả thi thực nghiệm và tách bạch trách nhiệm nghiệp vụ.
+**Mọi phép biến đổi có sẵn giả thuyết đúng đều đạt 7-11/12, trừ JPEG-50. Mọi phép thiếu giả thuyết đúng đều đạt 0-2/12.**
 
-### Câu hỏi 7: Mã băm mật mã (Cryptographic Hash như SHA-256) có phải là một thuật toán mã hóa (Encryption) không?
-* **Trả lời trọng tâm:**
-  * **Hoàn toàn không.** Đây là quan niệm sai lầm phổ biến cần phân định rạch ròi:
-    * *Mã hóa (Encryption):* Là phép biến đổi hai chiều có khóa nhằm bảo vệ tính bí mật (Confidentiality). Tùy thuộc vào hệ mật mã, quá trình này có thể sử dụng cùng một khóa bí mật chung cho cả mã hóa và giải mã ($C = E_K(P)$ và $P = D_K(C)$ trong mật mã đối xứng), hoặc sử dụng cặp khóa bất đối xứng (khóa công khai dùng để mã hóa và khóa riêng tương ứng dùng để giải mã: $C = E_{pk}(P)$ và $P = D_{sk}(C)$ theo định nghĩa NIST). Mã hóa luôn được thiết kế để cho phép khôi phục lại bản rõ ban đầu khi sở hữu đúng khóa giải mã hợp lệ.
-    * *Hàm băm mật mã (Cryptographic Hash):* Là hàm toán học một chiều không dùng khóa (Unkeyed One-way Function), ánh xạ dữ liệu đầu vào có độ dài tùy ý thành chuỗi bit đầu ra có độ dài cố định (256 bit đối với SHA-256). Về mặt toán học, hàm băm không phải là hàm có phép giải mã; bài toán tìm lại dữ liệu ban đầu từ mã băm (tìm tiền ảnh - preimage) được thiết kế để bất khả thi về mặt tính toán (computationally infeasible). Mục tiêu của hàm băm là kiểm tra tính toàn vẹn (Integrity) thông qua các tính chất kháng tiền ảnh và kháng va chạm.
+Cần chính xác một điểm: với các phép cắt, vẫn có giả thuyết được sinh ra - `pure_resize` kích hoạt vì cắt giữa làm hai trục co cùng tỉ lệ - nhưng nó căn sai, kéo vùng đã cắt ra full canvas. Khuyết tật không nằm ở việc *không sinh* giả thuyết mà ở *độ phủ*: ứng viên đúng vắng mặt trong khi một ứng viên sai trông hợp lý chiếm chỗ. Đó là lý do các hàng này báo `payload_not_detected` (đã căn, không thấy tín hiệu) thay vì `insufficient_sync_evidence` (chưa từng căn được).
 
-### Câu hỏi 8: Nguyên lý Kerckhoffs được áp dụng như thế nào trong bài toán thủy vân số? Nếu kẻ tấn công biết thuật toán DWT-DCT-QIM thì hệ thống có bị phá vỡ không?
-* **Trả lời trọng tâm:**
-  * Theo nguyên lý Kerckhoffs: Độ an toàn của hệ thống không phụ thuộc vào việc giấu kín thuật toán, mà dựa trên việc giữ bí mật của khóa (Key). Tuy nhiên, cần phân định rạch ròi giữa khả năng kháng giả mạo (Forgery Resistance) và khả năng kháng gỡ bỏ / phá hủy đồng bộ (Removal & Desynchronization Resistance):
-    1. *Kháng giả mạo (Forgery Resistance):* Việc giữ bí mật khóa và hạt giống CSPRNG (đối với vị trí nhúng fingerprint) cùng khóa HMAC $K$ (đối với thẻ xác thực semi-fragile) làm cho việc giả mạo có chủ đích trở nên khó khăn hơn nhiều và là một thành phần cốt lõi trong mô hình an ninh (security model). Với HMAC, việc không có khóa ngăn kẻ tấn công tính đúng có chủ đích thẻ xác thực; với payload định danh, việc không biết khóa phân bố khiến việc nhúng đè có chủ đích gặp trở ngại lớn (tuy nhiên không suy diễn thành mệnh đề phủ định tuyệt đối).
-    2. *Kháng gỡ bỏ và phá vỡ đồng bộ (Removal & Desynchronization Resistance):* Việc giữ bí mật khóa không đồng nghĩa với việc thủy vân miễn nhiễm trước các biến đổi tín hiệu mù. Kẻ tấn công dù không biết khóa vẫn có thể áp dụng các phép nén JPEG, thay đổi kích thước hoặc cắt cúp để phá hủy khả năng giải mã hay làm mất đồng bộ hình học (chính thực nghiệm của nhóm đã chứng minh tỷ lệ giải mã về 0% trước JPEG-70 và Resize-0.75).
+**Bằng chứng sắc nhất cho luận điểm tối ưu quá mức:** crop 0.25 là phép cắt duy nhất có 0 hàng `payload_not_detected`. Mọi trang đều sinh được ít nhất bằng chứng một phần, và chỉ ở đó. Đúng như dự đoán "giả thuyết đúng tồn tại cho tỉ lệ này và không tỉ lệ nào khác", và không giải thích được bằng cường độ tín hiệu, vì crop 0.10 bỏ đi ít hơn.
 
-### Câu hỏi 9: Tại sao thế hệ V1 thất bại trước JPEG-70 và Resize-0.75, và nhóm đã khắc phục bằng cách nào?
-* **Trả lời trọng tâm:**
-  * *Với nén JPEG-70:* Chuẩn nén JPEG chia ảnh thành các khối $8 \times 8$ và lượng tử hóa thô các hệ số DCT bằng ma trận lượng tử lossy. Khi hệ số chất lượng giảm xuống 70, các hệ số DCT dải trung tần bị làm tròn rất mạnh, làm xô lệch giá trị hệ số vượt ra khỏi khoảng dung sai của lưới Parity-QIM, tạo ra quá nhiều lỗi bit vượt quá năng lực tự sửa sai của mã Reed-Solomon (tối đa 8 byte lỗi).
-  * *Với Resize-0.75:* Hệ cơ sở DCT vẫn giữ nguyên tính trực giao toán học; tuy nhiên phép co giãn kích thước làm thay đổi lưới lấy mẫu không gian (sampling grid), nội suy lại các giá trị điểm ảnh và làm xô lệch ranh giới căn chỉnh (block alignment) của các khối $8 \times 8$. Sự xô lệch này làm biến đổi giá trị các hệ số tần số và phá vỡ hoàn toàn sự đồng bộ của lưới lượng tử hóa QIM.
-  * *Cách nhóm đã khắc phục (V2 và V3):* `[Implemented]` Bốn thay đổi thiết kế, đối chiếu trực tiếp được giữa `contracts/algorithm/fingerprint-candidates.v1.json`, `.v2.json` và `.v3.json`:
+#### 4.3.2.1. Ba lớp thất bại khác nhau, không phải một
 
-    | Cơ chế | V1 | V2 | V3 | Giải quyết vấn đề nào |
-    |---|---|---|---|---|
-    | Dải nhúng | `HL` (chi tiết) | `LL` (xấp xỉ) | `LL` | JPEG lượng tử hóa dải tần cao mạnh nhất; chuyển sang dải xấp xỉ để tránh đúng chỗ bị phá |
-    | Bước lượng tử `qim_delta` | quét 6.0-12.0 | ghép 24/32/48/64 | cố định **32.0** | Giảm lỗi bit thô, nhưng **một mình nó không đủ**: V2 quét tới 64.0 vẫn chỉ đạt tối đa 3/12 |
-    | Đồng bộ hình học | `orb-ransac` | pilot FFT + ORB (3+1 giả thuyết) | pilot + **8 giả thuyết hình học**, dung sai tỉ lệ 0.001 | Resize làm lệch lưới lấy mẫu; tìm kiếm giả thuyết khôi phục lại lưới trước khi giải mã |
-    | **Trải phổ** | không có | không có | **spread_delta 4.0, 64 chip/bit** | **Đây là cơ chế tạo ra bước nhảy.** Mỗi bit trải trên 64 hệ số nên hỏng cục bộ do nén được trung bình hóa |
+**Bảng 4.12:** Ba lớp nguyên nhân thất bại và biện pháp tương ứng
 
-  * *Bằng chứng cho thấy trải phổ mới là nguyên nhân, không phải bước lượng tử:* `[Experimentally observed]` V2 đã quét `qim_delta` qua 24 / 32 / 48 / 64 trên 1408 hàng (`status: complete`, 0 lỗi thực thi) mà tỷ lệ giải mã tốt nhất không bao giờ vượt 3/12 ở bất kỳ mức nào, trong khi PSNR giảm đơn điệu và tại 64.0 tụt xuống 36.53 dB - dưới cổng 38 dB. V3 giữ nguyên `qim_delta = 32.0` đúng như một mức V2 đã thử (V2 đo 42.33 dB tại mức đó) nhưng đạt 9-10/12. Vì bước lượng tử được giữ bằng nhau, bước nhảy không thể quy cho cường độ nhúng; khác biệt cấu trúc là trải phổ và tìm kiếm hình học mở rộng.
-  * *Cái giá phải trả, đo được:* PSNR tối thiểu giảm từ 69.31 dB (V1) xuống 42.47 dB (V3), vẫn trên ngưỡng cổng 38 dB. Lưu ý phần giảm này thuộc bước chuyển V1 → V2 (do đổi dải nhúng và nâng bước lượng tử), không phải V2 → V3.
-  * *Kết quả:* JPEG-70 từ 0/12 lên 9/12 và Resize-0.75 từ 0/12 lên 8/12 trên cùng corpus. Quan trọng hơn, JPEG-70 không còn gây mất mát nào so với kênh không tấn công (Mục 4.2.1) - cơ chế nén đã hết là yếu tố giới hạn; nút thắt còn lại là độ phủ phiếu tile trên một fixture.
-  * *Đã thử và loại trừ ba hướng tinh chỉnh tham số:* `[Experimentally observed]` Nhóm đã kiểm chứng và bác bỏ cả ba lever tham số của thiết kế hiện tại: (a) `qim_delta` - V2 quét 24→64 trên 1408 hàng, trần vẫn 3/12, và 64.0 phá cổng PSNR; (b) `tiles_per_page` - đọc mã nguồn cho thấy `derive_tiles_v3` trả về pool rồi embed chỉ dùng `tiles[:payload_repetitions]`, nên tham số này không tới được phép tính; (c) tham số trải phổ - thí nghiệm V4 ngày 2026-09-11 (192 hàng) cho thấy `spread_chips_per_bit` 128 kém hơn baseline (36-38/48 so với 39/48) và hạ `saturated_fraction_min` xuống 0.50 chỉ hoà (đổi 1 hàng crop lấy 1 hàng JPEG).
-  * *Phát hiện quan trọng từ kết quả âm tính đó:* khi đổi tham số, số hàng hỏng gần như không đổi nhưng trang bị hỏng thì đổi hẳn. Baseline hỏng cả 4 tấn công trên `pdf-multi-mixed/p0` và giải mã sạch `pdf-one-vector/p0`; ở `saturated_fraction_min = 0.50` thì đảo ngược chính xác. Đây là dấu hiệu của bài toán vị trí nhúng, không phải cường độ nhúng. Mọi tham số đã thử đều điều chỉnh *ghi mạnh bao nhiêu* hoặc *ghi bao nhiêu lần*, không tham số nào chọn *ghi ở đâu* theo nội dung trang, trong khi thứ tự tile hiện chỉ dựa trên HMAC-shuffle và khả năng sống sót qua cắt cúp - hoàn toàn mù nội dung.
-  * *Hướng xử lý tiếp theo, có căn cứ:* chọn vật mang theo nội dung một cách tất định - chấm điểm tile ứng viên theo độ kết cấu hoặc phương sai trước khi chọn `payload_repetitions` tile, vẫn tái lập được từ khóa. Đây là thay đổi thuật toán, không phải tham số. Xa hơn: bước lượng tử thích nghi theo mô hình thị giác người (HVS) và các kiến trúc học sâu (HiDDeN, StegaStamp) tự học lớp biến dạng nén JPEG vi phân.
-
-### Câu hỏi 10: Vai trò của mã xác thực HMAC trong thuật toán Semi-fragile Tamper Localization là gì? Tại sao không so sánh trực tiếp các hệ số DCT mà phải băm qua HMAC?
-* **Trả lời trọng tâm:**
-  * Nếu chỉ nhúng trực tiếp các hệ số đặc trưng DCT hoặc băm bằng hàm không khóa (như SHA-256), kẻ tấn công sau khi chỉnh sửa nội dung khối có thể tự trích xuất đặc trưng mới, tự tính mã băm và nhúng đè lên các khối đối tác (Tấn công giả mạo thẻ - Tag Forgery Attack).
-  * Bằng việc sử dụng HMAC-SHA256 với khóa bí mật $K$, việc không biết khóa ngăn chặn kẻ tấn công tính toán có chủ đích thẻ HMAC chính xác cho nội dung tùy ý sửa đổi.
-  * *Lưu ý học thuật về thẻ rút gọn (Truncated HMAC 32-bit):* Do dung lượng nhúng của từng khối ảnh có hạn, thuật toán cắt ngắn thẻ HMAC xuống 4 byte (32 bit). Mặc dù RFC 2104 khuyến nghị thẻ MAC không dưới 80 bit và NIST lưu ý mức dưới 64 bit không khuyến khích cho ứng dụng an ninh cao, prototype nghiên cứu chấp nhận thẻ 32-bit để dung hòa với dung lượng nhúng của khối ảnh $128 \times 128$. Không có khóa $K$, kẻ tấn công không thể tính thẻ đúng một cách có chủ đích, nhưng thẻ 32-bit vẫn có xác suất đoán ngẫu nhiên $1/2^{32} \approx 2.33 \times 10^{-10}$ cho mỗi khối. Đây là một giới hạn về biên độ an toàn (security margin) cần được nêu rõ khi trình bày học thuật.
-
----
-
-# PHẦN 9: HÀNG RÀO TUYÊN BỐ AN TOÀN CHO SLIDE & BÁO CÁO (CLAIM SAFETY GUIDE)
-
-Để bảo đảm tính trung thực học thuật, tuyệt đối tránh lỗi cường điệu (overclaim) hoặc gây hiểu lầm cho hội đồng chấm thi, thành viên soạn slide và báo cáo bắt buộc phải tuân thủ bảng ranh giới tuyên bố sau:
-
-| Chủ đề / lĩnh vực | Nội dung ĐƯỢC PHÉP tuyên bố (Allowed Claims) | Nội dung CẤM TUYÊN BỐ / dễ gây hiểu lầm (Prohibited Claims) | Căn cứ kỹ thuật & bằng chứng xác minh |
+| Lớp | Dấu hiệu | Ví dụ | Cách sửa |
 |---|---|---|---|
-| **1. Trạng thái Production** | Phiên bản Production Release 0.1 đang chạy bảo vệ tính toàn vẹn tệp chính xác bằng chữ ký số Ed25519 và SHA-256 trên Azure. | CẤM nói: "Production đã tích hợp bộ quét thủy vân tự động" hoặc "Hệ thống tự động trích xuất watermark trên server khi upload file". | `apps/web/src/features/evidence/copy.ts` hiển thị nhãn "Chưa tìm thấy bản cấp phát khớp"; API backend trả mã enum `NO_WATERMARK` với chú thích giới hạn. |
-| **2. Độ bền vững thủy vân** | ĐƯỢC phép nói, kèm đúng tên thế hệ: thế hệ **V1** đạt 0/12 trước JPEG-70 và Resize-0.75; thế hệ nghiên cứu **V3** đo trên cùng corpus đạt **9/12 (JPEG-70)**, **9/12 (Crop-0.25)**, **8/12 (Resize-0.75)**, 0 gán sai trên 352 hàng. ĐƯỢC nói: "dưới JPEG-70 và Crop-0.25, V3 không mất thêm hàng nào so với kênh không tấn công". | CẤM nói: "Thủy vân bền vững trước mọi phép tấn công", "Chống chịu hoàn hảo mọi biến đổi hình ảnh", "V3 đã giải quyết xong JPEG-70", hoặc trình bày V3 như năng lực đã phát hành. CẤM nêu con số V3 mà bỏ phạm vi `research_measurement_only`. CẤM nêu con số 0% mà không nói rõ đó là V1. | V1: `fingerprint-profile-v1.md`. V3: `reports/fingerprint-pregate-v3/summary.json`, `status: complete`, 352/352 hàng, `profile_promoted: False`, `qualified_candidate_ids: []` vì chưa đạt cổng 0.95. Xem Mục 4.2.1. |
-| **3. Định vị can thiệp** | Thuật toán Semi-fragile chứng minh quy trình nghiên cứu phát hiện và định vị can thiệp với IoU thực nghiệm đạt ~0.09; bị chi phối bởi cơ chế fail-safe bảo vệ trước nén mạnh. | CẤM dùng các từ: "Định vị chính xác", "Khoanh vùng hoàn hảo", "Định vị rất tốt vùng sửa đổi". | 48 hàng benchmark thực nghiệm với Aggregate IoU = 0.089981; 38/48 hàng kích hoạt fail-safe (`integrity-profile-v1.md`). |
-| **4. Tỷ lệ gán sai (False Attribution)** | Trong 682 trường hợp benchmark đã xét trên 48 ứng viên, không quan sát thấy trường hợp false attribution nào (0 / 682). | CẤM nói: "Hệ thống tuyệt đối không bao giờ gán nhầm" hoặc "Không bao giờ vu khống người vô tội". | Số liệu thực nghiệm thống kê trên tập mẫu giới hạn, không phải chứng minh toán học cho mọi trường hợp vô hạn. |
-| **5. Giá trị pháp lý chữ ký số** | Chữ ký số Ed25519 cung cấp đặc tính chống chối bỏ kỹ thuật (cryptographic non-repudiation); giá trị chứng cứ pháp lý tùy thuộc chính sách quản lý khóa và luật sở tại. | CẤM nói: "Chữ ký số có giá trị pháp lý tuyệt đối trong mọi trường hợp" hoặc xem `AGENTS.md` là "căn cứ pháp lý". | Khái niệm mật mã học phân biệt giữa tính chống chối bỏ kỹ thuật và giá trị pháp lý theo Luật Giao dịch điện tử. |
-| **6. Độ trung thực cảm nhận (Fidelity)** | Các chỉ số khách quan đạt $\text{PSNR} = 41.69\text{ dB}$ và $\text{SSIM} = 0.9825$ trên biểu diễn ảnh trang render 144 DPI, thể hiện độ méo tín hiệu thấp. | CẤM nói: "Chứng minh mắt thường tuyệt đối không thể nhận thấy" hoặc "Chất lượng hình ảnh hoàn toàn không đổi". | PSNR/SSIM là mô hình đo lường khách quan; chưa thực hiện nghiên cứu đánh giá thị giác chủ quan trên người (MOS / User Study). |
-| **7. Toàn vẹn văn bản vs hình ảnh** | Hệ thống bảo vệ văn bản PDF thông qua biểu diễn ảnh raster của từng trang tài liệu (Page-Image Watermarking) kết hợp ký số Manifest. | CẤM nói: "Thủy vân nhúng trực tiếp vào các ký tự text hoặc font của file PDF thô". | Pipeline thực tế: PDF $\rightarrow$ Render raster 144/300 DPI $\rightarrow$ nhúng thủy vân trên kênh Luminance $\rightarrow$ đóng gói lại PDF. |
+| **1. Không tạo được ứng viên** | `insufficient_sync_evidence` | screenshot 1366, phối cảnh | Chuẩn hoá khung ảnh - **đã kiểm chứng**: 0/12 → 9/12 ở 1920×1080 |
+| **2. Tạo ứng viên sai** | `payload_not_detected` **kèm đổi kích thước** | crop 0.10, crop 0.50 | Ước lượng tỉ lệ cắt thay vì liệt kê một giá trị cứng |
+| **3. Ứng viên đúng, vật mang chết** | `payload_not_detected` **không đổi kích thước** | JPEG 50; screenshot 1366 sau khi bóc viền | Lớp **duy nhất** mà các lever tham số từng là câu chuyện đúng - và cả ba lever đó đã bị bác bỏ bằng đo đạc |
 
----
+Phải phân loại thất bại theo `decode_status` cộng với việc raster có đổi kích thước hay không, trước khi đề xuất bất kỳ biện pháp nào.
 
-# PHẦN 10: KHUYẾN NGHỊ TRỰC QUAN HÓA & PHÂN BỔ SLIDE (SLIDE & VISUAL MAPPING GUIDE)
+Hai hệ quả phải nói thẳng:
 
-## 10.0. YÊU CẦU NỘP BÀI CHÍNH THỨC (ĐỌC TRƯỚC KHI LÀM SLIDE)
+- **Kết quả crop 0.25 bị tối ưu quá mức cho chính benchmark.** `crop_retained_scales = [sqrt(0.75)]` chính xác là tỉ lệ cạnh mà `crop_fraction = 0.25` tạo ra - đúng phép cắt duy nhất mà pre-gate đo. Bộ giải mã được cứng hoá để hoàn tác đúng phép tấn công mà nó bị chấm điểm. Đó là lý do một phép cắt nhẹ hơn (10%) lại tệ hơn một phép cắt nặng hơn (25%): vô lý nếu giải thích bằng cường độ tín hiệu, hoàn toàn hợp lý nếu giải thích bằng độ phủ giả thuyết.
+- **Screenshot hỏng vì một lý do cơ bản hơn và không liên quan.** Đặt trang 1536×3072 vào màn hình 1920×1080 kèm viền letterbox cho hai tỉ lệ 0.703 và 0.625 - không khớp, nên cả `pure_resize` lẫn `center_crop` đều không kích hoạt. Bộ giải mã báo `insufficient_sync_evidence` vì nó chưa từng tạo ra ứng viên nào.
 
-Nguồn: trang nộp bài trên hệ thống đào tạo trực tuyến UTH, học phần `012012303303`, mục Nộp bài tập lớn. Ghi lại ngày 2026-09-11. Trạng thái tại thời điểm ghi: Nhóm 9 chưa nộp gì (`Nothing has been submitted for this assignment`).
+### 4.3.3. Kiểm chứng: bóc viền letterbox khôi phục truy vết screenshot
 
-### 10.0.1. Hình thức nộp
+Chẩn đoán trên sinh ra một dự đoán kiểm chứng được: nếu bỏ viền đồng màu của màn hình, hai tỉ lệ sẽ khớp lại và giả thuyết `pure_resize` sẵn có sẽ kích hoạt. Kết quả đo trên 12 trang dương tính:
 
-Nộp một file nén chứa đủ ba thành phần:
+| Màn hình | Ảnh thô | Sau khi bóc viền |
+|---|---:|---:|
+| **1920×1080** | **0/12** | **9/12** |
+| 1366×768 | 0/12 | 0/12 |
 
-| Thành phần | Tình trạng của nhóm |
-|---|---|
-| **Word** (báo cáo thuyết minh) | Đã có: `docs/project/Nhom9_TruyVetToanVenVanBan.docx` |
-| **PowerPoint** (slide báo cáo) | **Chưa có. Một thành viên phụ trách.** |
-| **Demo** (mã nguồn hoặc link video) | Cần chuẩn bị: mã nguồn ở nhánh `feat/splitbind-mvp`, hoặc link hệ thống đang chạy |
+**9/12 đúng bằng tỉ lệ của resize-0.50** - chính là điều dự đoán đòi hỏi: bỏ viền đi thì screenshot *chính là* một phép co giãn đều, mà bộ giải mã vốn đã xử lý được. Thủy vân, ECC, tham số trải phổ và vị trí tile giữ nguyên không đổi; phần sửa chỉ khoảng hai mươi dòng tiền xử lý tất định: tìm màu viền theo trung vị bốn cạnh rồi cắt các hàng/cột nằm trong dung sai của màu đó.
 
-Quy ước đặt tên bắt buộc: `TenNhom_tenRutGonDeTai.rar`. Với nhóm này là dạng `Nhom9_TruyVetToanVenVanBan.rar`.
+Hai kích thước màn hình hỏng vì hai lý do khác nhau, và phép bóc viền tách bạch được chúng:
 
-### 10.0.2. Thời hạn
+- Ở 1920×1080, sau khi bóc, trang nằm ở tỉ lệ 0.625. Hai tỉ lệ khớp, `pure_resize` kích hoạt, truy vết phục hồi. Đây chưa bao giờ là vấn đề của thủy vân.
+- Ở 1366×768, trang nằm ở 683×1366, tỉ lệ 0.4447. Trạng thái chuyển từ `insufficient_sync_evidence` (12/12 hàng) sang `payload_not_detected` (11/12 hàng, một hàng đạt `partial_payload_evidence`) - hình học giờ thành công và chính payload mới là thứ chết. 0.4447 thấp hơn mốc resize-0.50 vốn đạt 9/12, nên đây là giới hạn phân giải thật của vật mang.
 
-- Nộp bài 2 ngày trước lịch báo cáo. Lịch báo cáo của Nhóm 9 là 17/09/2026, nên hạn nộp trên hệ thống là 15/09/2026.
-- Ngoài file nén, còn phải gửi tóm tắt slide dạng PDF, 4 slide trên một trang, lên diễn đàn thảo luận bài tập lớn để các nhóm khác xem trước và chuẩn bị câu hỏi phản biện.
+Chuyển dịch mã trạng thái đó là công cụ chẩn đoán đáng dùng: `insufficient_sync_evidence` nghĩa là chưa tạo được ứng viên, hỏng ở hình học; `payload_not_detected` nghĩa là đã căn được trang và tín hiệu đã mất.
 
-### 10.0.3. Yêu cầu khi trình bày
+### 4.3.4. Kiến trúc V4 đề xuất
 
-- **Tất cả thành viên** phải chuẩn bị để trình bày trước lớp, không phân công một người nói hết.
-- Nhóm phải chuẩn bị 03 câu hỏi tự luận cho cả lớp để tạo tương tác.
-- Các nhóm khác sẽ xem trước nội dung và đặt câu hỏi phản biện. Phần chuẩn bị trả lời nằm ở PHẦN 8 của tài liệu này.
-- **Tổng thời gian 20 phút**, đã bao gồm cả trình bày lẫn phần tương tác. Khung 20 slide bên dưới được thiết kế vừa với quỹ thời gian này: trung bình dưới một phút mỗi slide, chừa khoảng 5 phút cho hỏi đáp.
+Xếp theo tỉ lệ lợi ích trên chi phí đo được:
 
-### 10.0.4. Cảnh báo từ giảng viên
+**Tầng 1 - Chuẩn hoá khung ảnh trước khi giải mã (đã kiểm chứng).**
+Bóc viền đồng màu; mở rộng sang phát hiện biên trang và khử nghiêng. Bộ giải mã V3 ngầm giả định đầu vào đã được đóng khung giống hệt bản phát hành, trong khi kênh rò rỉ thật không bao giờ như vậy. Đây là tầng cho nhiều độ bền nhất trên mỗi dòng mã.
 
-Nguyên văn: bài tập lớn là nội dung học và kiểm tra đánh giá, nhóm nào làm không đạt chất lượng thì không được báo cáo và không có điểm bài này, giảng viên sẽ giảng nội dung đó cho cả lớp.
+**Tầng 2 - Ước lượng tỉ lệ cắt thay vì liệt kê.**
+Thay `crop_retained_scales` cố định bằng tìm kiếm tỉ lệ, hoặc ước lượng tỉ lệ từ tương quan log-polar của pilot (hạ tầng này đã có sẵn trong `synchronization_v2.py`). Xoá điểm tối ưu quá mức tại 0.25 và làm crop 0.10 / 0.50 trở nên xử lý được.
 
-### 10.0.5. Ba việc chưa xong
+**Tầng 3 - Cho phép hai trục co giãn độc lập.**
+Ràng buộc `ratios_agree` loại bỏ mọi phép biến đổi đổi tỉ lệ khung. Nới nó ra cho phép xử lý ảnh bị kéo méo và bù phối cảnh.
 
-1. **Slide PowerPoint** theo khung 20 slide bên dưới. Một thành viên phụ trách.
-2. **Bản PDF 4 slide/trang** để đăng lên diễn đàn. Xuất từ PowerPoint: File > Export > Create PDF, trong hộp thoại chọn Options > Publish what: Handouts, slides per page: 4.
-3. **03 câu hỏi tự luận** cho cả lớp. Đã soạn ở mục 10.0.6 bên dưới.
+**Tầng 4 - Chọn vật mang theo nội dung (chưa kiểm chứng).**
+Chấm điểm tile ứng viên theo kết cấu trước khi chọn, vẫn tất định từ khoá. Giải quyết việc *trang nào* hỏng bên trong một phép biến đổi mà bộ giải mã đã hoàn tác được - hiệu ứng thứ cấp thật, nhưng không phải nguyên nhân của các thất bại diện rộng.
 
-**Một khiếm khuyết còn lại trong báo cáo, cần người có tài khoản hệ thống xử lý:** ảnh
-`docs/project/report-assets/ui-xac-minh-khong-khop.png` dùng cho hình 4.3 đang chụp nhầm
-trạng thái *Đang tải hồ sơ kiểm chứng* chứ không phải kết quả *không khớp*. Chú thích hình
-mô tả đúng, nhưng ảnh thì chưa. Cách sửa: đăng nhập https://splitbind.qivarn.id.vn, tải lên
-một tệp đã bị sửa, chờ trang hiện kết quả không khớp rồi chụp lại, ghi đè đúng tên tệp trên,
-sau đó chạy lại `python docs/project/build_report_v2.py` và `python docs/project/apply_cover.py`.
+### 4.3.5. Cái gì kiến trúc này không sửa được
 
-### 10.0.7. Đóng gói bài nộp
 
-Thư mục dựng sẵn: `submission/` ở gốc dự án. Thư mục này bị `.gitignore` chặn vì dựng lại được từ nguồn, không cần đưa vào repo.
+- **Giới hạn phân giải là thật.** Dưới tỉ lệ khoảng 0.45, payload chết kể cả khi hình học hoàn hảo. Không tầng nào ở trên chạm tới điều đó; muốn sửa phải tăng dung lượng hoặc giảm payload, và nhóm đã đo được rằng nâng `qim_delta` không phải lối ra (V2 quét 24→64, trần vẫn 3/12).
+- **JPEG-50 là thất bại vật mang thật** (lớp 3): hình học đúng vì ảnh không đổi kích thước, nhưng nén phá huỷ tín hiệu. Đây là giới hạn mà không tầng kiến trúc nào ở trên chạm tới được, và ba lever tham số đã bị bác bỏ bằng đo đạc, nên hướng duy nhất còn lại là tăng dung lượng kênh hoặc giảm payload.
+- **Toàn bộ số trong phần này đến từ harness nghiên cứu, không phải pre-gate**, và khác pre-gate ở cách dẫn xuất RNG tấn công cùng việc cấp mẫu đồng bộ ORB cho bộ giải mã. Không được trộn với Mục 4.2.1, và không được trình bày như năng lực đã phát hành. Từ 12/09/2026 production có bật đường ống nhúng và giải fingerprint, nhưng Mục 4.2.3 cho thấy năng lực đó chưa truy vết được bản biến đổi nào trên môi trường thật; kết luận trả cho người dùng vẫn dựa trên đối chiếu tệp chính xác và chữ ký.
 
-Đã có trong đó:
+### 4.3.6. Vì sao chẩn đoán này có được
 
-| Tệp | Nội dung |
-|---|---|
-| `Nhom9_TruyVetToanVenVanBan.docx` | Báo cáo Word |
-| `Nhom9_TruyVetToanVenVanBan.pdf` | Bản PDF của báo cáo, 54 trang, khổ A4, xuất bằng LibreOffice headless |
-| `splitbind-source.zip` | 539 tệp mã nguồn, xuất bằng `git archive` từ nhánh `feat/splitbind-mvp` nên sạch, không có `node_modules`, `.venv` hay khoá bí mật |
-| `DEMO-README.txt` | Link hệ thống đang chạy, mô tả cấu trúc mã nguồn và cách chạy thử |
+Đáng ghi nhận về mặt phương pháp: chẩn đoán trên chỉ tìm ra được vì dự án đã ghi lại bằng chứng đúng cách. Mã trạng thái phân biệt `insufficient_sync_evidence` với `payload_not_detected` là thứ tách được hai nguyên nhân; hợp đồng tấn công có sẵn họ `screenshot` để đo; corpus khoá theo hash làm phép so sánh có kiểm soát. Một dự án ghi chép cẩu thả sẽ không để lại gì để kiểm toán.
 
-Còn thiếu một tệp PowerPoint. Khi thành viên làm xong, chép vào cùng thư mục rồi nén.
+## Hình ảnh minh hoạ hệ thống và biểu đồ kết quả
 
-Máy đã cài sẵn WinRAR và 7-Zip nhưng không nằm trong PATH. Lệnh tạo đúng định dạng `.rar` mà đề bài yêu cầu, chạy trong PowerShell:
+Các hình dưới đây được chụp từ hệ thống đang vận hành và dựng từ dữ liệu đo đã trình bày ở các mục trên.
 
-```
-& "$env:ProgramFiles\WinRAR\WinRAR.exe" a -r -ep1 "Nhom9_TruyVetToanVenVanBan.rar" "submission\*"
-```
+![](report-assets/ui-cap-phat.png)
 
-Trước khi nộp, kiểm tra lại ba điều:
+**Hình 4.1:** Giao diện cấp phát tài liệu trên hệ thống đang vận hành
 
-1. Tệp nén mở được và có đủ bốn thành phần: Word, PowerPoint, mã nguồn, README demo.
-2. Tên tệp đúng khuôn `TenNhom_tenRutGonDeTai.rar`.
-3. Đã đăng bản PDF 4 slide/trang lên diễn đàn thảo luận bài tập lớn, đây là việc tách rời khỏi tệp nén.
+![](report-assets/ui-xac-minh-khop.png)
 
-### 10.0.5b. Đối chiếu với tài liệu môn học (đã kiểm chứng)
+**Hình 4.2:** Kết quả xác minh khi tệp khớp bản cấp phát: mã SHA-256 trùng khớp và chữ ký hồ sơ hợp lệ
 
-Năm tài liệu tiếng Việt ở thư mục gốc dự án đã được đối chiếu với báo cáo:
+![](report-assets/ui-xac-minh-khong-khop.png)
 
-- Đề cương môn học (`123033 - An toan thong tin DCCT 2025.pdf`) xếp nội dung này ở
-  **Chương 3.1: Tổng quan về Mật mã và các kỹ thuật giấu tin**. Thuật ngữ chính thức của
-  môn là "giấu tin", thủy vân số là một nhánh của nó. Khi báo cáo, nên mở đầu bằng liên hệ
-  này để nối đề tài vào chương trình học.
-- Hai giáo trình tiếng Việt không có nội dung nào về thủy vân số hay giấu tin. Toàn bộ
-  phần lý thuyết thủy vân của báo cáo dựa vào [2] Cox và cộng sự, cùng hai bài tổng quan
-  steganography tiếng Anh ở thư mục gốc. Nếu giảng viên hỏi "lấy lý thuyết ở đâu", trả lời
-  đúng là như vậy, không nói là lấy từ giáo trình.
-- Hai giáo trình đó khớp đúng mục [3] và [4] trong tài liệu tham khảo: [3] Hoàng Xuân Dậu,
-  *Giáo trình Cơ sở An toàn Thông tin*, Học viện Công nghệ Bưu chính Viễn thông, 2020;
-  [4] TS. Thái Thanh Tùng, *Giáo trình Mật mã học và Hệ thống Thông tin An toàn*, Nhà xuất
-  bản Thông tin và Truyền thông, 2011. Đã kiểm trang bìa và lời giới thiệu của cả hai.
-- Các thuật ngữ chung mà báo cáo dùng - hàm băm, chữ ký số, tính toàn vẹn, mã hóa, bí mật,
-  sẵn sàng, chống chối bỏ - đều trùng cách gọi trong giáo trình, nên không lệch với bài giảng.
+**Hình 4.3:** Kết quả xác minh khi tệp đã bị chỉnh sửa: hệ thống báo không khớp và không quy kết hành vi cho bất kỳ ai
 
-### 10.0.5c. Trạng thái thực tế trên hệ thống đào tạo trực tuyến (đọc ngày 11/09/2026)
+![](report-assets/bieu-do-v1-v3.png)
 
-Đã mở trực tiếp trang lớp học phần và kiểm tra từng mục. Kết quả:
+**Hình 4.4:** Tỉ lệ giải mã của thế hệ V1 và V3 trên cùng hợp đồng corpus, cùng định nghĩa cổng
 
-- **Mục "Nộp Bài tập lớn" báo *Nothing has been submitted for this assignment*.** Nhóm 9
-  chưa nộp gì. Mục này không đặt hạn cụ thể trên hệ thống; quy tắc duy nhất là "nộp bài
-  2 ngày trước lịch báo cáo".
-- **Nhóm 9 chưa đăng bài lên diễn đàn "Thảo luận Bài tập lớn".** Đã có 11 nhóm đăng
-  (nhóm 2, 3, 4, 6, 7, 10, 11, 12, 14 và hai nhóm khác). Đây là phần bắt buộc, đăng trước
-  buổi báo cáo để các nhóm khác đọc và đặt câu hỏi phản biện.
-- **Khuôn mẫu bài đăng diễn đàn mà các nhóm khác đang dùng** không phải chỉ đính kèm tệp
-  PDF. Bài mẫu đầy đủ nhất gồm: tổng quan đề tài, phân loại, mô hình triển khai, kết quả đo,
-  phân tích, giải pháp, mục "Kết quả đạt được", mục "Thảo luận" liệt kê các điểm để cả lớp
-  trao đổi, kèm tệp PDF. Tiêu đề đặt theo dạng `Nhóm 9_<tên đề tài>`.
-- **Thành viên nhóm đã xác nhận đúng:** Nhóm 9 có 2 trên 5 chỗ, gồm Ngô Văn Gia Phúc và
-  Hoàng Việt Quang. Trang bìa báo cáo khớp.
-- **Bài Mã hóa Affine (Cá nhân) đã nộp** ngày 11/09/2026, trạng thái Submitted for grading.
-- **Ba bài nhóm còn chưa nộp**, không mục nào đặt hạn trên hệ thống:
-  - `Tạo môi trường làm việc nhóm`: yêu cầu tạo tài khoản miro.com, nhóm trưởng tạo board và share email thầy. Là việc thao tác tài khoản, không phải bài viết.
-  - `Elearning 04 - Tấn công website_Nhóm`: dùng hackbar/Hacktools kiểm thử lỗ hổng trên https://demo.owasp-juice.shop/, quay hoặc chụp bài rồi nộp.
-  - `Elearning 5 - Minh họa mật mã bằng Cryptool_Nhóm`: dùng CrypTool minh họa DES, phá mã bằng từ điển, tìm hiểu SSL/TLS; nộp file `Nhom9_Cryptool.pdf`.
-- **Thư mục "Tài liệu tham khảo" của môn chỉ có đúng một tệp**:
-  `Image_Steganography_Techniques_An_Overview.pdf`. Đây là tài liệu duy nhất giảng viên
-  cung cấp và nó trực tiếp liên quan đề tài, nên đã được bổ sung vào mục tham khảo của báo
-  cáo thành [14], cùng với [15] là bài tổng quan steganography còn lại ở thư mục gốc dự án.
-- Thông tin liên hệ của giảng viên, liên kết phòng học trực tuyến và nhóm Zalo nằm ở
-  `docs/internal/lms-course-contacts.md`, cố ý để ngoài phạm vi Git vì là dữ liệu cá nhân.
+![](report-assets/bieu-do-phong-bi-tan-cong.png)
 
-### 10.0.6. Ba câu hỏi tự luận cho cả lớp
+**Hình 4.5:** Tỉ lệ truy vết của 13 phép biến đổi, phân theo ba lớp nguyên nhân thất bại
 
-Yêu cầu của giảng viên là mỗi nhóm chuẩn bị 03 câu hỏi tự luận để cả lớp tương tác. Ba câu dưới đây bám đúng bốn nội dung đề tài, không hỏi mẹo, và mỗi câu đều có nhiều hướng trả lời hợp lý nên dễ tạo thảo luận. Kèm theo là ý chính nhóm dùng để chốt lại sau khi lớp phát biểu.
+![](report-assets/bieu-do-boc-vien.png)
 
-**Câu 1.** Chữ ký số bảo vệ toàn vẹn ở mức từng bit: đổi một byte là chữ ký hỏng. Thủy vân bền vững thì ngược lại, chấp nhận tài liệu bị biến đổi miễn còn trích được định danh. Theo bạn, hai tính chất này mâu thuẫn hay bổ sung cho nhau? Nếu một hệ thống chỉ được chọn một trong hai, bạn chọn cơ chế nào cho bài toán truy vết rò rỉ tài liệu nội bộ, và đánh đổi gì?
+**Hình 4.6:** Hiệu quả của bước bóc viền letterbox trước khi giải mã, đo trên 12 trang dương tính
 
-*Ý chốt:* hai cơ chế phục vụ hai mô hình đe dọa khác nhau, chữ ký số cho kênh số nguyên bản còn thủy vân cho kênh analog hoặc nén mất mát, nên chúng bổ sung chứ không mâu thuẫn. Thứ tự thực thi là nhúng trước rồi ký sau. Nếu buộc chọn một, chọn chữ ký số vì nó cho bảo đảm mật mã và chống chối bỏ, còn thủy vân chỉ cho tín hiệu kỹ thuật hỗ trợ điều tra.
-
-**Câu 2.** Nhóm đo được hiện tượng sau: thủy vân sống sót khi ảnh bị cắt 25% diện tích, nhưng lại thất bại khi chỉ bị cắt 10%, tức phép tấn công nhẹ hơn. Bạn giải thích hiện tượng này thế nào? Nếu gặp một kết quả phản trực giác như vậy trong thí nghiệm của mình, bạn sẽ kiểm tra điều gì trước tiên?
-
-*Ý chốt:* không giải thích được bằng cường độ tín hiệu. Nguyên nhân là bộ giải mã chỉ sinh giả thuyết hình học cho đúng một tỉ lệ cắt được cứng hoá, và tỉ lệ đó trùng khít với phép cắt 25% mà benchmark dùng để chấm điểm. Đây là tối ưu quá mức cho chính thước đo. Việc cần kiểm tra trước tiên là tầng nào hỏng: đọc mã trạng thái để biết hệ thống chưa căn được ảnh hay đã căn rồi mà mất tín hiệu.
-
-**Câu 3.** Giả sử hệ thống truy vết ra một tài liệu rò rỉ khớp với bản cấp phát cho nhân viên A. Theo bạn, kết quả đó chứng minh được điều gì và không chứng minh được điều gì? Cần thêm bằng chứng nào nữa trước khi đưa ra kết luận về trách nhiệm của một cá nhân?
-
-*Ý chốt:* kết quả chỉ chứng minh tệp nghi vấn khớp với một bản cấp phát cụ thể. Nó không chứng minh A là người làm rò rỉ, vì bản cấp phát có thể bị sao chép, bị đánh cắp, bị chia sẻ lại, hoặc tài khoản bị chiếm. Đây là tín hiệu kỹ thuật phục vụ điều tra, không phải kết luận pháp lý. Cần thêm nhật ký truy cập, bằng chứng về kênh phát tán và quy trình điều tra nội bộ.
-
----
-
-Đề xuất khung 20 slide tiêu chuẩn bám sát 4 yêu cầu của giảng viên và kiến trúc SplitBind:
-
-```
-[Khung Báo cáo BTL Nhóm 9 - 18 Slides]
-├── MÀN 1: ĐẶT VẤN ĐỀ & BỐI CẢNH (Slides 1 - 3)
-├── MÀN 2: LÝ THUYẾT DIGITAL WATERMARKING - YÊU CẦU 1 (Slides 4 - 6)
-├── MÀN 3: ỨNG DỤNG THỦY VÂN TRONG TRUY VẾT & TOÀN VẸN - YÊU CẦU 2 (Slides 7 - 10)
-├── MÀN 4: ỨNG DỤNG KÝ SỐ & GIẢI QUYẾT MÂU THUẪN - YÊU CẦU 3 (Slides 11 - 13)
-├── MÀN 5: MA TRẬN SO SÁNH CÁC KỸ THUẬT TOÀN VẸN - YÊU CẦU 4 (Slides 14 - 15)
-└── MÀN 6: THỰC THI HỆ THỐNG SPLITBIND, THỰC NGHIỆM & KẾT LUẬN (Slides 16 - 20)
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
 ```
 
-### Chi tiết phân bổ từng slide và khuyến nghị trực quan:
+# KẾT LUẬN
 
-1. **Slide 1: Trang tiêu đề:** Tên đề tài, Nhóm 9, giảng viên hướng dẫn TS. Hồ Đăng Thế. (Hình thức: Tinh gọn, chuyên nghiệp).
-2. **Slide 2: Đặt vấn đề & thách thức bảo vệ toàn vẹn tài liệu:** Nguy cơ rò rỉ tài liệu nội bộ qua chụp màn hình, in-scan; sự bất lực của chữ ký số truyền thống khi tệp bị biến đổi byte thô. (Hình thức: Sơ đồ dòng rò rỉ tài liệu).
-3. **Slide 3: Mục tiêu & bốn yêu cầu cốt lõi:** Trình bày rõ 4 yêu cầu giảng viên giao và giải quyết nghịch lý "Văn bản vs hình ảnh" (Page-Image Watermarking). (Hình thức: 4 khối nội dung trực quan).
-4. **Slide 4: Cơ sở lý thuyết thủy vân số (Digital Watermarking):** Khái niệm, mục tiêu an ninh, phân loại theo miền nhúng (Không gian vs Tần số: DCT, DWT, DFT). (Hình thức: Sơ đồ phân nhánh kỹ thuật).
-5. **Slide 5: Tam giác đánh đổi cốt lõi (Trade-off Triangle):** Robustness $\leftrightarrow$ Imperceptibility $\leftrightarrow$ Capacity. Giải thích ràng buộc đánh đổi kỹ thuật (Engineering / Design Trade-off) giữa độ bền vững, độ tàng hình và dung lượng nhúng. (Hình thức: Đồ họa hình tam giác đánh đổi với 3 đỉnh).
-6. **Slide 6: Kỹ thuật điều chế chỉ số lượng tử (QIM):** Nguyên lý Parity-QIM, bước lượng tử hóa $\Delta$, cơ chế giải mã mù (Blind Extraction). (Hình thức: Trục số lượng tử hóa so le chẵn/lẻ).
-7. **Slide 7: Bài toán A - truy vết nguồn phát hành (Traitor Tracing):** Định nghĩa bài toán, cấu trúc payload chuẩn hóa 23 byte (`"SB"` + version + UUID 16B + CRC-32), mã sửa lỗi Reed-Solomon 39 byte. (Hình thức: Sơ đồ phân rã khối byte payload).
-8. **Slide 8: Pipeline nhúng & trích xuất DWT-DCT-QIM:** Luồng xử lý Haar DWT cấp 1, chia khối DCT $8 \times 8$, CSPRNG key, bộ căn chỉnh hình học ORB-RANSAC dựa trên mẫu đồng bộ (SyncTemplate). (Hình thức: Sơ đồ khối pipeline dạng ngang Flowchart LR).
-9. **Slide 9: Bài toán B - phát hiện & định vị sửa đổi (Tamper Localization):** Nguyên lý Semi-fragile, lưới khối $128 \times 128$, trích xuất đặc trưng DCT tần số thấp, thẻ xác thực HMAC-SHA256 4 byte, phân tán khối đối tác (Partner Ring). (Hình thức: Sơ đồ lưới ảnh và liên kết khối đối tác).
-10. **Slide 10: Kết quả thực nghiệm định vị can thiệp & ranh giới kỹ thuật:** Trình bày 4 dạng can thiệp (`replace_text`, `cover_region`, `copy_move`, `insert_object`), số liệu IoU = 0.089981, giải thích cơ chế fail-safe bảo vệ trước nén mạnh. (Hình thức: Bảng số liệu kết hợp hình ảnh trực quan 4 ca can thiệp).
-11. **Slide 11: Ứng dụng ký số trong bảo vệ thông tin truy vết:** Cấu trúc Hồ sơ toàn vẹn (Manifest RFC 8785 JCS), thuật toán ký Ed25519, liên kết `issuance_id` giữa thủy vân và chữ ký số. (Hình thức: Sơ đồ cấu trúc dữ liệu Manifest và quy trình ký).
-12. **Slide 12: Giải quyết mâu thuẫn giữa thủy vân số và chữ ký số:** Phân tích câu hỏi của giảng viên: "Nhúng trước, ký sau"; phân tầng phòng thủ Defense-in-Depth giữa kênh số nguyên bản và kênh rò rỉ analog/lossy. (Hình thức: Sơ đồ hai nhánh luồng xác minh - Dual Verification Paths).
-13. **Slide 13: Ba cấp độ kiến trúc & Minh bạch trạng thái vận hành:** Phân định rõ cấp độ A (Payload), cấp độ B (Kiến trúc liên kết) và cấp độ C (Production Release 0.1). Giải thích nhãn UI "Chưa tìm thấy bản cấp phát khớp". (Hình thức: Bảng phân cấp 3 tầng rõ ràng).
-14. **Slide 14: Ma trận so sánh đa chiều toàn diện (Yêu cầu 4):** Trình bày bảng so sánh 6 kỹ thuật (Hash, HMAC, Digital Signature, Robust WM, Semi-fragile WM, Steganography) qua 7 tiêu chí an ninh. (Hình thức: Bảng ma trận nổi bật các điểm mạnh/yếu).
-15. **Slide 15: Phân tích tương phản chuyên sâu:** So sánh Watermarking vs Steganography (mục tiêu giấu tin); Watermarking vs Digital Signature (kênh số vs kênh analog); CRC-32 vs HMAC (lỗi ngẫu nhiên vs toàn vẹn mật mã). (Hình thức: 3 khối so sánh song song).
-16. **Slide 16: Hiện thực hệ thống SplitBind & môi trường Production:** Kiến trúc đám mây: Caddy, React Vite, Django API, Neon Postgres, Cloudflare R2 trên Azure VM (`https://splitbind.qivarn.id.vn`). Ảnh chụp giao diện cấp phát và xác thực. (Hình thức: Sơ đồ kiến trúc triển khai thực tế).
-17. **Slide 17: Bảng tổng hợp số liệu thực nghiệm đã khóa (Frozen Metrics):** Bảng số liệu chuẩn thế hệ V1: PSNR 41.69 dB, SSIM 0.9825, 32.736 hàng V1, False attribution 0.00% (0/682), IoU ~ 0.09. Ghi rõ trên slide rằng đây là số của thế hệ V1. (Hình thức: Thẻ thông số nổi bật - Key Metric Cards).
-18. **Slide 18 (MỚI): Tiến hóa thuật toán V1 → V3 và kết quả cải thiện độ bền:** Slide có sức nặng kỹ thuật cao nhất của báo cáo. Trình bày ba nội dung:
-    * *Bảng đối chiếu trên cùng corpus:* JPEG-70 `0/12 → 9/12`, Resize-0.75 `0/12 → 8/12`, Crop-0.25 `1/3 → 9/12`, lỗi thực thi `31/682 → 0/352`. Nhấn mạnh cùng corpus `e5837cd4…`, cùng cổng, cùng mẫu số nên so sánh có kiểm soát.
-    * *Bốn thay đổi thiết kế và vấn đề mỗi thay đổi giải quyết:* dải nhúng `HL → LL`, `qim_delta` `6-12 → 32`, đồng bộ `orb-ransac → pilot + 8 giả thuyết hình học`, và trải phổ `64 chip/bit` (chi tiết ở Câu hỏi 9).
-    * *Phát hiện then chốt:* dưới JPEG-70 và Crop-0.25, V3 trượt đúng ba trang mà phép đo không tấn công cũng trượt - không thêm hàng nào. Nén đã hết là yếu tố giới hạn; nút thắt còn lại là độ phủ phiếu tile, và ba hàng đó có `bit_error_rate = 0.0`.
-    * *Bắt buộc nêu kèm:* `research_measurement_only`, `profile_promoted: False`, chưa đạt cổng 0.95, production không nhúng fingerprint ở bất kỳ thế hệ nào.
-    (Hình thức: Bảng đối chiếu hai cột V1/V3 kết hợp biểu đồ cột nhóm; thêm một dòng nhỏ ghi phạm vi bằng chứng.)
-19. **Slide 19 (MỚI): Chẩn đoán nguyên nhân gốc & đóng góp đề xuất của Nhóm:** Slide trả lời trực tiếp phần "đề xuất" của đề bài (chi tiết ở PHẦN 13). Ba nhịp:
-    * *Chẩn đoán:* bộ giải mã chỉ sinh giả thuyết hình học cho ba trường hợp - giữ nguyên, co giãn đều, và cắt cúp tại đúng một tỉ lệ cứng `0.8660`. Ngoài ba trường hợp đó, tầng payload không bao giờ được chạy tới.
-    * *Bằng chứng:* bảng tương quan hoàn hảo - mọi phép biến đổi sinh được giả thuyết đạt 7-11/12, mọi phép không sinh được đạt 0-2/12, không ngoại lệ. Kèm nghịch lý crop 10% (2/12) tệ hơn crop 25% (7/12) vì 25% chính là tỉ lệ được cứng hoá.
-    * *Kiểm chứng:* bóc viền letterbox đưa screenshot 1920×1080 từ 0/12 lên 9/12, đúng bằng tỉ lệ resize-0.50, mà không đổi một tham số nào của thủy vân.
-    (Hình thức: sơ đồ ba nhánh giả thuyết hình học; bảng tương quan; ảnh trước/sau bóc viền kèm hai con số 0/12 → 9/12.)
-20. **Slide 20: Tổng kết, đóng góp & hướng nghiên cứu tiếp theo:** Tóm tắt kết quả; thừa nhận giới hạn (V3 chưa đạt cổng 0.95; IoU định vị ~ 0.09). Phần hướng phát triển nên trình bày như một kết luận có căn cứ thực nghiệm, không phải danh sách ước muốn:
-    * Nhóm đã kiểm chứng và loại trừ cả ba lever tham số (`qim_delta`, `tiles_per_page`, tham số trải phổ) bằng ba loại bằng chứng khác nhau: sweep 1408 hàng của V2, đọc mã nguồn, và thí nghiệm V4 192 hàng.
-    * Kết quả âm tính chỉ ra nút thắt thật: đổi tham số làm đổi trang bị hỏng chứ không giảm số hàng hỏng - đây là bài toán vị trí nhúng, không phải cường độ.
-    * Hướng tiếp theo: chọn vật mang theo nội dung một cách tất định; sau đó mới tới bước lượng tử thích nghi HVS và Deep Watermarking (HiDDeN, StegaStamp).
-    (Hình thức: ba khối - đã thử gì, học được gì, làm gì tiếp.)
+Báo cáo đã hoàn thành bốn nội dung được giao. Về lý thuyết, nhóm trình bày cơ sở kỹ thuật Digital Watermarking, phân loại theo miền nhúng và theo mục tiêu an ninh, cùng bài toán đánh đổi giữa độ bền, tính vô hình và dung lượng nhúng. Về ứng dụng, nhóm phân tích vai trò của thủy vân bền vững trong truy vết nguồn phát hành, của thủy vân bán dễ vỡ trong định vị can thiệp, và của chữ ký số Ed25519 trên manifest chuẩn tắc RFC 8785 trong bảo vệ thông tin truy vết. Về so sánh, nhóm đặt sáu kỹ thuật toàn vẹn cạnh nhau trên bảy tiêu chí an ninh.
 
----
+Điểm khác biệt của báo cáo là toàn bộ phần lý thuyết đều được kiểm chứng bằng một hệ thống hiện thực đầy đủ và đang vận hành, chứ không dừng ở mô hình.
 
-# PHẦN 11: TÀI LIỆU THAM KHẢO HỌC THUẬT CHUẨN IEEE (ACADEMIC REFERENCES)
+Đóng góp chính của nhóm không phải một con số độ bền, mà là một chẩn đoán nguyên nhân gốc. Qua ba thế hệ thuật toán, nhóm đã lần lượt kiểm chứng và bác bỏ cả ba hướng tinh chỉnh tham số, mỗi lần bằng một loại bằng chứng khác nhau: một sweep 1408 hàng, một lần đọc mã nguồn, và một thí nghiệm 192 hàng. Kết quả âm tính đó dẫn tới câu hỏi đúng, và câu trả lời là: độ bền của hệ thống không bị giới hạn bởi thủy vân, mà bởi tập giả thuyết hình học của bộ giải mã. Bằng chứng là một tương quan không có ngoại lệ trên 286 hàng đo, sau đó được xác nhận bằng một phép thử có tính tiên đoán: bóc viền letterbox đưa tỉ lệ truy vết của ảnh chụp màn hình 1920×1080 từ 0 trên 12 lên 9 trên 12, mà không thay đổi bất kỳ tham số nào của thủy vân. Ở 1366×768 phép bóc viền không khôi phục được hàng nào, và chính sự khác biệt giữa hai độ phân giải là thứ tách bạch được hai lớp thất bại.
+
+Từ đó nhóm phân tách được ba lớp thất bại vốn bị gộp chung dưới nhãn thủy vân không đủ bền: không tạo được ứng viên hình học, tạo ứng viên sai, và ứng viên đúng nhưng vật mang đã chết. Chỉ lớp thứ ba mới thực sự là vấn đề của thủy vân.
+
+Về các giới hạn đã nhận diện, phân hệ thủy vân bền vững chưa đạt cổng phát hành và được giữ ở tầng nghiên cứu; phiên bản vận hành chỉ kích hoạt xác thực toàn vẹn tệp chính xác. Dưới tỉ lệ co giãn khoảng 0.45 thì payload không còn khôi phục được kể cả khi hình học chính xác. Định vị can thiệp đạt IoU tổng hợp khoảng 0.09 do cơ chế fail-safe kích hoạt trên phần lớn kịch bản có diện tích can thiệp lớn. Và quan trọng nhất: không kết quả nào trong báo cáo chứng minh danh tính người làm rò rỉ, chỉnh sửa hay phát tán tài liệu; thủy vân và chữ ký số cung cấp tín hiệu kỹ thuật phục vụ điều tra, không phải kết luận pháp lý về hành vi của một cá nhân.
+
+Hướng phát triển rút ra trực tiếp từ chẩn đoán: chuẩn hoá khung ảnh trước khi giải mã, ước lượng tỉ lệ cắt thay vì liệt kê một giá trị cứng, cho phép hai trục co giãn độc lập, và cuối cùng mới là chọn vật mang theo nội dung. Xa hơn, bước lượng tử thích nghi theo mô hình thị giác người và các kiến trúc học sâu là lối đi cho lớp thất bại thứ ba.
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
+
+# TÀI LIỆU THAM KHẢO
 
 Tất cả các trích dẫn trong bài thuyết trình và báo cáo thuyết minh được định dạng theo chuẩn IEEE:
 
@@ -953,125 +880,28 @@ Tất cả các trích dẫn trong bài thuyết trình và báo cáo thuyết m
   18. [18] T. Sander, P. Fernandez, A. Durmus, M. Douze, and T. Furon, "Watermark Anything with Localized Messages," Meta AI Research, GitHub repository, 2025. [Online]. Available: https://github.com/facebookresearch/watermark-anything
   19. [19] Guo Fei, "blind_watermark: blind and invisible image watermark," GitHub repository, 2025. [Online]. Available: https://github.com/guofei9987/blind_watermark
 
----
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
 
-# PHẦN 13: ĐỀ XUẤT KIẾN TRÚC V4 - CHẨN ĐOÁN NGUYÊN NHÂN GỐC VÀ HƯỚNG SỬA
-
-`[Experimentally observed]` `[Implemented]` `[Limitation]`
-
-Đề bài yêu cầu "tìm hiểu và đề xuất" một hệ thống. Phần này là đóng góp đề xuất của nhóm: một chẩn đoán nguyên nhân gốc dựa trên số đo, một phép kiểm chứng đã thực hiện, và kiến trúc V4 rút ra từ đó.
-
-## 13.1. Chẩn đoán: nút thắt nằm ở tập giả thuyết hình học, không ở thủy vân
-
-Đọc hàm tìm kiếm hình học `search_geometry_v3` trong mã nguồn, bộ giải mã chỉ sinh ứng viên chuẩn tắc từ đúng ba nguồn:
-
-1. `identity` - chỉ khi raster bị tấn công có đúng kích thước chuẩn tắc.
-2. `pure_resize` - chỉ khi hai trục co giãn cùng một tỉ lệ, sai số `geometry_ratio_tolerance = 0.001`.
-3. `center_crop` - chỉ cho các tỉ lệ nằm trong `profile.crop_retained_scales`, vốn bị đóng băng ở đúng một giá trị `0.8660254037844386`.
-
-Ngoài ba trường hợp đó, bộ giải mã không sinh được giả thuyết hình học nào, nên tầng payload không bao giờ được chạy tới - bất kể vật mang mạnh đến đâu.
-
-## 13.2. Bằng chứng: tương quan hoàn hảo giữa "có giả thuyết" và "truy vết được"
-
-Đo trên 286 hàng, 0 lỗi thực thi (`run_v5_envelope.py`, 2026-09-11):
-
-| Phép biến đổi | Kích thước ra | Giả thuyết **đúng** có sẵn? | `decode_status` chủ đạo | Truy vết được |
-|---|---|---|---|---:|
-| crop 0.10 (cạnh 0.9487) | 1457×2914 | **không** (0.9486 ∉ {0.8660}) | `partial` 5, `payload_not_detected` 5 | 2/12 |
-| crop 0.25 (cạnh 0.8660) | 1330×2660 | **có** (`center_crop`) | `decoded` 7, `partial` 5, **`payload_not_detected` 0** | **7/12** |
-| crop 0.50 (cạnh 0.7071) | 1086×2172 | **không** | `payload_not_detected` 12 | 0/12 |
-| JPEG 50 | không đổi | **có** (`identity`) | `payload_not_detected` 12 | 0/12 |
-| resize 0.75 / 0.50 / 1.50 | co giãn đều | **có** (`pure_resize`) | phần lớn `decoded` | 10 / 9 / 11 /12 |
-| screenshot 1920×1080 | 1080×1920 | **không** (tỉ lệ khung lệch) | `payload_not_detected` 7, `insufficient_sync` 5 | 0/12 |
-| screenshot 1366×768 | 768×1366 | **không** | `insufficient_sync_evidence` 12 | 0/12 |
-
-**Mọi phép biến đổi có sẵn giả thuyết đúng đều đạt 7-11/12, trừ JPEG-50. Mọi phép thiếu giả thuyết đúng đều đạt 0-2/12.**
-
-Cần chính xác một điểm: với các phép cắt, vẫn có giả thuyết được sinh ra - `pure_resize` kích hoạt vì cắt giữa làm hai trục co cùng tỉ lệ - nhưng nó căn sai, kéo vùng đã cắt ra full canvas. Khuyết tật không nằm ở việc *không sinh* giả thuyết mà ở *độ phủ*: ứng viên đúng vắng mặt trong khi một ứng viên sai trông hợp lý chiếm chỗ. Đó là lý do các hàng này báo `payload_not_detected` (đã căn, không thấy tín hiệu) thay vì `insufficient_sync_evidence` (chưa từng căn được).
-
-**Bằng chứng sắc nhất cho luận điểm tối ưu quá mức:** crop 0.25 là phép cắt duy nhất có 0 hàng `payload_not_detected`. Mọi trang đều sinh được ít nhất bằng chứng một phần, và chỉ ở đó. Đúng như dự đoán "giả thuyết đúng tồn tại cho tỉ lệ này và không tỉ lệ nào khác", và không giải thích được bằng cường độ tín hiệu, vì crop 0.10 bỏ đi ít hơn.
-
-### Ba lớp thất bại khác nhau, không phải một
-
-| Lớp | Dấu hiệu | Ví dụ | Cách sửa |
-|---|---|---|---|
-| **1. Không tạo được ứng viên** | `insufficient_sync_evidence` | screenshot 1366, phối cảnh | Chuẩn hoá khung ảnh - **đã kiểm chứng**: 0/12 → 9/12 ở 1920×1080 |
-| **2. Tạo ứng viên sai** | `payload_not_detected` **kèm đổi kích thước** | crop 0.10, crop 0.50 | Ước lượng tỉ lệ cắt thay vì liệt kê một giá trị cứng |
-| **3. Ứng viên đúng, vật mang chết** | `payload_not_detected` **không đổi kích thước** | JPEG 50; screenshot 1366 sau khi bóc viền | Lớp **duy nhất** mà các lever tham số từng là câu chuyện đúng - và cả ba lever đó đã bị bác bỏ bằng đo đạc |
-
-Phải phân loại thất bại theo `decode_status` cộng với việc raster có đổi kích thước hay không, trước khi đề xuất bất kỳ biện pháp nào.
-
-Hai hệ quả phải nói thẳng:
-
-- **Kết quả crop 0.25 bị tối ưu quá mức cho chính benchmark.** `crop_retained_scales = [sqrt(0.75)]` chính xác là tỉ lệ cạnh mà `crop_fraction = 0.25` tạo ra - đúng phép cắt duy nhất mà pre-gate đo. Bộ giải mã được cứng hoá để hoàn tác đúng phép tấn công mà nó bị chấm điểm. Đó là lý do một phép cắt nhẹ hơn (10%) lại tệ hơn một phép cắt nặng hơn (25%): vô lý nếu giải thích bằng cường độ tín hiệu, hoàn toàn hợp lý nếu giải thích bằng độ phủ giả thuyết.
-- **Screenshot hỏng vì một lý do cơ bản hơn và không liên quan.** Đặt trang 1536×3072 vào màn hình 1920×1080 kèm viền letterbox cho hai tỉ lệ 0.703 và 0.625 - không khớp, nên cả `pure_resize` lẫn `center_crop` đều không kích hoạt. Bộ giải mã báo `insufficient_sync_evidence` vì nó chưa từng tạo ra ứng viên nào.
-
-## 13.3. Kiểm chứng: bóc viền letterbox khôi phục truy vết screenshot
-
-Chẩn đoán trên sinh ra một dự đoán kiểm chứng được: nếu bỏ viền đồng màu của màn hình, hai tỉ lệ sẽ khớp lại và giả thuyết `pure_resize` sẵn có sẽ kích hoạt. Kết quả đo trên 12 trang dương tính:
-
-| Màn hình | Ảnh thô | Sau khi bóc viền |
-|---|---:|---:|
-| **1920×1080** | **0/12** | **9/12** |
-| 1366×768 | 0/12 | 0/12 |
-
-**9/12 đúng bằng tỉ lệ của resize-0.50** - chính là điều dự đoán đòi hỏi: bỏ viền đi thì screenshot *chính là* một phép co giãn đều, mà bộ giải mã vốn đã xử lý được. Thủy vân, ECC, tham số trải phổ và vị trí tile giữ nguyên không đổi; phần sửa chỉ khoảng hai mươi dòng tiền xử lý tất định: tìm màu viền theo trung vị bốn cạnh rồi cắt các hàng/cột nằm trong dung sai của màu đó.
-
-Hai kích thước màn hình hỏng vì hai lý do khác nhau, và phép bóc viền tách bạch được chúng:
-
-- Ở 1920×1080, sau khi bóc, trang nằm ở tỉ lệ 0.625. Hai tỉ lệ khớp, `pure_resize` kích hoạt, truy vết phục hồi. Đây chưa bao giờ là vấn đề của thủy vân.
-- Ở 1366×768, trang nằm ở 683×1366, tỉ lệ 0.4447. Trạng thái chuyển từ `insufficient_sync_evidence` (12/12 hàng) sang `payload_not_detected` (11/12 hàng, một hàng đạt `partial_payload_evidence`) - hình học giờ thành công và chính payload mới là thứ chết. 0.4447 thấp hơn mốc resize-0.50 vốn đạt 9/12, nên đây là giới hạn phân giải thật của vật mang.
-
-Chuyển dịch mã trạng thái đó là công cụ chẩn đoán đáng dùng: `insufficient_sync_evidence` nghĩa là chưa tạo được ứng viên, hỏng ở hình học; `payload_not_detected` nghĩa là đã căn được trang và tín hiệu đã mất.
-
-## 13.4. Kiến trúc V4 đề xuất
-
-Xếp theo tỉ lệ lợi ích trên chi phí đo được:
-
-**Tầng 1 - Chuẩn hoá khung ảnh trước khi giải mã (đã kiểm chứng).**
-Bóc viền đồng màu; mở rộng sang phát hiện biên trang và khử nghiêng. Bộ giải mã V3 ngầm giả định đầu vào đã được đóng khung giống hệt bản phát hành, trong khi kênh rò rỉ thật không bao giờ như vậy. Đây là tầng cho nhiều độ bền nhất trên mỗi dòng mã.
-
-**Tầng 2 - Ước lượng tỉ lệ cắt thay vì liệt kê.**
-Thay `crop_retained_scales` cố định bằng tìm kiếm tỉ lệ, hoặc ước lượng tỉ lệ từ tương quan log-polar của pilot (hạ tầng này đã có sẵn trong `synchronization_v2.py`). Xoá điểm tối ưu quá mức tại 0.25 và làm crop 0.10 / 0.50 trở nên xử lý được.
-
-**Tầng 3 - Cho phép hai trục co giãn độc lập.**
-Ràng buộc `ratios_agree` loại bỏ mọi phép biến đổi đổi tỉ lệ khung. Nới nó ra cho phép xử lý ảnh bị kéo méo và bù phối cảnh.
-
-**Tầng 4 - Chọn vật mang theo nội dung (chưa kiểm chứng).**
-Chấm điểm tile ứng viên theo kết cấu trước khi chọn, vẫn tất định từ khoá. Giải quyết việc *trang nào* hỏng bên trong một phép biến đổi mà bộ giải mã đã hoàn tác được - hiệu ứng thứ cấp thật, nhưng không phải nguyên nhân của các thất bại diện rộng.
-
-## 13.5. Cái gì kiến trúc này không sửa được
-
-`[Limitation]`
-
-- **Giới hạn phân giải là thật.** Dưới tỉ lệ khoảng 0.45, payload chết kể cả khi hình học hoàn hảo. Không tầng nào ở trên chạm tới điều đó; muốn sửa phải tăng dung lượng hoặc giảm payload, và nhóm đã đo được rằng nâng `qim_delta` không phải lối ra (V2 quét 24→64, trần vẫn 3/12).
-- **JPEG-50 là thất bại vật mang thật** (lớp 3): hình học đúng vì ảnh không đổi kích thước, nhưng nén phá huỷ tín hiệu. Đây là giới hạn mà không tầng kiến trúc nào ở trên chạm tới được, và ba lever tham số đã bị bác bỏ bằng đo đạc, nên hướng duy nhất còn lại là tăng dung lượng kênh hoặc giảm payload.
-- **Toàn bộ số trong phần này đến từ harness nghiên cứu, không phải pre-gate**, và khác pre-gate ở cách dẫn xuất RNG tấn công cùng việc cấp mẫu đồng bộ ORB cho bộ giải mã. Không được trộn với Mục 4.2.1, và không được trình bày như năng lực đã phát hành. Từ 12/09/2026 production có bật đường ống nhúng và giải fingerprint, nhưng Mục 4.2.3 cho thấy năng lực đó chưa truy vết được bản biến đổi nào trên môi trường thật; kết luận trả cho người dùng vẫn dựa trên đối chiếu tệp chính xác và chữ ký.
-
-## 13.6. Vì sao chẩn đoán này có được
-
-Đáng ghi nhận về mặt phương pháp: chẩn đoán trên chỉ tìm ra được vì dự án đã ghi lại bằng chứng đúng cách. Mã trạng thái phân biệt `insufficient_sync_evidence` với `payload_not_detected` là thứ tách được hai nguyên nhân; hợp đồng tấn công có sẵn họ `screenshot` để đo; corpus khoá theo hash làm phép so sánh có kiểm soát. Một dự án ghi chép cẩu thả sẽ không để lại gì để kiểm toán.
-
----
-
-# PHẦN 12: PHỤ LỤC: MA TRẬN TRUY VẾT KHẲNG ĐỊNH VÀ BẰNG CHỨNG (CLAIM / EVIDENCE TRACEABILITY MATRIX)
+# PHỤ LỤC A. MA TRẬN TRUY VẾT KHẲNG ĐỊNH VÀ BẰNG CHỨNG
 
 Bảng đối chiếu toàn diện giữa các tuyên bố kỹ thuật trong tài liệu với bằng chứng thực tế trong kho lưu trữ:
 
 | Khẳng định Kỹ thuật / Số liệu | Phân loại Nhãn | Bằng chứng Thực tế / Đường dẫn Mã nguồn | Trạng thái Kiểm chứng |
 |---|---|---|---|
-| Cấu trúc payload nhúng đúng 23 byte (`magic`, `version`, `UUID`, `CRC32`) | `[Implemented]` | `contracts/algorithm/payload-profile.v1.json: L3-L10`, `research/python/src/splitbind_ref/payload.py: L18-L33` | Đã kiểm chứng: 10/10 tests pass trong `test_payload.py`. |
-| Mã sửa lỗi Reed-Solomon 39 byte từ 23 byte payload | `[Implemented]` | `contracts/algorithm/payload-profile.v1.json: L20-L27`, `research/python/src/splitbind_ref/payload.py` | Đã kiểm chứng qua hợp đồng thuật toán cố định. |
-| Thuật toán thủy vân DWT-DCT-QIM với ORB-RANSAC | `[Implemented]` | `research/python/src/splitbind_ref/dwt_dct_qim.py` | Đã kiểm chứng qua pipeline mã hóa/giải mã tham chiếu. |
-| Số liệu PSNR 41.69 dB và SSIM 0.9825 trên trang PDF | `[Experimentally observed]` | `artifacts/task-1-fidelity/fidelity-report.json` | Đã kiểm chứng: Đo lường khách quan trên trang PDF render 144 DPI. |
-| Quy mô Benchmark V1: 32.736 hàng thực nghiệm | `[Experimentally observed]` | `docs/evaluation/fingerprint-profile-v1.md`; dữ liệu thô `reports/fingerprint-baseline-v1/results.jsonl` (Mã băm SHA-256: `e4e9898f...`) | Đã kiểm chứng: 22 trang $\times$ 48 ứng viên $\times$ 31 kịch bản tấn công. |
-| Tỷ lệ gán sai 0.00% (0 / 682 hàng) | `[Experimentally observed]` | `docs/evaluation/fingerprint-profile-v1.md: Table 4` | Đã kiểm chứng trên tập mẫu benchmark V1 đã xét. |
-| Ranh giới thất bại trước JPEG-70 và Resize-0.75 | `[Limitation]` | `docs/evaluation/fingerprint-profile-v1.md: Section 5` | Đã kiểm chứng: 0/12 ca giải mã thành công trong benchmark. |
-| Thuật toán Semi-fragile Tamper Localization khối $128 \times 128$ | `[Implemented]` | `research/python/src/splitbind_ref/integrity.py` | Đã kiểm chứng mã nguồn cài đặt DCT + HMAC-SHA256 + Partner Ring. |
-| Quy mô Benchmark Can thiệp 48 hàng, Aggregate IoU = 0.089981 | `[Experimentally observed]` | `docs/evaluation/integrity-profile-v1.md: Table 2` | Đã kiểm chứng: 12 trang $\times$ 4 loại tấn công; 38/48 hàng kích hoạt fail-safe. |
-| Chuẩn hóa RFC 8785 JCS và ký số Ed25519 trên Manifest | `[Implemented]` & `[Production]` | `services/api/splitbind/release/manifest.py: L58-L119` | Đã kiểm chứng qua hàm `build_signed_issuance_manifest` và `_sign` với Ed25519 trên Azure. |
-| Trạng thái UI minh bạch "Chưa tìm thấy bản cấp phát khớp" | `[Production]` & `[Limitation]` | `apps/web/src/features/evidence/copy.ts: L46-L81`, `apps/web/src/pages/VerifyDocumentPage.tsx` | Đã kiểm chứng logic hiển thị trạng thái và thông báo phạm vi trên giao diện web production. |
-| Phân định rạch ròi ba cấp độ A (Payload), B (Kiến trúc), C (Production) | `[Implemented]` & `[Production]` (Thiết kế Kiến trúc Dự án) | `docs/superpowers/specs/2026-08-13-splitbind-production-design.md: Section 1-3`, `docs/decisions/001-azure-production-architecture.md` | Đã kiểm chứng thống nhất trong hồ sơ đặc tả thiết kế kiến trúc SplitBind. |
+| Cấu trúc payload nhúng đúng 23 byte (`magic`, `version`, `UUID`, `CRC32`) | *Đã hiện thực trong mã nguồn* | `contracts/algorithm/payload-profile.v1.json: L3-L10`, `research/python/src/splitbind_ref/payload.py: L18-L33` | Đã kiểm chứng: 10/10 tests pass trong `test_payload.py`. |
+| Mã sửa lỗi Reed-Solomon 39 byte từ 23 byte payload | *Đã hiện thực trong mã nguồn* | `contracts/algorithm/payload-profile.v1.json: L20-L27`, `research/python/src/splitbind_ref/payload.py` | Đã kiểm chứng qua hợp đồng thuật toán cố định. |
+| Thuật toán thủy vân DWT-DCT-QIM với ORB-RANSAC | *Đã hiện thực trong mã nguồn* | `research/python/src/splitbind_ref/dwt_dct_qim.py` | Đã kiểm chứng qua pipeline mã hóa/giải mã tham chiếu. |
+| Số liệu PSNR 41.69 dB và SSIM 0.9825 trên trang PDF | *Số liệu đo thực nghiệm* | `artifacts/task-1-fidelity/fidelity-report.json` | Đã kiểm chứng: Đo lường khách quan trên trang PDF render 144 DPI. |
+| Quy mô Benchmark V1: 32.736 hàng thực nghiệm | *Số liệu đo thực nghiệm* | `docs/evaluation/fingerprint-profile-v1.md`; dữ liệu thô `reports/fingerprint-baseline-v1/results.jsonl` (Mã băm SHA-256: `e4e9898f...`) | Đã kiểm chứng: 22 trang $\times$ 48 ứng viên $\times$ 31 kịch bản tấn công. |
+| Tỷ lệ gán sai 0.00% (0 / 682 hàng) | *Số liệu đo thực nghiệm* | `docs/evaluation/fingerprint-profile-v1.md: Table 4` | Đã kiểm chứng trên tập mẫu benchmark V1 đã xét. |
+| Ranh giới thất bại trước JPEG-70 và Resize-0.75 | *Giới hạn đã nhận diện* | `docs/evaluation/fingerprint-profile-v1.md: Section 5` | Đã kiểm chứng: 0/12 ca giải mã thành công trong benchmark. |
+| Thuật toán Semi-fragile Tamper Localization khối $128 \times 128$ | *Đã hiện thực trong mã nguồn* | `research/python/src/splitbind_ref/integrity.py` | Đã kiểm chứng mã nguồn cài đặt DCT + HMAC-SHA256 + Partner Ring. |
+| Quy mô Benchmark Can thiệp 48 hàng, Aggregate IoU = 0.089981 | *Số liệu đo thực nghiệm* | `docs/evaluation/integrity-profile-v1.md: Table 2` | Đã kiểm chứng: 12 trang $\times$ 4 loại tấn công; 38/48 hàng kích hoạt fail-safe. |
+| Chuẩn hóa RFC 8785 JCS và ký số Ed25519 trên Manifest | *Đã hiện thực trong mã nguồn* và *Đang vận hành trên hệ thống thật* | `services/api/splitbind/release/manifest.py: L58-L119` | Đã kiểm chứng qua hàm `build_signed_issuance_manifest` và `_sign` với Ed25519 trên Azure. |
+| Trạng thái UI minh bạch "Chưa tìm thấy bản cấp phát khớp" | *Đang vận hành trên hệ thống thật* và *Giới hạn đã nhận diện* | `apps/web/src/features/evidence/copy.ts: L46-L81`, `apps/web/src/pages/VerifyDocumentPage.tsx` | Đã kiểm chứng logic hiển thị trạng thái và thông báo phạm vi trên giao diện web production. |
+| Phân định rạch ròi ba cấp độ A (Payload), B (Kiến trúc), C (Production) | *Đã hiện thực trong mã nguồn* và *Đang vận hành trên hệ thống thật* (Thiết kế Kiến trúc Dự án) | `docs/superpowers/specs/2026-08-13-splitbind-production-design.md: Section 1-3`, `docs/decisions/001-azure-production-architecture.md` | Đã kiểm chứng thống nhất trong hồ sơ đặc tả thiết kế kiến trúc SplitBind. |
 | Thủy vân đã bật trên production từ 12/09/2026; năm phép thử, không bản biến đổi nào được truy vết | *Đang vận hành trên hệ thống thật* và *Giới hạn đã nhận diện* | Đo qua giao diện công khai; bảng ở Bảng 4.9 | Đã kiểm chứng: 1 trong 5 giải được, và đó là bản nguyên vẹn mà mã băm đã trả lời xong. |
 | Mẫu đồng bộ ORB không phải mảnh còn thiếu của bộ giải mã | *Giới hạn đã nhận diện* (giả thuyết bị bác bỏ) | 3 vật mang nhân 5 điều kiện, giải hai lần mỗi ô; Mục 4.2.3 | Đã kiểm chứng: 30/30 ô cho trạng thái giống hệt nhau khi có và không có mẫu đồng bộ. |
 | Trang văn bản là vật mang gần như tệ nhất cho thiết kế QIM trung tần | *Số liệu đo thực nghiệm* | Bảng 4.10 | Đã kiểm chứng: trang gradient giữ được bằng chứng payload qua thu nhỏ 0.50; trang văn bản không ra gì kể cả khi không tấn công. |

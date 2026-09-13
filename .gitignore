@@ -9,6 +9,15 @@
 /docs/course/
 /docs/internal/
 /docs/project/lecturer-email-summary.md
+
+# Bài tập cá nhân và bản nháp riêng, không thuộc sản phẩm nhóm nộp.
+/docs/project/HoangVietQuang_BaiTapAffine.docx
+/docs/project/affine-homework.md
+/docs/project/forum-post-draft.md
+
+# Ghi chép công việc nội bộ và sản phẩm trung gian của quá trình dựng tài liệu.
+/docs/project/task-6-report.md
+/docs/project/*.pre-cover.docx
 # Chứa IP server production, email cá nhân, Azure subscription ID, endpoint R2
 # và username quản trị. Bản thân file vẫn ở trên đĩa để dùng nội bộ.
 /docs/evaluation/integrity-release-0.1.md
@@ -95,3 +104,6 @@ reports/
 .terraform/
 *.tfstate
 *.tfstate.*
+
+# Gói bài nộp, dựng lại được từ nguồn nên không đưa vào repo.
+/submission/
