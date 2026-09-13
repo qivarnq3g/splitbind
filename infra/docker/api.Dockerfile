@@ -39,6 +39,10 @@ RUN groupadd --gid 10001 splitbind \
     && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin splitbind
 
 COPY --from=builder /opt/venv /opt/venv
+
+RUN /opt/venv/bin/python -m pip uninstall -y pip setuptools wheel \
+    && /usr/local/bin/python -m pip uninstall -y pip setuptools wheel
+
 WORKDIR /app/services/api
 COPY --chown=10001:10001 services/api/manage.py ./manage.py
 COPY --chown=10001:10001 services/api/config ./config
