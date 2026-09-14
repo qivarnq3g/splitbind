@@ -28,6 +28,8 @@ def embedded_page(request):
 @pytest.mark.parametrize("attack", [
     AttackCase("jpeg-q70", "jpeg", {"quality": 70}),
     AttackCase("resize-s0p75", "resize", {"scale": 0.75}),
+    AttackCase("resize-s0p625", "resize", {"scale": 0.625}),
+    AttackCase("resize-s0p375", "resize", {"scale": 0.375}),
     AttackCase("crop-f0p25", "crop", {"fraction": 0.25}),
 ])
 def test_v3_representative_attack_decodes(embedded_page, attack):

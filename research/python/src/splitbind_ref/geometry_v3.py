@@ -10,6 +10,8 @@ import cv2
 import numpy as np
 from numpy.typing import NDArray
 
+from splitbind_ref.frame_restore import restore_frame
+
 from .fingerprint_v3_profile import FingerprintV3Profile, v2_pilot_profile
 from .synchronization import SyncTemplate
 from .synchronization_v2 import align_page_v2
@@ -21,7 +23,7 @@ _MATRIX_QUANTIZATION_DECIMALS = 8
 
 @dataclass(frozen=True, slots=True)
 class GeometryHypothesisV3:
-    kind: Literal["identity", "pure_resize", "center_crop", "sync"]
+    kind: Literal["identity", "pure_resize", "center_crop", "frame_restore", "sync"]
     image: NDArray[np.uint8]
     source_to_canonical: NDArray[np.float64]
     score: float
@@ -72,7 +74,7 @@ def search_geometry_v3(
     seen_matrices: set[tuple[float, ...]] = set()
 
     def add(
-        kind: Literal["identity", "pure_resize", "center_crop", "sync"],
+        kind: Literal["identity", "pure_resize", "center_crop", "frame_restore", "sync"],
         image: NDArray[np.uint8],
         matrix: NDArray[np.float64],
         score: float,
@@ -120,6 +122,17 @@ def search_geometry_v3(
             dtype=np.float64,
         )
         add("pure_resize", resized, resize_matrix, 1.0)
+
+    restored = restore_frame(
+        attacked, target_shape, interpolation=interpolation
+    )
+    if restored is not None and restored.trimmed:
+        add(
+            "frame_restore",
+            restored.image,
+            restored.source_to_canonical,
+            1.0,
+        )
 
     if len(hypotheses) >= profile.max_geometry_hypotheses:
         return GeometrySearchV3(tuple(hypotheses), None)
