@@ -261,7 +261,7 @@ def test_upload_role_matrix_and_denials_are_audited(browser_client, actors, role
         upload_payload(size_bytes=MAX_UPLOAD_BYTES + 1),
         upload_payload(sha256="A" * 64),
         upload_payload(sha256="short"),
-        upload_payload(content_type="image/png"),
+        upload_payload(content_type="application/zip"),
         upload_payload("unknown_input"),
     ],
 )
@@ -863,3 +863,20 @@ def test_stored_source_filename_strips_paths_and_refuses_hostile_names():
     assert safe_source_filename("noextension") == ""
     assert safe_source_filename(None) == ""
     assert len(safe_source_filename("n" * 400 + ".pdf")) <= 180
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("content_type", ["image/png", "image/jpeg", "application/pdf"])
+def test_issuance_intent_accepts_documents_and_images(browser_client, actors, content_type):
+    login(browser_client, actors[Role.ISSUER])
+
+    response = browser_client.post(
+        "/api/v1/uploads",
+        data=json.dumps(upload_payload(content_type=content_type)),
+        content_type="application/json",
+        **csrf_headers(browser_client),
+    )
+
+    assert response.status_code == 201
+    record = UploadRequest.objects.get()
+    assert record.source_content_type == content_type

@@ -26,7 +26,7 @@ function validateSize(file: File): void {
 
 function normalizedContentType(file: File, kind: UploadKind, exactOnly = false): string | null {
   const name = file.name.toLocaleLowerCase();
-  const candidates = kind === "issuance_input" || exactOnly
+  const candidates = exactOnly
     ? [{ suffixes: [".pdf"], type: "application/pdf" }]
     : [
         { suffixes: [".pdf"], type: "application/pdf" },
@@ -38,10 +38,14 @@ function normalizedContentType(file: File, kind: UploadKind, exactOnly = false):
   return candidate.type;
 }
 
-export function validatePdf(file: File): void {
+export function validateIssuanceFile(file: File, exactOnly = true): void {
   validateSize(file);
-  if (!normalizedContentType(file, "issuance_input")) {
-    throw new SafeApiError("Tệp đã chọn không phải PDF. Chọn tệp có định dạng PDF rồi thử lại.");
+  if (!normalizedContentType(file, "issuance_input", exactOnly)) {
+    throw new SafeApiError(
+      exactOnly
+        ? "Tệp đã chọn không phải PDF. Chọn tệp có định dạng PDF rồi thử lại."
+        : "Tệp chưa đúng định dạng. Chọn tệp PDF, PNG hoặc JPEG rồi thử lại.",
+    );
   }
 }
 
@@ -68,7 +72,7 @@ export async function uploadPdf(
   signal?: AbortSignal,
   exactOnly = false,
 ): Promise<UploadReady> {
-  if (kind === "issuance_input") validatePdf(file);
+  if (kind === "issuance_input") validateIssuanceFile(file, exactOnly);
   else validateVerificationFile(file, exactOnly);
   const contentType = normalizedContentType(file, kind, exactOnly)!;
 
@@ -128,8 +132,9 @@ export function uploadIssuancePdf(
   file: File,
   onStage: (stage: UploadStage) => void,
   signal?: AbortSignal,
+  exactOnly = true,
 ): Promise<UploadReady> {
-  return uploadPdf(file, "issuance_input", onStage, signal);
+  return uploadPdf(file, "issuance_input", onStage, signal, exactOnly);
 }
 
 export function uploadVerificationPdf(

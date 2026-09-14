@@ -24,11 +24,11 @@ _PROMOTED_KEY = re.compile(
 _ISSUANCE_OUTPUT_KEY = re.compile(
     r"^outputs/issuance/"
     r"(?P<organization>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/"
-    r"(?P<issuance>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.pdf$"
+    r"(?P<issuance>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.(?:pdf|png)$"
 )
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 _CONTENT_TYPES = {
-    "issuance_input": {"application/pdf"},
+    "issuance_input": {"application/pdf", "image/png", "image/jpeg"},
     "verification_input": {"application/pdf", "image/png", "image/jpeg"},
 }
 

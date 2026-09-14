@@ -174,6 +174,7 @@ class UploadRequest(ValidatedOrganizationOwnedModel):
     purpose = models.CharField(max_length=16, choices=UploadPurpose.choices)
     object_key = models.CharField(max_length=1024, unique=True)
     source_filename = models.CharField(max_length=180, blank=True, default="")
+    source_content_type = models.CharField(max_length=64, blank=True, default="")
     expected_sha256 = models.CharField(
         max_length=64,
         validators=[validate_sha256],

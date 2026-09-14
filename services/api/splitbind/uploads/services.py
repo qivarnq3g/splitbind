@@ -27,7 +27,7 @@ _KIND_TO_PURPOSE = {
     "verification_input": UploadPurpose.VERIFICATION,
 }
 _CONTENT_TYPES = {
-    "issuance_input": {"application/pdf"},
+    "issuance_input": {"application/pdf", "image/png", "image/jpeg"},
     "verification_input": {"application/pdf", "image/png", "image/jpeg"},
 }
 
@@ -122,6 +122,7 @@ def create_upload(actor, *, kind: str, filename: str, content_type: str, size_by
             purpose=_KIND_TO_PURPOSE[kind],
             object_key=key,
             source_filename=safe_source_filename(filename),
+            source_content_type=content_type,
             expected_sha256=sha256,
             size_bytes=size_bytes,
             expires_at=now + UPLOAD_TTL,

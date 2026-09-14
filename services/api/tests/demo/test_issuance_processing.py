@@ -505,8 +505,8 @@ def test_task_workspace_survives_through_upload_then_is_removed(
     def assert_workspace_then_upload(**kwargs):
         workspace_path = workspaces[0]
         assert workspace_path.is_dir()
-        assert (workspace_path / "source.pdf").is_file()
-        assert (workspace_path / "output.pdf").is_file()
+        assert (workspace_path / "source.bin").is_file()
+        assert (workspace_path / "output.bin").is_file()
         return real_upload(**kwargs)
 
     monkeypatch.setattr(storage, "upload_bytes", assert_workspace_then_upload)

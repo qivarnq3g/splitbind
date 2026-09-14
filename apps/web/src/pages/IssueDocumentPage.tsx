@@ -1,17 +1,18 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowRight } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { DocumentFileInput } from "../components/DocumentFileInput";
 import { WorkflowSteps } from "../components/WorkflowSteps";
 import { canCreateIssuance, useSession } from "../features/auth/session";
+import { getDemoCapabilities } from "../features/demo/capabilities";
 import { SafeApiError } from "../features/shared/apiError";
 import {
   MAX_PDF_LABEL,
   MAX_PDF_PAGES,
   type UploadStage,
   uploadIssuancePdf,
-  validatePdf,
+  validateIssuanceFile,
 } from "../features/uploads/uploadIssuance";
 import { createIssuance } from "../features/issuances/issuances";
 import { formatBytes } from "../features/shared/formatBytes";
@@ -24,14 +25,28 @@ export function IssueDocumentPage() {
   const [recipientName, setRecipientName] = useState("");
   const [stage, setStage] = useState<UploadStage | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const capabilities = useQuery({
+    queryKey: ["demo-capabilities"],
+    queryFn: ({ signal }) => getDemoCapabilities(signal),
+    enabled: Boolean(session.data?.user),
+    staleTime: 30_000,
+    retry: false,
+  });
+  const capability = capabilities.data;
+  const exactOnly =
+    capability === undefined
+      ? true
+      : capability.algorithm_label === "integrity_release_v1"
+        ? capability.transformed_attribution_available !== true
+        : false;
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
   const issuance = useMutation({
     mutationFn: async () => {
       if (!file)
-        throw new SafeApiError("Chưa có tệp PDF. Chọn một tệp rồi thử lại.");
-      validatePdf(file);
+        throw new SafeApiError("Chưa có tệp. Chọn một tệp rồi thử lại.");
+      validateIssuanceFile(file, exactOnly);
       const trimmedEmail = recipientEmail.trim();
       if (!trimmedEmail) {
         throw new SafeApiError(
@@ -41,7 +56,12 @@ export function IssueDocumentPage() {
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
-      const upload = await uploadIssuancePdf(file, setStage, controller.signal);
+      const upload = await uploadIssuancePdf(
+        file,
+        setStage,
+        controller.signal,
+        exactOnly,
+      );
       setStage(null);
       return createIssuance(
         upload.uploadId,
@@ -64,7 +84,7 @@ export function IssueDocumentPage() {
       return;
     }
     try {
-      validatePdf(selected);
+      validateIssuanceFile(selected, exactOnly);
       setFile(selected);
     } catch (error) {
       setFile(selected);
@@ -119,8 +139,12 @@ export function IssueDocumentPage() {
             >
               <DocumentFileInput
                 id="pdf-file"
-                label="Tệp PDF"
-                accept="application/pdf,.pdf"
+                label={exactOnly ? "Tệp PDF" : "Tệp tài liệu hoặc ảnh"}
+                accept={
+                  exactOnly
+                    ? "application/pdf,.pdf"
+                    : "application/pdf,image/png,image/jpeg,.pdf,.png,.jpg,.jpeg"
+                }
                 disabled={issuance.isPending}
                 invalid={Boolean(validationError)}
                 describedBy="pdf-help"
@@ -136,7 +160,9 @@ export function IssueDocumentPage() {
                 {validationError ??
                   (file
                     ? `${formatBytes(file.size)} · Tệp được chọn trên thiết bị, chưa tải lên.`
-                    : `PDF · tối đa ${MAX_PDF_LABEL} · PDF tối đa ${MAX_PDF_PAGES} trang`)}
+                    : exactOnly
+                      ? `PDF · tối đa ${MAX_PDF_LABEL} · PDF tối đa ${MAX_PDF_PAGES} trang`
+                      : `PDF, PNG hoặc JPEG · tối đa ${MAX_PDF_LABEL} · PDF tối đa ${MAX_PDF_PAGES} trang`)}
               </p>
             </div>
             <fieldset className="field-group">

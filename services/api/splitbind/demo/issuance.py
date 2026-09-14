@@ -86,6 +86,17 @@ class _CanonicalizedPage:
     height: int
 
 
+ISSUANCE_OUTPUT_EXTENSIONS = {
+    "application/pdf": "pdf",
+    "image/png": "png",
+    "image/jpeg": "png",
+}
+
+
+def issuance_output_extension(source_content_type: str) -> str:
+    return ISSUANCE_OUTPUT_EXTENSIONS.get(source_content_type or "", "pdf")
+
+
 def process_issuance_job(
     *, job_id, storage, owner_token: uuid.UUID | None = None
 ) -> IssuanceProcessingResult:
@@ -158,7 +169,12 @@ def _acquire_processing_claim(*, job_id, owner_token):
             owner_token=owner_token,
         )
 
-    output_key = f"outputs/issuance/{job.organization_id}/{issuance.id}.pdf"
+    output_extension = issuance_output_extension(
+        getattr(getattr(document, "upload_request", None), "source_content_type", "")
+    )
+    output_key = (
+        f"outputs/issuance/{job.organization_id}/{issuance.id}.{output_extension}"
+    )
     evidence = DemoIssuanceResult(
         organization_id=job.organization_id,
         job=job,
@@ -234,14 +250,16 @@ def _process_issuance_job(
         except StorageUnavailable as error:
             raise DemoIssuanceError("DEMO_INPUT_STORAGE_FAILED") from error
 
-        source_path = workspace_path / "source.pdf"
-        output_path = workspace_path / "output.pdf"
+        source_path = workspace_path / "source.bin"
+        output_path = workspace_path / "output.bin"
         source_path.write_bytes(downloaded.data)
-        output_bytes, page_count, candidate_identifier = _build_issuance_pdf(
-            source_path.read_bytes(),
-            issuance_id=claim.issuance_id,
-            fingerprint_key=fingerprint_key,
-            visible_marker=integrity_mode and not fingerprint_enabled,
+        output_bytes, page_count, candidate_identifier, output_content_type = (
+            _build_issuance_artifact(
+                source_path.read_bytes(),
+                issuance_id=claim.issuance_id,
+                fingerprint_key=fingerprint_key,
+                visible_marker=integrity_mode and not fingerprint_enabled,
+            )
         )
         output_path.write_bytes(output_bytes)
         if not _begin_output_upload(claim):
@@ -250,7 +268,7 @@ def _process_issuance_job(
             with output_path.open("rb") as output_stream:
                 uploaded = storage.upload_bytes(
                     key=claim.output_object_key,
-                    content_type="application/pdf",
+                    content_type=output_content_type,
                     chunks=iter(lambda: output_stream.read(64 * 1024), b""),
                     max_bytes=settings.MAX_PDF_BYTES,
                 )
@@ -697,6 +715,83 @@ def _select_frozen_candidate():
     if identifier != FROZEN_CANDIDATE_IDENTIFIER_HEX:
         raise DemoIssuanceError("DEMO_FINGERPRINT_CANDIDATE_INVALID")
     return candidate, identifier
+
+
+PNG_MAGIC = bytes([137, 80, 78, 71, 13, 10, 26, 10])
+JPEG_MAGIC = bytes([255, 216, 255])
+
+
+def _build_issuance_artifact(
+    source: bytes,
+    *,
+    issuance_id: uuid.UUID,
+    fingerprint_key: bytes | None,
+    visible_marker: bool = False,
+) -> tuple[bytes, int, str, str]:
+    if source.startswith(PNG_MAGIC) or source.startswith(JPEG_MAGIC):
+        output, candidate_identifier = _build_issuance_image(
+            source,
+            issuance_id=issuance_id,
+            fingerprint_key=fingerprint_key,
+            visible_marker=visible_marker,
+        )
+        return output, 1, candidate_identifier, "image/png"
+    output, page_count, candidate_identifier = _build_issuance_pdf(
+        source,
+        issuance_id=issuance_id,
+        fingerprint_key=fingerprint_key,
+        visible_marker=visible_marker,
+    )
+    return output, page_count, candidate_identifier, "application/pdf"
+
+
+def _build_issuance_image(
+    source: bytes,
+    *,
+    issuance_id: uuid.UUID,
+    fingerprint_key: bytes | None,
+    visible_marker: bool = False,
+) -> tuple[bytes, str]:
+    if len(source) > settings.MAX_PDF_BYTES:
+        raise DemoIssuanceError("DEMO_PDF_FILE_LIMIT")
+    raster = cv2.imdecode(np.frombuffer(source, dtype=np.uint8), cv2.IMREAD_COLOR)
+    if raster is None or raster.ndim != 3 or raster.shape[2] != 3:
+        raise DemoIssuanceError("DEMO_IMAGE_INVALID")
+    height, width = raster.shape[:2]
+    if height * width > settings.MAX_IMAGE_PIXELS:
+        raise DemoIssuanceError("DEMO_IMAGE_PIXEL_LIMIT")
+
+    if visible_marker:
+        candidate = None
+        candidate_identifier = FROZEN_CANDIDATE_IDENTIFIER_HEX
+    else:
+        if fingerprint_key is None:
+            raise DemoIssuanceError("DEMO_FINGERPRINT_KEY_INVALID")
+        candidate, candidate_identifier = _select_frozen_candidate()
+
+    if visible_marker:
+        content = apply_visible_marker(raster, issuance_id)
+    else:
+        canonical = _canonicalize_page(raster)
+        embedded = embed_fingerprint_v2(
+            canonical.canvas,
+            FingerprintV2Context(
+                issuance_id=issuance_id,
+                fingerprint_key=fingerprint_key,
+                page_index=0,
+            ),
+            candidate,
+        ).image
+        content = embedded[
+            canonical.top : canonical.top + canonical.height,
+            canonical.left : canonical.left + canonical.width,
+        ]
+    if content.shape[:2] != (height, width):
+        content = cv2.resize(content, (width, height), interpolation=cv2.INTER_CUBIC)
+    written, encoded = cv2.imencode(".png", content)
+    if not written:
+        raise DemoIssuanceError("DEMO_PDF_OUTPUT_FAILED")
+    return encoded.tobytes(), candidate_identifier
 
 
 def _build_issuance_pdf(

@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { appRoutes } from "../app/router";
 import { createQueryClient } from "../app/queryClient";
-import { validatePdf, validateVerificationFile } from "../features/uploads/uploadIssuance";
+import { validateIssuanceFile, validateVerificationFile } from "../features/uploads/uploadIssuance";
 
 const USER_ID = "00000000-0000-4000-8000-000000000001";
 const ORGANIZATION_ID = "00000000-0000-4000-8000-000000000002";
@@ -134,7 +134,8 @@ describe("verification browser workflow", () => {
     expect(() => validateVerificationFile(new File(["png"], "sample.png", { type: "image/png" }))).not.toThrow();
     expect(() => validateVerificationFile(new File(["jpg"], "sample.jpg", { type: "image/jpeg" }))).not.toThrow();
     expect(() => validateVerificationFile(new File(["gif"], "sample.gif", { type: "image/gif" }))).toThrow(/PDF, PNG hoặc JPEG/);
-    expect(() => validatePdf(new File(["png"], "sample.png", { type: "image/png" }))).toThrow(/không phải PDF/);
+    expect(() => validateIssuanceFile(new File(["png"], "sample.png", { type: "image/png" }))).toThrow(/không phải PDF/);
+    expect(() => validateIssuanceFile(new File(["png"], "sample.png", { type: "image/png" }), false)).not.toThrow();
   });
 
   it("renders contract facts without recipient disclosure or invented geometry", async () => {
