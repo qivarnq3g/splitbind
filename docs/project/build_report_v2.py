@@ -31,6 +31,8 @@ FIGURES = [
      "Kết quả xác minh khi tệp khớp bản cấp phát: mã SHA-256 trùng khớp và chữ ký hồ sơ hợp lệ"),
     ("ui-verification-no-match.png",
      "Kết quả xác minh khi tệp đã bị chỉnh sửa: hệ thống báo không khớp và không quy kết hành vi cho bất kỳ ai"),
+    ("ui-verification-traced.png",
+     "Truy nguồn bằng thủy vân khi mã băm không khớp: hệ thống báo hai giá trị mã băm khác nhau nhưng vẫn chỉ đúng bản cấp phát gốc"),
     ("chart-v1-vs-v3.png",
      "Tỉ lệ giải mã của thế hệ V1 và V3 trên cùng hợp đồng corpus, cùng định nghĩa cổng"),
     ("chart-attack-envelope.png",

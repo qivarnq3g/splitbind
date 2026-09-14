@@ -4,7 +4,7 @@ Hai loại ảnh, để riêng vì chúng có vòng đời khác nhau.
 
 ## `figures/`
 
-Sáu ảnh được nhúng thẳng vào báo cáo. Danh sách và chú thích nằm trong biến `FIGURES`
+Bảy ảnh được nhúng thẳng vào báo cáo. Danh sách và chú thích nằm trong biến `FIGURES`
 của `build_report_v2.py`; đổi tên tệp ở đây thì phải sửa cả biến đó.
 
 | Tệp | Nguồn |
@@ -12,6 +12,7 @@ của `build_report_v2.py`; đổi tên tệp ở đây thì phải sửa cả b
 | `ui-issuance-result.png` | Chụp từ hệ thống đang vận hành |
 | `ui-verification-match.png` | Chụp từ hệ thống đang vận hành |
 | `ui-verification-no-match.png` | Chụp từ hệ thống đang vận hành |
+| `ui-verification-traced.png` | Chụp từ hệ thống đang vận hành |
 | `chart-v1-vs-v3.png` | `make_figures.py` dựng từ dữ liệu đo |
 | `chart-attack-envelope.png` | `make_figures.py` dựng từ dữ liệu đo |
 | `chart-frame-restore.png` | `make_figures.py` dựng từ dữ liệu đo |

@@ -705,6 +705,22 @@ Chốt an toàn thật nằm ở chỗ khác và đã có sẵn: danh tính gi�
 - Xác minh nhận PDF, PNG và JPEG, kể cả ảnh chụp màn hình có viền.
 - Phép kiểm cuối chạy bằng khoá thật trong container đang phục vụ: một ảnh JPEG 1400 x 900 đi qua đúng hàm cấp phát của hệ thống, rồi đem kết quả qua đúng hàm xác minh, cho ra `decoded` và đúng mã hồ sơ.
 
+#### Ba phép thử qua đúng giao diện người dùng, ngày 14/09/2026
+
+`[Experimentally observed]` Phép kiểm vừa nêu gọi thẳng hàm bên trong container. Để biết đường đi thật của sản phẩm có hoạt động không, nhóm chạy thêm ba phép thử qua đúng giao diện web, với một ảnh tài liệu mẫu 1400 x 900 do nhóm dựng, cấp phát trên chính hệ thống đang chạy rồi biến đổi và đem xác minh lại.
+
+| Tệp đem xác minh | Mã băm | Kết quả |
+|---|---|---|
+| Mã hoá lại PNG, điểm ảnh giữ nguyên từng pixel | khác bản gốc | Truy được nguồn, chỉ đúng mã hồ sơ cấp phát |
+| Nén JPEG chất lượng 70, kích thước giữ nguyên | khác bản gốc | Không truy được nguồn |
+| Thu nhỏ 0.75 rồi nén JPEG chất lượng 70 | khác bản gốc | Không truy được nguồn |
+
+Hàng thứ nhất là điều đáng nói nhất và là nội dung của Hình 4.4: mã băm của tệp đem xác minh khác hẳn mã băm đã ký, giao diện ghi rõ "hai giá trị khác nhau", vậy mà hệ thống vẫn chỉ ra đúng bản cấp phát đã sinh ra tệp đó. Kết luận ấy chỉ có thể đến từ thủy vân, vì mọi đường đối chiếu theo mã băm đều đã thất bại. Đây là bằng chứng trực tiếp rằng chuỗi cấp phát, nhúng, lưu trữ, giải mã và tra cứu hồ sơ chạy thông suốt trên môi trường thật, chứ không chỉ trong phòng thí nghiệm.
+
+Hai hàng còn lại trượt, và phải đọc chúng cho đúng. Chúng không chứng minh đường đi của sản phẩm bị hỏng, vì hàng thứ nhất đã chứng minh ngược lại trên cùng một tệp, cùng một phiên. Chúng cho thấy tín hiệu bị mất khi nén, trên đúng loại vật mang mà Mục 4.2.3.3 đã chỉ ra là khó nhất: ảnh mẫu của phép thử này gần như toàn nền phẳng và mảng màu trơn, tức ít kết cấu để giấu tín hiệu. Số liệu benchmark 9/12 trước JPEG-70 ở Mục 4.2.1.1 được đo trên corpus trang tài liệu render từ PDF thật, nhiều kết cấu hơn hẳn, nên hai con số không mâu thuẫn mà mô tả hai vật mang khác nhau.
+
+`[Limitation]` Điều trung thực phải nói kèm: ba phép thử là quá ít để rút ra tỉ lệ, và nhóm không trình bày chúng như một phép đo độ bền. Chúng trả lời một câu hỏi hẹp hơn và rõ hơn, là đường đi thật của sản phẩm có truy được nguồn khi mã băm không khớp hay không. Câu trả lời là có.
+
 `[Limitation]` Mọi kết quả truy vết vẫn mang nhãn giới hạn `fingerprint.recall_below_release_gate` do chính hệ thống gắn, nghĩa là độ thu hồi chưa đạt ngưỡng phát hành mà nhóm tự đặt. Nhóm giữ nguyên nhãn này thay vì gỡ đi, vì nó đúng.
 
 ### 7.5.6. Phần nào của Mục 4.2.3 bị hiệu chỉnh
@@ -1197,6 +1213,7 @@ Bảng đối chiếu toàn diện giữa các tuyên bố kỹ thuật trong t�
 | Bóc viền đưa ảnh về khung chuẩn trước khi giải mã | `[Implemented]` & `[Production]` | `research/python/src/splitbind_ref/frame_restore.py`; nối vào dịch vụ tại `services/api/splitbind/demo/verification.py` (`_geometry_hypotheses`) | Đã kiểm chứng bằng `services/api/tests/demo/test_screenshot_frame_restore.py`: ảnh chụp màn hình có viền chuyển từ `insufficient_sync_evidence` sang giải mã đúng mã hồ sơ. |
 | Ngưỡng hai kết quả khớp nhau khiến một tấm ảnh không bao giờ được quy kết | `[Implemented]` & `[Limitation]` | `_aggregate_unknown_page_decisions` trong `services/api/splitbind/demo/verification.py` | Đã kiểm chứng: số trang nằm trong phép dẫn xuất có khoá nên đúng một giả thuyết giải mã được; 120 ảnh âm tính cho 0 lần quy kết nhầm, tất cả dừng ở khâu đồng bộ có khoá. |
 | Cấp phát ảnh: đầu vào PNG hoặc JPEG, nội dung đầu ra luôn là PNG, giữ nguyên kích thước gốc | `[Implemented]` & `[Production]` | `_build_issuance_artifact` trong `services/api/splitbind/demo/issuance.py` | Đã kiểm chứng bằng `services/api/tests/demo/test_image_issuance.py`: ảnh JPEG 1400 x 900 cấp phát xong truy ngược lại đúng mã hồ sơ, kích thước không đổi. |
+| Trên hệ thống thật, một tệp có mã băm không khớp vẫn được truy đúng bản cấp phát nhờ thủy vân | `[Experimentally observed]` & `[Production]` | Phép thử ngày 14/09/2026 qua đúng giao diện web; ảnh chụp màn hình ở `docs/project/report-assets/evidence/2026-09-14-v0.2.1/`; nội dung ở Hình 4.4 | Đã kiểm chứng: giao diện ghi "hai giá trị khác nhau" ở phần đối chiếu mã băm, đồng thời ghi đúng mã hồ sơ cấp phát `b4401e85-c550-44b9-b1e8-0bf0428a9821`. Kết luận này không thể đến từ đối chiếu mã băm. |
 | Đuôi tệp cấp phát suy từ kiểu nội dung của tài liệu nguồn, ở cả ba nơi quyết định | `[Implemented]` & `[Production]` | `services/api/splitbind/demo/worker.py: L45`, `services/api/splitbind/demo/issuance.py: L172`, `services/api/splitbind/documents/views.py: L200-L203` tại commit `52751f2`, chính là commit dựng nên ảnh chứa ghi trong `release-images.env` | Đã kiểm chứng bằng `services/api/tests/documents/test_issuance_download.py`: tài liệu ảnh tải về mang đuôi `.png` và tên ASCII đọc được. Trước đó đuôi bị cố định `.pdf` ở hai nơi nên hai lỗi triệt tiêu nhau và mọi kiểm tra nội bộ đều xanh. |
 
 ---
