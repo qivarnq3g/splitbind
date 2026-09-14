@@ -21,10 +21,10 @@ vận hành, dựng từ commit `52751f2`. Cửa sổ trình duyệt 1436x840.
 
 Ảnh cuối là bằng chứng cho bản vá đuôi tệp: trước `integrity-v0.2.1`, chỗ này là `.pdf`.
 
-## Sáu phép thử truy vết
+## Tám phép thử truy vết
 
 Cấp phát trên hệ thống thật, tải bản cấp phát về, biến đổi rồi nộp lại qua đúng biểu mẫu
-xác minh. Ba vật mang khác nhau để không kết luận dựa trên một loại ảnh duy nhất.
+xác minh. Bốn vật mang khác nhau để không kết luận dựa trên một loại ảnh duy nhất.
 
 | Tệp | Vật mang | Phép biến đổi | Kết quả |
 |---|---|---|---|
@@ -34,15 +34,20 @@ xác minh. Ba vật mang khác nhau để không kết luận dựa trên một 
 | `not-traced-textured-jpeg-q70.jpg` | Trang chữ dày, nhiều kết cấu | Nén JPEG 70 | Không truy được |
 | `not-traced-resize-075-lossless.jpg` | Trang chữ dày, nhiều kết cấu | Thu nhỏ 0.75, không nén | Không truy được |
 | `not-traced-pdf-page-jpeg-q70.jpg` | Trang render từ PDF đã cấp phát | Nén JPEG 70 | Không truy được |
+| `not-traced-screenshot-distorted-issue.jpg` | Trang chữ dày, cấp phát ở 1400 x 1980 | Chụp màn hình 1920 x 1080, thu nhỏ 0.545, viền đen | Không truy được |
+| `traced-screenshot-canonical-*.jpg` | Ảnh chuyển sắc, cấp phát ở đúng 1152 x 2304 | Chụp màn hình 1920 x 1080, thu nhỏ 0.469, viền đen | **Truy được nguồn** |
 
-Ảnh đầu là ảnh quan trọng nhất của cả bộ và được đưa vào báo cáo thành Hình 4.4, bản đầy
-đủ nằm ở `../../figures/ui-verification-traced.png`.
+Hai hàng cuối là phép so sánh có kiểm soát quan trọng nhất của cả bộ. Cùng một lớp tấn
+công và cùng cách dựng ảnh chụp màn hình; hàng cuối còn bị thu nhỏ mạnh hơn mà vẫn truy
+được. Biến duy nhất khác nhau là tỉ lệ khung hình của tệp đem đi cấp phát, tức là bản cấp
+phát có phải đi qua vòng kéo méo của `_canonicalize_page` hay không.
 
-Năm ảnh còn lại là kết quả âm tính và được giữ lại vì chúng bác bỏ chính giả thuyết đầu
-tiên của nhóm. Ban đầu nhóm cho rằng ảnh mẫu quá phẳng nên ít chỗ giấu tín hiệu; hai phép
-thử sau dùng vật mang nhiều kết cấu hơn hẳn và vẫn trượt. Giả thuyết thứ hai là chỉ nén mới phá tín hiệu, còn thu nhỏ thuần tuý thì phục hồi khung
-ảnh sẽ cứu được; hàng thu nhỏ không nén bác bỏ nốt. Kết luận đúng là trên đường đi thật
-của sản phẩm, mọi phép biến đổi làm đổi điểm ảnh đều khiến hệ thống mất khả năng truy vết.
+`traced-screenshot-canonical-headline.jpg` còn cho thấy một khiếm khuyết giao diện: dòng
+kết luận lớn ghi "Chưa đủ bằng chứng xác minh" trong khi bảng chi tiết ở
+`traced-screenshot-canonical-matched.jpg` ghi đúng mã hồ sơ cấp phát đã khớp.
+
+Ảnh `traced-control-lossless.jpg` được đưa vào báo cáo thành Hình 4.4, bản đầy đủ nằm ở
+`../../figures/ui-verification-traced.png`.
 
 ## Chi tiết kỹ thuật trên trang kết quả
 
