@@ -948,11 +948,49 @@ Hai kích thước màn hình hỏng vì hai lý do khác nhau, và phép bóc v
 
 Chuyển dịch mã trạng thái đó là công cụ chẩn đoán đáng dùng: `insufficient_sync_evidence` nghĩa là chưa tạo được ứng viên, hỏng ở hình học; `payload_not_detected` nghĩa là đã căn được trang và tín hiệu đã mất.
 
-### 4.3.4. b. Đối chiếu ba công trình mã nguồn mở về đúng bài toán trang văn bản
+### 4.3.4. b. Quét toàn bộ lưới ứng viên: hồ sơ đang chạy là hồ sơ yếu nhất
+
+*Số liệu đo thực nghiệm* Sau khi xác định nút thắt là vật mang, nhóm quét toàn bộ lưới 16 ứng viên của hợp đồng tham số V2 trên một trang chữ dày đặt ở đúng khung chuẩn, đo bằng chính bộ giải mã của dịch vụ.
+
+Tám ứng viên dùng ô 512 điểm ảnh bị loại ngay từ khâu nhúng: khung chuẩn 1152 x 2304 chỉ chứa được 8 ô không chồng lấn trong khi hồ sơ đòi 18. Nói cách khác, một nửa lưới ứng viên không dùng được trên chính khung mà hệ thống đang chạy. Tám ứng viên còn lại dùng ô 384 điểm ảnh:
+
+| # | qim | pilot | lặp | PSNR | Không tấn công | Chụp màn hình | Nén JPEG 70 |
+|---:|---:|---:|---:|---:|---|---|---|
+| **0** | 24 | 1.5 | 3 | 44.09 | **mất đồng bộ** | mất đồng bộ | mất đồng bộ |
+| 1 | 24 | 1.5 | 5 | 43.97 | giải được | một phần | mất đồng bộ |
+| **4** | 32 | 2.0 | 3 | 42.02 | **giải được** | không thấy payload | **giải được** |
+| 5 | 32 | 2.0 | 5 | 41.88 | giải được | không thấy payload | giải được |
+| 8 | 48 | 3.0 | 3 | 39.16 | giải được | không thấy payload | giải được |
+| 9 | 48 | 3.0 | 5 | 39.03 | giải được | không thấy payload | giải được |
+| 12 | 64 | 4.0 | 3 | 37.04 | giải được | không thấy payload | giải được |
+| 13 | 64 | 4.0 | 5 | 36.91 | giải được | không thấy payload | giải được |
+
+Ứng viên số 0 là hồ sơ mà hệ thống đang chạy ghim, và nó là ứng viên **duy nhất** trượt hoàn toàn. Mọi ứng viên còn lại đều giải được trang chữ không bị tấn công.
+
+Đọc kỹ hơn, có hai điều đáng nói:
+
+* **Chênh lệch giữa trượt sạch và giải được chỉ là một bậc tham số.** Từ số 0 sang số 4 chỉ nâng bước lượng tử từ 24 lên 32 và cường độ pilot từ 1.5 lên 2.0. Cái giá là 2,07 dB PSNR, đưa 44.09 xuống 42.02, vẫn cách cổng chất lượng 38 dB một khoảng rộng. Đổi lại, trang chữ chuyển từ không đồng bộ được sang giải được cả khi bị nén JPEG chất lượng 70.
+* **Nâng tiếp không mua thêm gì.** Các mức 48 và 64 cho cùng kết quả chức năng như mức 32 nhưng PSNR tụt xuống 39.16 và 37.04, tức mức 64 đã rơi xuống dưới cổng chất lượng. Đây là một ví dụ sạch của tam giác đánh đổi ở Mục 1.3: sau một điểm nhất định, tăng cường độ chỉ còn trả giá mà không thu được độ bền.
+
+*Giới hạn đã nhận diện* Cột chụp màn hình vẫn là ranh giới chưa vượt qua trên vật mang trang chữ. Các ứng viên mạnh hơn chuyển trạng thái từ mất đồng bộ sang không thấy payload, nghĩa là khâu hình học đã làm được việc còn tín hiệu thì không đủ sống sót. Đây đúng là lớp thất bại thứ ba trong cách phân loại ở Mục 4.3.2.
+
+#### 4.3.4.1. Cách nhóm đã xử lý phát hiện này
+
+*Đã hiện thực trong mã nguồn* Nhóm chuyển hồ sơ phát hành sang ứng viên số 4. Ba điều kèm theo cần nêu vì chúng là phần khó của thay đổi, không phải bản thân việc đổi tham số:
+
+1. **Định danh ứng viên bị khoá cứng trong ràng buộc cơ sở dữ liệu.** Bảng bằng chứng cấp phát có một `CheckConstraint` đòi đúng một định danh, nên đổi hồ sơ kéo theo một migration nới ràng buộc để chấp nhận cả định danh cũ lẫn mới.
+2. **Bản cấp phát cũ phải đọc được tiếp.** Khâu xác minh giữ danh sách hồ sơ được chấp nhận, thử hồ sơ hiện hành trước rồi mới tới hồ sơ đã bị thay thế.
+3. **Thứ tự thử có ý nghĩa về chi phí.** Bộ giải mã căn hình học lại cho từng hồ sơ, nên đưa cả hai hồ sơ vào một lần gọi sẽ bắt mọi tệp hiện hành trả giá gấp đôi. Dịch vụ vì thế gọi lần lượt và dừng ngay khi một hồ sơ chạm tới tầng payload.
+
+*Giới hạn đã nhận diện* Trước thay đổi này, mã chọn hồ sơ bằng cách lấy phần tử đầu của lưới ứng viên rồi mới đối chiếu định danh. Thứ tự của một tệp hợp đồng vì thế quyết định thuật toán nào thực sự chạy trên hệ thống thật, một sự phụ thuộc không được ghi ở đâu cả. Nay mã tra hồ sơ theo định danh, nên hợp đồng có sắp xếp lại thì hành vi vẫn giữ nguyên.
+
+---
+
+### 4.3.5. b. Đối chiếu ba công trình mã nguồn mở về đúng bài toán trang văn bản
 
 *Số liệu đo thực nghiệm* (đọc mã nguồn) Sau khi xác định được nút thắt là vật mang trang văn bản, nhóm tải về và đọc mã của ba công trình công khai giải đúng lớp bài toán này, thay vì chỉ đọc tóm tắt bài báo.
 
-#### 4.3.4.1. Công trình 1: thủy vân ảnh trang văn bản chống chụp màn hình [20]
+#### 4.3.5.1. Công trình 1: thủy vân ảnh trang văn bản chống chụp màn hình [20]
 
 Đây là công trình gần bài toán của nhóm nhất, vì đối tượng của nó đúng là ảnh trang tài liệu. Cách làm là học sâu kiểu StegaStamp: một bộ mã hoá và một bộ giải mã cùng huấn luyện, ở giữa là một tầng biến dạng khả vi gồm làm mờ, nhiễu, đổi tương phản, đổi độ sáng, đổi sắc độ và nén JPEG khả vi tới chất lượng 50. Ô làm việc 400 x 400 điểm ảnh, tải trọng 100 bit.
 
@@ -966,7 +1004,7 @@ Trên ảnh trang tài liệu, nét chữ có giá trị điểm ảnh thấp c�
 
 Điều này tương phản trực tiếp với thiết kế đang chạy của SplitBind. Bộ mã hoá hiện tại rải ô đều khắp khung chuẩn và dùng một bước lượng tử cố định, nên trên một trang chữ thì phần lớn ô rơi vào nền trắng gần như không có sức chứa, còn số ít ô còn lại nằm vắt qua biên nét chữ tương phản cao, đúng chỗ mà thay đổi vừa dễ thấy vừa dễ mất.
 
-#### 4.3.4.2. Công trình 2: thủy vân chống chụp màn hình dùng điểm đặc trưng [21]
+#### 4.3.5.2. Công trình 2: thủy vân chống chụp màn hình dùng điểm đặc trưng [21]
 
 Công trình này không dùng học sâu và gần với thiết kế hiện tại của nhóm hơn. Quy tắc nhúng của nó cũng là đẩy lệch một cặp hệ số DCT tần trung trong khối 8 x 8, cụ thể là cặp ở vị trí (4,5) và (5,4), tức cùng họ với cách SplitBind lượng tử hoá hiệu hai hệ số. Hai khác biệt mới là phần đáng học.
 
@@ -978,13 +1016,13 @@ Cần nêu kèm một giới hạn để không phóng đại công trình này:
 
 Tải trọng của nó cũng nhỏ hơn nhiều: 30 bit thông tin, thêm CRC8, mã hoá BCH(63,36) thành 64 bit xếp vào ma trận 8 x 8. SplitBind đang đòi mang một định danh 128 bit, tức gấp hơn bốn lần, trên cùng một họ vật mang.
 
-#### 4.3.4.3. Công trình 3: thư viện đang được dùng trong sản phẩm thật [22]
+#### 4.3.5.3. Công trình 3: thư viện đang được dùng trong sản phẩm thật [22]
 
 Thư viện này được dùng rộng rãi trong các sản phẩm sinh ảnh, nên nó là mốc so sánh về mức kỳ vọng thực tế chứ không phải về kết quả nghiên cứu. Tài liệu của chính nó ghi thẳng rằng các phương pháp trong thư viện không bền trước phép thu nhỏ và trước phép cắt làm đổi tỉ lệ khung hình, chỉ bền trước nhiễu, đổi màu, đổi độ sáng và nén JPEG. Bảng kết quả kèm theo ghi thu nhỏ 50 phần trăm là trượt ở cả hai phương pháp, kể cả phương pháp học sâu. Tải trọng là 32 đến 64 bit.
 
 Đối chiếu này làm rõ vị thế của dự án theo cả hai chiều. Chiều bất lợi đã nêu ở các mục trên. Chiều thuận lợi là bước phục hồi khung ảnh của nhóm giải quyết đúng lớp tấn công mà một thư viện đang chạy trong sản phẩm thật còn không đặt mục tiêu xử lý, và Mục 4.2.4.5 có số đo cho thấy ảnh chụp màn hình thu nhỏ còn 0.469 vẫn truy được nguồn trên vật mang phù hợp.
 
-#### 4.3.4.4. Bốn điều rút ra cho kiến trúc V4
+#### 4.3.5.4. Bốn điều rút ra cho kiến trúc V4
 
 1. **Đặt thủy vân theo nội dung, không rải đều.** Chọn vùng nhúng ở nơi ảnh có kết cấu, bỏ qua vùng nền trắng. Cả hai công trình đầu đều làm điều này, bằng hai cơ chế khác nhau.
 2. **Đồng bộ bằng đặc trưng nội dung, không chỉ bằng mẫu pilot tần số.** Đây là hướng chạm trực tiếp vào `insufficient_sync_evidence`, trạng thái chiếm toàn bộ các ô thất bại trên trang chữ.
@@ -995,7 +1033,7 @@ Thư viện này được dùng rộng rãi trong các sản phẩm sinh ảnh, 
 
 ---
 
-### 4.3.5. Kiến trúc V4 đề xuất
+### 4.3.6. Kiến trúc V4 đề xuất
 
 Xếp theo tỉ lệ lợi ích trên chi phí đo được:
 
@@ -1011,7 +1049,7 @@ Ràng buộc `ratios_agree` loại bỏ mọi phép biến đổi đổi tỉ l�
 **Tầng 4 - Chọn vật mang theo nội dung (chưa kiểm chứng).**
 Chấm điểm tile ứng viên theo kết cấu trước khi chọn, vẫn tất định từ khoá. Giải quyết việc *trang nào* hỏng bên trong một phép biến đổi mà bộ giải mã đã hoàn tác được - hiệu ứng thứ cấp thật, nhưng không phải nguyên nhân của các thất bại diện rộng.
 
-### 4.3.6. Cái gì kiến trúc này không sửa được
+### 4.3.7. Cái gì kiến trúc này không sửa được
 
 
 - **Giới hạn phân giải là thật, nhưng ngưỡng đã dịch.** Ở thời điểm đo này, dưới tỉ lệ khoảng 0.45 payload chết kể cả khi hình học hoàn hảo; sau khi sửa ngân sách ký hiệu xoá, ngưỡng đó hạ xuống thấp hơn (Mục 4.2.4.2). Phần vẫn đúng là bản chất của giới hạn: tồn tại một tỉ lệ đủ nhỏ để payload không còn khôi phục được. Không tầng nào ở trên chạm tới điều đó; muốn sửa phải tăng dung lượng hoặc giảm payload, và nhóm đã đo được rằng nâng `qim_delta` không phải lối ra (V2 quét 24→64, trần vẫn 3/12).
@@ -1019,7 +1057,7 @@ Chấm điểm tile ứng viên theo kết cấu trước khi chọn, vẫn tấ
   * **Đính chính ngày 14/09/2026.** Kết luận vừa nêu đã bị chính nhóm bác bỏ. Tín hiệu không hề bị nén phá huỷ: ở đúng các ca này, từ mã về tới bên nhận với tỉ lệ lỗi bit bằng 0,000 rồi bị chính bên nhận vứt đi vì khai quá ngân sách ký hiệu xoá. Sau khi sửa phần kế toán đó, nén JPEG q50 giải mã được (Mục 4.2.4.2 và 4.2.4.3). Giữ nguyên đoạn trên vì nó là chẩn đoán mà nhóm thực sự đã đưa ra ở thời điểm đó, và đường đi từ chẩn đoán sai tới phép đo bác bỏ nó là một phần của kết quả.
 - **Toàn bộ số trong phần này đến từ harness nghiên cứu, không phải pre-gate**, và khác pre-gate ở cách dẫn xuất RNG tấn công cùng việc cấp mẫu đồng bộ ORB cho bộ giải mã. Không được trộn với Mục 4.2.1, và không được trình bày như năng lực đã phát hành. Từ 12/09/2026 production có bật đường ống nhúng và giải thủy vân. Mục 4.2.3 ghi lại kết quả âm tính ban đầu, còn Mục 4.2.4 ghi lại trạng thái sau khi sửa nguyên nhân gốc; kết luận chắc chắn trả cho người dùng vẫn dựa trên đối chiếu tệp chính xác và chữ ký, còn kết quả truy vết luôn kèm nhãn giới hạn.
 
-### 4.3.7. Vì sao chẩn đoán này có được
+### 4.3.8. Vì sao chẩn đoán này có được
 
 Đáng ghi nhận về mặt phương pháp: chẩn đoán trên chỉ tìm ra được vì dự án đã ghi lại bằng chứng đúng cách. Mã trạng thái phân biệt `insufficient_sync_evidence` với `payload_not_detected` là thứ tách được hai nguyên nhân; hợp đồng tấn công có sẵn họ `screenshot` để đo; corpus khoá theo hash làm phép so sánh có kiểm soát. Một dự án ghi chép cẩu thả sẽ không để lại gì để kiểm toán.
 
@@ -1152,6 +1190,8 @@ Bảng đối chiếu toàn diện giữa các tuyên bố kỹ thuật trong t�
 | Cấp phát ảnh: đầu vào PNG hoặc JPEG, nội dung đầu ra luôn là PNG, giữ nguyên kích thước gốc | *Đã hiện thực trong mã nguồn* và *Đang vận hành trên hệ thống thật* | `_build_issuance_artifact` trong `services/api/splitbind/demo/issuance.py` | Đã kiểm chứng bằng `services/api/tests/demo/test_image_issuance.py`: ảnh JPEG 1400 x 900 cấp phát xong truy ngược lại đúng mã hồ sơ, kích thước không đổi. |
 | Trên hệ thống thật, ảnh chụp màn hình thu nhỏ còn 0.469 kèm viền đen vẫn truy được nguồn, nếu bản cấp phát đúng khung chuẩn | *Số liệu đo thực nghiệm* và *Đang vận hành trên hệ thống thật* | Phép so sánh có kiểm soát ngày 14/09/2026 qua đúng giao diện web; ảnh chụp màn hình ở `docs/project/report-assets/evidence/2026-09-14-v0.2.1/`; bảng ở Mục 4.2.4.5 | Đã kiểm chứng: cùng cách dựng ảnh chụp màn hình, bản cấp phát lệch khung chuẩn thì trượt còn bản đúng khung chuẩn thì chỉ đúng mã hồ sơ, dù tệp bị thu nhỏ mạnh hơn. |
 | Giao diện hiện "Chưa đủ bằng chứng xác minh" ngay cả khi hệ thống đã truy đúng nguồn | *Đã hiện thực trong mã nguồn* và *Giới hạn đã nhận diện* | `integrityVerdict` trong `apps/web/src/features/evidence/copy.ts` tại commit `52751f2`; ảnh chụp màn hình trong thư mục bằng chứng ngày 14/09 | Đã kiểm chứng: hàm không có nhánh cho `SOURCE_IDENTIFIED_MODIFIED` nên trạng thái này rơi vào nhánh mặc định, trong khi `STATUS_COPY` đã có sẵn nhãn đúng cho nó. |
+| Hồ sơ tham số mà hệ thống đang chạy ghim là hồ sơ yếu nhất trong lưới ứng viên | *Số liệu đo thực nghiệm* | Quét toàn bộ 16 ứng viên của `contracts/algorithm/fingerprint-candidates.v2.json` trên trang chữ ở khung chuẩn; bảng ở Mục 4.3.4 | Đã kiểm chứng: ứng viên số 0 là cái duy nhất trượt hoàn toàn, bảy ứng viên còn lại đều giải được trang chữ không bị tấn công. |
+| Một nửa lưới ứng viên V2 không dùng được trên khung chuẩn | *Số liệu đo thực nghiệm* và *Giới hạn đã nhận diện* | Tám ứng viên dùng ô 512 điểm ảnh; khung 1152 x 2304 chỉ chứa 8 ô không chồng lấn mà hồ sơ đòi 18 | Đã kiểm chứng: khâu nhúng báo lỗi ngay, nên các ứng viên này chưa bao giờ chạy được. |
 | Vật mang quyết định truy vết được hay không, phép tấn công và kích thước cấp phát thì không | *Số liệu đo thực nghiệm* và *Giới hạn đã nhận diện* | Phép đo giai thừa hai vật mang nhân hai kích thước nhân ba điều kiện, chạy trên `_decode_image` của dịch vụ; bảng ở Mục 4.2.4.5 | Đã kiểm chứng: ảnh chuyển sắc `decoded` cả sáu ô kể cả nén JPEG 70; trang chữ dày `insufficient_sync_evidence` cả sáu ô kể cả khi không tấn công. |
 | Trên hệ thống thật, một tệp có mã băm không khớp vẫn được truy đúng bản cấp phát nhờ thủy vân | *Số liệu đo thực nghiệm* và *Đang vận hành trên hệ thống thật* | Phép thử ngày 14/09/2026 qua đúng giao diện web; ảnh chụp màn hình ở `docs/project/report-assets/evidence/2026-09-14-v0.2.1/`; nội dung ở Hình 4.4 | Đã kiểm chứng: giao diện ghi "hai giá trị khác nhau" ở phần đối chiếu mã băm, đồng thời ghi đúng mã hồ sơ cấp phát `b4401e85-c550-44b9-b1e8-0bf0428a9821`. Kết luận này không thể đến từ đối chiếu mã băm. |
 | Đuôi tệp cấp phát suy từ kiểu nội dung của tài liệu nguồn, ở cả ba nơi quyết định | *Đã hiện thực trong mã nguồn* và *Đang vận hành trên hệ thống thật* | `services/api/splitbind/demo/worker.py: L45`, `services/api/splitbind/demo/issuance.py: L172`, `services/api/splitbind/documents/views.py: L200-L203` tại commit `52751f2`, chính là commit dựng nên ảnh chứa ghi trong `release-images.env` | Đã kiểm chứng bằng `services/api/tests/documents/test_issuance_download.py`: tài liệu ảnh tải về mang đuôi `.png` và tên ASCII đọc được. Trước đó đuôi bị cố định `.pdf` ở hai nơi nên hai lỗi triệt tiêu nhau và mọi kiểm tra nội bộ đều xanh. |
