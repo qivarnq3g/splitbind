@@ -22,15 +22,20 @@
 # và username quản trị. Bản thân file vẫn ở trên đĩa để dùng nội bộ.
 /docs/evaluation/integrity-release-0.1.md
 
+# Chi ban bao cao nop bai va bo dung cua no nam trong kho.
+# Moi thu khac duoi docs/ la tai lieu lam viec cua may nay.
+/docs/*
+!/docs/project/
+
 # Agent operating contract — local to each machine.
-# Same intent as the rules above. Note: docs/knowledge/ and docs/project-context.md
-# are deliberately NOT excluded any more; see the content boundary section in
-# docs/project-context.md for what may and may not be written into them.
+# Same intent as the rules above.
 /AGENTS.md
 /**/AGENTS.md
 /CLAUDE.md
 /**/CLAUDE.md
 .claude/
+/.agents/
+/skills-lock.json
 .codex/
 .antigravity/
 .cursor/
