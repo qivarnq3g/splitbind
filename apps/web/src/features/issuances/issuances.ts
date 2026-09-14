@@ -87,7 +87,7 @@ export async function getIssuanceResult(id: string, signal?: AbortSignal) {
 
 export class IssuanceResultUnavailableError extends SafeApiError {
   constructor() {
-    super("Kết quả PDF không còn sẵn sàng. Hãy kiểm tra lại trạng thái hồ sơ.");
+    super("Tệp kết quả không còn sẵn sàng. Hãy kiểm tra lại trạng thái hồ sơ.");
     this.name = "IssuanceResultUnavailableError";
   }
 }

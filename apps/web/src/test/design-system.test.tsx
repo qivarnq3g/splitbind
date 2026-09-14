@@ -108,7 +108,7 @@ describe("SplitBind design system", () => {
 
     renderApp("/issue");
 
-    expect(await screen.findByText("Chọn PDF và người nhận để tạo bản cấp phát riêng.")).toBeVisible();
+    expect(await screen.findByText("Chọn tài liệu và người nhận để tạo bản cấp phát riêng.")).toBeVisible();
     expect(document.querySelector(".app-shell")).toBeVisible();
     expect(await screen.findByRole("banner", { name: "Thanh ứng dụng SplitBind" })).toBeVisible();
     expect(await screen.findByRole("navigation", { name: "Điều hướng chính" })).toBeVisible();
@@ -167,9 +167,36 @@ describe("SplitBind design system", () => {
     renderApp("/issue");
 
     const banner = await screen.findByRole("complementary", { name: "Khả năng xác minh" });
-    expect(banner).toHaveTextContent("Xác minh chính xác file đã cấp phát");
-    expect(banner).toHaveTextContent("Nhận diện fingerprint sau biến đổi chưa khả dụng");
+    expect(banner).toHaveTextContent("Xác minh chính xác tệp đã cấp phát");
+    expect(banner).toHaveTextContent("Đọc thủy vân sau khi tệp bị biến đổi hiện chưa khả dụng");
     expect(banner).not.toHaveTextContent("Bản demo");
+  });
+
+  it("announces tracing once the deployment can actually do it", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async (input) => {
+      const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
+      if (path === "/api/v1/auth/session") {
+        return json({
+          authenticated: true,
+          csrf_token: "csrf-token",
+          user: { id: USER_ID, username: "issuer.demo", role: "issuer", organization_id: ORGANIZATION_ID },
+        });
+      }
+      return json({
+        enabled: true,
+        processing_limits: { max_pdf_pages: 5, max_pdf_bytes: 10 * 1024 * 1024, max_image_pixels: 40_000_000 },
+        algorithm_label: "integrity_release_v1",
+        hidden_fingerprint_enabled: true,
+        transformed_attribution_available: true,
+      });
+    }));
+
+    renderApp("/issue");
+
+    const banner = await screen.findByRole("complementary", { name: "Khả năng xác minh" });
+    expect(banner).toHaveTextContent("Đối chiếu mã băm và đọc thủy vân");
+    expect(banner).toHaveTextContent("chụp lại màn hình");
+    expect(banner).not.toHaveTextContent("chưa khả dụng");
   });
 
   it("shortens long identifiers and copies the full value on demand", async () => {

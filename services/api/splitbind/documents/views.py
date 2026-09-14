@@ -194,18 +194,25 @@ def document_name_slug(name: str) -> str:
     return slug[:80].strip("-")
 
 
-def issuance_download_filename(issuance) -> str:
+DOWNLOAD_EXTENSIONS = {"pdf", "png"}
+
+
+def issuance_download_filename(issuance, output_object_key: str = "") -> str:
     reference = f"splitbind-{str(issuance.id)[:8]}"
+    suffix = (output_object_key or "").rpartition(".")[2].lower()
+    extension = suffix if suffix in DOWNLOAD_EXTENSIONS else "pdf"
     document = getattr(issuance, "document", None)
     upload = getattr(document, "upload_request", None)
     original = (getattr(upload, "source_filename", "") or "").strip()
-    stem, dotted, _extension = original.rpartition(".")
+    stem, dotted, _original_extension = original.rpartition(".")
     slug = document_name_slug(stem if dotted else original)
-    candidate = f"{slug}-{reference}.pdf" if slug else f"{reference}.pdf"
+    candidate = (
+        f"{slug}-{reference}.{extension}" if slug else f"{reference}.{extension}"
+    )
     try:
         return validate_download_filename(candidate)
     except ValueError:
-        return f"{reference}.pdf"
+        return f"{reference}.{extension}"
 
 
 @method_decorator(never_cache, name="dispatch")
@@ -239,7 +246,9 @@ class IssuanceResultView(APIView):
             download_url = get_storage().presign_get(
                 key=evidence.output_object_key,
                 expires=ISSUANCE_RESULT_TTL,
-                filename=issuance_download_filename(record),
+                filename=issuance_download_filename(
+                    record, evidence.output_object_key
+                ),
             )
         except StorageUnavailable:
             _result_download_audit(

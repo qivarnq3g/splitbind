@@ -43,7 +43,7 @@ export function IssuanceDetailPage() {
       ? "Thử tải lại"
       : download.isSuccess
         ? "Đã mở bản tải"
-        : "Tải PDF kết quả";
+        : "Tải bản cấp phát";
 
   return (
     <main className="workspace-page result-page">
@@ -92,14 +92,14 @@ export function IssuanceDetailPage() {
                 {available
                   ? "Bản cấp phát đã sẵn sàng"
                   : isCompleted
-                    ? "Đã cấp phát · PDF không khả dụng"
+                    ? "Đã cấp phát · tệp kết quả không khả dụng"
                     : processing
                       ? "Đang chuẩn bị bản cấp phát"
                       : "Chưa có bản cấp phát"}
               </h2>
               <p>
                 {available
-                  ? "Lưu bản PDF kết quả và gửi đúng tệp này cho người nhận."
+                  ? "Lưu tệp kết quả và gửi đúng tệp này cho người nhận."
                   : "Theo dõi công việc để biết trạng thái và bước tiếp theo."}
               </p>
             </div>
@@ -118,8 +118,8 @@ export function IssuanceDetailPage() {
             ) : (
               <p className="result-note">
                 {processing
-                  ? "Kết quả PDF đang được xử lý."
-                  : "Kết quả PDF hiện không có sẵn. Hãy kiểm tra trạng thái công việc hoặc tạo bản cấp phát mới."}
+                  ? "Tệp kết quả đang được xử lý."
+                  : "Tệp kết quả hiện không có sẵn. Hãy kiểm tra trạng thái công việc hoặc tạo bản cấp phát mới."}
               </p>
             )}
             <Link className="button button-secondary" to="/issue">

@@ -204,8 +204,10 @@ export function VerifyDocumentPage() {
           <details className="guide-details">
             <summary>Phạm vi kiểm tra</summary>
             <p>
-              Bản Integrity Release đối chiếu chính xác tệp đã cấp phát. Nhận
-              diện sau chỉnh sửa hoặc chuyển đổi định dạng chưa khả dụng.
+              Hệ thống đối chiếu mã băm để biết tệp có nguyên vẹn không, và đọc
+              thủy vân để truy ra nguồn khi tệp đã bị nén lại, thu nhỏ hoặc chụp
+              lại màn hình. Tệp bị cắt mất phần lớn nội dung hoặc bị xoay thì
+              chưa đọc được.
             </p>
             <p>
               Dữ liệu kỹ thuật có trong hồ sơ kết quả, không phải kết luận pháp

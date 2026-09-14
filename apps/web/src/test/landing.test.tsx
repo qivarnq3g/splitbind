@@ -145,7 +145,7 @@ describe("SplitBind landing page", () => {
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
   });
 
-  it("states the evidence boundary and never claims transformed-file detection", async () => {
+  it("states what tracing can and cannot do, with the limits in the boundary section", async () => {
     vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async () => json({
       authenticated: false,
       csrf_token: "csrf-token",
@@ -156,14 +156,21 @@ describe("SplitBind landing page", () => {
 
     const boundary = await screen.findByRole("region", { name: "Biên giới bằng chứng" });
     expect(boundary).toHaveTextContent("không phải bằng chứng");
-    expect(boundary).toHaveTextContent("chưa khả dụng");
-    const claimSections = Array.from(
+    expect(boundary).toHaveTextContent("cắt mất phần lớn nội dung");
+    expect(boundary).toHaveTextContent("xoay nghiêng");
+    expect(boundary).toHaveTextContent("chưa đạt ngưỡng");
+    expect(boundary).toHaveTextContent("không bao giờ chứng minh được ai");
+    const sections = Array.from(
       document.querySelectorAll<HTMLElement>("[data-landing-section]"),
-    ).filter((section) => section.dataset.landingSection !== "05");
-    expect(claimSections).toHaveLength(6);
-    for (const section of claimSections) {
-      expect(section.textContent ?? "").not.toMatch(/sau (khi )?biến đổi/i);
-    }
+    );
+    expect(sections).toHaveLength(7);
+    const claiming = sections.filter((section) =>
+      /nén lại|thu nhỏ|chụp lại màn hình/i.test(section.textContent ?? ""),
+    );
+    expect(claiming.map((section) => section.dataset.landingSection).sort()).toEqual([
+      "04",
+      "05",
+    ]);
   });
 
   it("issues no API request while rendering", async () => {

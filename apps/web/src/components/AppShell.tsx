@@ -97,8 +97,18 @@ export function AppShell() {
         {user && !location.pathname.startsWith("/verifications/") &&
         capabilities.data?.algorithm_label === "integrity_release_v1" ? (
           <aside className="capability-note" aria-label="Khả năng xác minh">
-            <strong>Xác minh chính xác file đã cấp phát.</strong> Nhận diện
-            fingerprint sau biến đổi chưa khả dụng.
+            {capabilities.data?.transformed_attribution_available === true ? (
+              <>
+                <strong>Đối chiếu mã băm và đọc thủy vân.</strong> Truy được
+                nguồn cả khi tệp đã bị nén lại, thu nhỏ hoặc chụp lại màn hình.
+                Không xác định ai làm rò rỉ hay chỉnh sửa.
+              </>
+            ) : (
+              <>
+                <strong>Xác minh chính xác tệp đã cấp phát.</strong> Đọc thủy
+                vân sau khi tệp bị biến đổi hiện chưa khả dụng.
+              </>
+            )}
           </aside>
         ) : capabilities.data?.enabled && !location.pathname.startsWith("/verifications/") ? (
           <aside className="capability-note" aria-label="Giới hạn chế độ demo">

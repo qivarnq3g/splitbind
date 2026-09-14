@@ -352,7 +352,7 @@ describe("issuance browser workflow", () => {
       return json({ detail: "Not found." }, 404);
     });
     renderApp(`/issuances/${ISSUANCE_ID}`);
-    await screen.findByText("Kết quả PDF đang được xử lý.");
+    await screen.findByText("Tệp kết quả đang được xử lý.");
     expect(screen.queryByText("Chế độ demo cục bộ - vân tay thử nghiệm, chưa phát hành.")).not.toBeInTheDocument();
   });
 
@@ -367,8 +367,8 @@ describe("issuance browser workflow", () => {
     }));
     renderApp(`/issuances/${ISSUANCE_ID}`);
 
-    expect(await screen.findByText("Kết quả PDF đang được xử lý.")).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Tải PDF kết quả" })).not.toBeInTheDocument();
+    expect(await screen.findByText("Tệp kết quả đang được xử lý.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Tải bản cấp phát" })).not.toBeInTheDocument();
   });
 
   it("labels and downloads an available experimental result using a fresh URL", async () => {
@@ -399,7 +399,7 @@ describe("issuance browser workflow", () => {
 
     expect(await screen.findByText("Thử nghiệm - chưa phát hành")).toBeVisible();
     expect(observed).not.toContain(`/api/v1/issuances/${ISSUANCE_ID}/result`);
-    fireEvent.click(screen.getByRole("button", { name: "Tải PDF kết quả" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tải bản cấp phát" }));
 
     await waitFor(() => expect(downloadedHref).toBe("https://storage.example.test/signed-result.pdf"));
     expect(observed.filter((path) => path === `/api/v1/issuances/${ISSUANCE_ID}/result`)).toHaveLength(1);
@@ -420,9 +420,9 @@ describe("issuance browser workflow", () => {
     }));
     renderApp(`/issuances/${ISSUANCE_ID}`);
 
-    expect(await screen.findByText("Kết quả PDF hiện không có sẵn. Hãy kiểm tra trạng thái công việc hoặc tạo bản cấp phát mới.")).toBeVisible();
+    expect(await screen.findByText("Tệp kết quả hiện không có sẵn. Hãy kiểm tra trạng thái công việc hoặc tạo bản cấp phát mới.")).toBeVisible();
     expect(screen.queryByRole("heading", { name: "Bản cấp phát đã sẵn sàng" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Tải PDF kết quả" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Tải bản cấp phát" })).not.toBeInTheDocument();
   });
 
   it("keeps download errors safe and retryable", async () => {
@@ -437,7 +437,7 @@ describe("issuance browser workflow", () => {
     }));
     renderApp(`/issuances/${ISSUANCE_ID}`);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Tải PDF kết quả" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tải bản cấp phát" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Không thể tạo liên kết tải lúc này. Hãy thử lại.");
     expect(screen.getByRole("button", { name: "Thử tải lại" })).toBeVisible();
   });
@@ -461,9 +461,9 @@ describe("issuance browser workflow", () => {
     vi.stubGlobal("fetch", fetchMock);
     renderApp(`/issuances/${ISSUANCE_ID}`);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Tải PDF kết quả" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tải bản cấp phát" }));
 
-    expect(await screen.findByText("Kết quả PDF hiện không có sẵn. Hãy kiểm tra trạng thái công việc hoặc tạo bản cấp phát mới.")).toBeVisible();
+    expect(await screen.findByText("Tệp kết quả hiện không có sẵn. Hãy kiểm tra trạng thái công việc hoặc tạo bản cấp phát mới.")).toBeVisible();
     await waitFor(() => expect(detailReads).toBe(2));
     expect(screen.queryByRole("button", { name: /tải/i })).not.toBeInTheDocument();
     expect(screen.queryByText("Hãy thử lại.")).not.toBeInTheDocument();

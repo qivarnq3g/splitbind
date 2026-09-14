@@ -105,7 +105,7 @@ export function EvidenceSummary({
                 <dd>{regions ? regions.length : "API chưa cung cấp"}</dd>
               </div>
               <div>
-                <dt>Điểm fingerprint</dt>
+                <dt>Điểm thủy vân</dt>
                 <dd>{scoreLabel(evidence.fingerprint_confidence)}</dd>
               </div>
               <div>

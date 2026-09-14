@@ -42,6 +42,22 @@ STALE_RESULT_ERROR_CODE = "DEMO_STALE_RESULT_INVALID"
 STALE_CLEANUP_ERROR_CODE = "DEMO_STALE_OUTPUT_CLEANUP_FAILED"
 
 
+def _issuance_output_extension(job) -> str:
+    document_id = (
+        Issuance.objects.filter(pk=job.issuance_id)
+        .values_list("document_id", flat=True)
+        .first()
+    )
+    content_type = (
+        Document.objects.filter(pk=document_id)
+        .values_list("upload_request__source_content_type", flat=True)
+        .first()
+        if document_id
+        else None
+    )
+    return demo_issuance.issuance_output_extension(content_type or "")
+
+
 @dataclass(frozen=True, slots=True)
 class WorkerCycleResult:
     job_id: UUID
@@ -120,7 +136,8 @@ def claim_next_job(
                 attempt=job.attempt,
                 owner_token=owner_token,
                 output_object_key=(
-                    f"outputs/issuance/{job.organization_id}/{job.issuance_id}.pdf"
+                    f"outputs/issuance/{job.organization_id}/{job.issuance_id}"
+                    f".{_issuance_output_extension(job)}"
                 ),
             )
         elif job.kind == JobKind.VERIFICATION:

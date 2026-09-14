@@ -122,7 +122,7 @@ export function IssueDocumentPage() {
       <header className="page-heading" data-motion-block>
         <p className="page-context">Cấp phát tài liệu</p>
         <h1>Tạo bản cấp phát</h1>
-        <p>Chọn PDF và người nhận để tạo bản cấp phát riêng.</p>
+        <p>Chọn tài liệu và người nhận để tạo bản cấp phát riêng.</p>
       </header>
       <div className="workbench-layout">
         <section className="workbench" aria-label="Tạo bản cấp phát" data-motion-block>
@@ -225,7 +225,7 @@ export function IssueDocumentPage() {
                 </span>
                 <ArrowRight size={18} aria-hidden="true" />
               </button>
-              <p>Nhận PDF sau khi xử lý.</p>
+              <p>Nhận tệp kết quả sau khi xử lý.</p>
             </div>
           </form>
         </section>
@@ -234,7 +234,7 @@ export function IssueDocumentPage() {
           <ol className="guide-steps">
             <li>
               <strong>Chọn tài liệu</strong>
-              <span>Giữ nguyên bản PDF nguồn trên thiết bị của bạn.</span>
+              <span>Giữ nguyên tệp gốc trên thiết bị của bạn.</span>
             </li>
             <li>
               <strong>Tạo bản cấp phát</strong>
@@ -243,7 +243,7 @@ export function IssueDocumentPage() {
               </span>
             </li>
             <li>
-              <strong>Tải và lưu bản PDF</strong>
+              <strong>Tải và lưu bản cấp phát</strong>
               <span>Gửi đúng bản kết quả để có thể xác minh về sau.</span>
             </li>
           </ol>

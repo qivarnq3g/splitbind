@@ -3,7 +3,12 @@ import { useState } from "react";
 import { CompactIdentifier } from "../../components/CompactIdentifier";
 import { downloadIssuanceManifest } from "./downloadManifest";
 import type { components } from "../../api/generated/schema";
-import { INTEGRITY_SCOPE, integrityVerdict, type VerificationStatus } from "./copy";
+import {
+  INTEGRITY_SCOPE,
+  INTEGRITY_SCOPE_WITH_TRACING,
+  integrityVerdict,
+  type VerificationStatus,
+} from "./copy";
 
 type Attestation = components["schemas"]["ManifestAttestation"];
 
@@ -60,6 +65,9 @@ export function IntegrityEvidence({
   const verdict = integrityVerdict(status, hash, signature);
   const noSource = status === "NO_WATERMARK" && hash === false && signature == null;
   const issuedAt = issuedAtText(attestation?.issued_at);
+  const tracingEnabled = (evidence.limitations ?? []).includes(
+    "fingerprint.recall_below_release_gate",
+  );
   const extraLimits = (evidence.limitations ?? []).some(id => ![
     "evidence.not_proof_of_leak_edit_or_distribution",
     "fingerprint.transformed_attribution_unavailable",
@@ -117,7 +125,7 @@ export function IntegrityEvidence({
             </p>
             <dl className="evidence-facts">
               <div>
-                <dt>Chữ ký bản kê khai</dt>
+                <dt>Chữ ký manifest</dt>
                 <dd>{signatureText(signature, noSource)}</dd>
               </div>
               {attestation ? (
@@ -133,10 +141,10 @@ export function IntegrityEvidence({
                     </div>
                   ) : null}
                   <div>
-                    <dt>Mã băm bản kê khai đã ký · SHA-256</dt>
+                    <dt>Mã băm manifest đã ký · SHA-256</dt>
                     <dd>
                       <CompactIdentifier
-                        label="Mã băm bản kê khai đã ký"
+                        label="Mã băm manifest đã ký"
                         value={attestation.manifest_sha256}
                         full
                       />
@@ -179,8 +187,8 @@ export function IntegrityEvidence({
               </pre>
               <div className="evidence-export">
                 <p>
-                  Hồ sơ kiểm chứng gồm bản kê khai công khai, chữ ký tách rời và khóa
-                  công khai dùng để ký. Bản kê khai này không chứa thông tin người nhận.
+                  Hồ sơ kiểm chứng gồm manifest công khai, chữ ký tách rời và khóa
+                  công khai dùng để ký. Manifest này không chứa thông tin người nhận.
                 </p>
                 <button
                   className="button button-secondary"
@@ -224,7 +232,7 @@ export function IntegrityEvidence({
           ) : null}
           <section aria-labelledby="technical-limitations-heading" className="evidence-group">
             <h2 id="technical-limitations-heading">Phạm vi kiểm chứng</h2>
-            <p>{INTEGRITY_SCOPE}</p>
+            <p>{tracingEnabled ? INTEGRITY_SCOPE_WITH_TRACING : INTEGRITY_SCOPE}</p>
             {extraLimits ? <p>Hồ sơ có giới hạn bổ sung. Liên hệ đơn vị cấp phát trước khi dựa vào kết quả này.</p> : null}
           </section>
         </div>

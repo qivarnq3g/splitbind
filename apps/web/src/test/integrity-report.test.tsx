@@ -24,7 +24,7 @@ it("reports no matching issuance without claiming a known document was modified"
   }} />);
   expect(screen.getByText(/Không tìm thấy bản cấp phát có mã SHA-256 trùng/)).toBeVisible();
   expect(screen.getByText("Chưa kiểm tra - chưa tìm được bản cấp phát")).toBeInTheDocument();
-  expect(document.body).not.toHaveTextContent(/API|Số phiếu|Điểm fingerprint|Điểm toàn vẹn|Vùng toàn vẹn nghi vấn/);
+  expect(document.body).not.toHaveTextContent(/API|Số phiếu|Điểm thủy vân|Điểm toàn vẹn|Vùng toàn vẹn nghi vấn/);
 });
 
 it("keeps an unavailable signature distinct from one not checked because no match exists", () => {

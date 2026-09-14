@@ -51,7 +51,7 @@ for (const role of ["administrator", "auditor", "verifier"] as const) {
       }),
     }));
     await page.goto(`/verifications/${VERIFICATION_ID}`);
-    await expect(page.getByRole("heading", { name: "Không phát hiện watermark" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Không đọc được thủy vân" })).toBeVisible();
     await page.getByText("Xem chi tiết kỹ thuật", { exact: true }).click();
     await expect(page.getByText("không có nghĩa tài liệu chắc chắn không thuộc hệ thống", { exact: false })).toBeVisible();
   });

@@ -93,8 +93,10 @@ def make_issuance(organization, actor, suffix):
     return issuance, job
 
 
-def commit_result(issuance, job):
-    output_key = f"outputs/issuance/{issuance.organization_id}/{issuance.id}.pdf"
+def commit_result(issuance, job, extension="pdf"):
+    output_key = (
+        f"outputs/issuance/{issuance.organization_id}/{issuance.id}.{extension}"
+    )
     issuance.output_object_key = output_key
     issuance.output_sha256 = OUTPUT_SHA256
     issuance.save(update_fields=["output_object_key", "output_sha256"])
@@ -399,3 +401,22 @@ def test_document_name_slug_produces_a_portable_ascii_name():
     assert document_name_slug("") == ""
     assert len(document_name_slug("x" * 300)) <= 80
     assert not document_name_slug("tài liệu").endswith("-")
+
+
+@pytest.mark.django_db
+def test_an_image_issuance_downloads_with_a_png_name(issuance_context):
+    _organization, issuer, issuance, job, storage = issuance_context
+    commit_result(issuance, job, extension="png")
+    UploadRequest.objects.filter(pk=issuance.document.upload_request.pk).update(
+        source_filename="ảnh chứng nhận.png"
+    )
+    client = Client()
+    login(client, issuer)
+
+    with override_settings(SPLITBIND_OBJECT_STORAGE=storage):
+        response = client.get(f"/api/v1/issuances/{issuance.id}/result")
+
+    assert response.status_code == 200
+    assert storage.presign_get_filename == (
+        f"anh-chung-nhan-splitbind-{str(issuance.id)[:8]}.png"
+    )

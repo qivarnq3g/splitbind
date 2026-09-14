@@ -156,7 +156,7 @@ describe("verification browser workflow", () => {
     renderApp(`/verifications/${VERIFICATION_ID}`);
     expect(await screen.findByRole("heading", { name: "Khớp nguồn, có dấu hiệu thay đổi" })).toBeVisible();
     fireEvent.click(screen.getByText("Xem chi tiết kỹ thuật"));
-    expect(screen.getByText("Demo không đánh giá watermark toàn vẹn hoặc định vị vùng chỉnh sửa.")).toBeVisible();
+    expect(screen.getByText("Bản thử nghiệm không đánh giá thủy vân toàn vẹn, cũng không chỉ ra vùng bị chỉnh sửa.")).toBeVisible();
     expect(screen.getByText("0,75")).toBeVisible();
     expect(screen.getByText("API chưa cung cấp trang tương ứng và hình học từng trang", { exact: false })).toBeVisible();
     expect(screen.queryByText(/giới hạn kỹ thuật chưa được giao diện mô tả/)).not.toBeInTheDocument();

@@ -103,7 +103,7 @@ export function JobDetailPage() {
         : data?.status === "processing"
           ? verification
             ? "Đang kiểm tra tài liệu và tổng hợp bằng chứng."
-            : "Đang tạo bản PDF và hồ sơ cấp phát có chữ ký."
+            : "Đang tạo bản cấp phát và hồ sơ có chữ ký."
           : "Yêu cầu đã được tiếp nhận và đang chờ xử lý.";
   return (
     <main ref={root} className="workspace-page result-page">

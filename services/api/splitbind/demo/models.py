@@ -258,10 +258,13 @@ class DemoIssuanceResult(ValidatedOrganizationOwnedModel):
                 or self.job.attempt != self.attempt
             ):
                 raise ValidationError("demo result must bind its issuance job")
-            expected_key = (
-                f"outputs/issuance/{self.organization_id}/{self.issuance_id}.pdf"
+            expected_prefix = (
+                f"outputs/issuance/{self.organization_id}/{self.issuance_id}."
             )
-            if self.output_object_key != expected_key:
+            expected_keys = {
+                expected_prefix + extension for extension in ("pdf", "png")
+            }
+            if self.output_object_key not in expected_keys:
                 raise ValidationError("demo result output key does not match its owner")
         try:
             validate_issuance_output_key(self.output_object_key)
