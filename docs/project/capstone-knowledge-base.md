@@ -1124,6 +1124,9 @@ Tất cả các trích dẫn trong bài thuyết trình và báo cáo thuyết m
   17. [17] Adobe Research, "TrustMark: Universal Watermarking for Arbitrary Resolution Images," GitHub repository, 2026. [Online]. Available: https://github.com/adobe/trustmark
   18. [18] T. Sander, P. Fernandez, A. Durmus, M. Douze, and T. Furon, "Watermark Anything with Localized Messages," Meta AI Research, GitHub repository, 2025. [Online]. Available: https://github.com/facebookresearch/watermark-anything
   19. [19] Guo Fei, "blind_watermark: blind and invisible image watermark," GitHub repository, 2025. [Online]. Available: https://github.com/guofei9987/blind_watermark
+  20. [20] gslxr, "Screen-Shooting-Resilient-Document-Image-Watermarking," GitHub repository. [Online]. Available: https://github.com/gslxr/Screen-Shooting-Resilient-Document-Image-Watermarking
+  21. [21] H. Fang, W. Zhang, H. Zhou, H. Cui and N. Yu, "Screen-shooting resilient watermarking," IEEE Transactions on Information Forensics and Security, vol. 14, no. 6, pp. 1403-1418, 2019. Mã nguồn: https://github.com/FangHanNUS/Screen-Shooting-Resilient-Watermarking
+  22. [22] ShieldMnt, "invisible-watermark: python library for invisible image watermark," GitHub repository. [Online]. Available: https://github.com/ShieldMnt/invisible-watermark
 
 ---
 
@@ -1195,6 +1198,53 @@ Hai kích thước màn hình hỏng vì hai lý do khác nhau, và phép bóc v
 - Ở 1366×768, trang nằm ở 683×1366, tỉ lệ 0.4447. Trạng thái chuyển từ `insufficient_sync_evidence` (12/12 hàng) sang `payload_not_detected` (11/12 hàng, một hàng đạt `partial_payload_evidence`) - hình học giờ thành công và chính payload mới là thứ chết. 0.4447 thấp hơn mốc resize-0.50 vốn đạt 9/12, nên đây là giới hạn phân giải thật của vật mang.
 
 Chuyển dịch mã trạng thái đó là công cụ chẩn đoán đáng dùng: `insufficient_sync_evidence` nghĩa là chưa tạo được ứng viên, hỏng ở hình học; `payload_not_detected` nghĩa là đã căn được trang và tín hiệu đã mất.
+
+## 13.4b. Đối chiếu ba công trình mã nguồn mở về đúng bài toán trang văn bản
+
+`[Experimentally observed]` (đọc mã nguồn) Sau khi xác định được nút thắt là vật mang trang văn bản, nhóm tải về và đọc mã của ba công trình công khai giải đúng lớp bài toán này, thay vì chỉ đọc tóm tắt bài báo.
+
+### Công trình 1: thủy vân ảnh trang văn bản chống chụp màn hình [20]
+
+Đây là công trình gần bài toán của nhóm nhất, vì đối tượng của nó đúng là ảnh trang tài liệu. Cách làm là học sâu kiểu StegaStamp: một bộ mã hoá và một bộ giải mã cùng huấn luyện, ở giữa là một tầng biến dạng khả vi gồm làm mờ, nhiễu, đổi tương phản, đổi độ sáng, đổi sắc độ và nén JPEG khả vi tới chất lượng 50. Ô làm việc 400 x 400 điểm ảnh, tải trọng 100 bit.
+
+Chi tiết đáng giá nhất không nằm ở kiến trúc mạng mà nằm ở một dòng trong hàm mất mát:
+
+```
+text_diff_op = im_rgb_diff * (1.0 - image_input)
+```
+
+Trên ảnh trang tài liệu, nét chữ có giá trị điểm ảnh thấp còn nền trắng có giá trị gần 1. Nhân sai lệch với `1.0 - image_input` nghĩa là phạt nặng những thay đổi rơi trúng nét chữ và gần như không phạt thay đổi trên nền. Nói cách khác, mô hình bị ép đẩy năng lượng thủy vân ra vùng nền thay vì lên nét chữ. Một biến thể thứ hai trong cùng kho mã đảo dấu lại để thử hướng ngược lại, cho thấy chính nhóm tác giả coi đây là lựa chọn thiết kế trung tâm.
+
+Điều này tương phản trực tiếp với thiết kế đang chạy của SplitBind. Bộ mã hoá hiện tại rải ô đều khắp khung chuẩn và dùng một bước lượng tử cố định, nên trên một trang chữ thì phần lớn ô rơi vào nền trắng gần như không có sức chứa, còn số ít ô còn lại nằm vắt qua biên nét chữ tương phản cao, đúng chỗ mà thay đổi vừa dễ thấy vừa dễ mất.
+
+### Công trình 2: thủy vân chống chụp màn hình dùng điểm đặc trưng [21]
+
+Công trình này không dùng học sâu và gần với thiết kế hiện tại của nhóm hơn. Quy tắc nhúng của nó cũng là đẩy lệch một cặp hệ số DCT tần trung trong khối 8 x 8, cụ thể là cặp ở vị trí (4,5) và (5,4), tức cùng họ với cách SplitBind lượng tử hoá hiệu hai hệ số. Hai khác biệt mới là phần đáng học.
+
+Khác biệt thứ nhất là cách đồng bộ. Thay vì cài một mẫu pilot vào miền tần số rồi dò lại, công trình này chạy SIFT để tìm điểm đặc trưng của chính nội dung ảnh, lọc lấy các điểm cách nhau tối thiểu 64 điểm ảnh và cách mép tối thiểu 32 điểm ảnh, rồi nhúng vào các vùng 64 x 64 lấy điểm đặc trưng làm tâm. Lúc trích, chạy lại SIFT trên ảnh nhận được để tìm lại đúng những vùng ấy. Đồng bộ vì thế bám vào nội dung, và nội dung trang chữ thì rất giàu điểm đặc trưng. Đây đúng là thứ mà đường đang chạy của nhóm thiếu: phép đo ở Mục 4.2.4.5 cho thấy trang chữ trượt ngay ở trạng thái `insufficient_sync_evidence`, tức mẫu pilot không được tìm thấy, chứ không phải payload hỏng.
+
+Khác biệt thứ hai là cường độ nhúng thích nghi theo nội dung. Bước đẩy lệch được tính bằng một phần tỉ lệ với chính độ lớn của hai hệ số tại chỗ, cộng thêm một sàn cố định. Vùng phẳng thì gần như chỉ còn phần sàn, vùng nhiều kết cấu thì mạnh hơn. SplitBind hiện dùng một bước lượng tử duy nhất cho mọi ô.
+
+Cần nêu kèm một giới hạn để không phóng đại công trình này: khâu nắn phối cảnh của nó là thủ công, người dùng phải bấm bốn góc ảnh trước khi trích. Nó không giải bài toán hình học một cách mù như dịch vụ của nhóm buộc phải làm.
+
+Tải trọng của nó cũng nhỏ hơn nhiều: 30 bit thông tin, thêm CRC8, mã hoá BCH(63,36) thành 64 bit xếp vào ma trận 8 x 8. SplitBind đang đòi mang một định danh 128 bit, tức gấp hơn bốn lần, trên cùng một họ vật mang.
+
+### Công trình 3: thư viện đang được dùng trong sản phẩm thật [22]
+
+Thư viện này được dùng rộng rãi trong các sản phẩm sinh ảnh, nên nó là mốc so sánh về mức kỳ vọng thực tế chứ không phải về kết quả nghiên cứu. Tài liệu của chính nó ghi thẳng rằng các phương pháp trong thư viện không bền trước phép thu nhỏ và trước phép cắt làm đổi tỉ lệ khung hình, chỉ bền trước nhiễu, đổi màu, đổi độ sáng và nén JPEG. Bảng kết quả kèm theo ghi thu nhỏ 50 phần trăm là trượt ở cả hai phương pháp, kể cả phương pháp học sâu. Tải trọng là 32 đến 64 bit.
+
+Đối chiếu này làm rõ vị thế của dự án theo cả hai chiều. Chiều bất lợi đã nêu ở các mục trên. Chiều thuận lợi là bước phục hồi khung ảnh của nhóm giải quyết đúng lớp tấn công mà một thư viện đang chạy trong sản phẩm thật còn không đặt mục tiêu xử lý, và Mục 4.2.4.5 có số đo cho thấy ảnh chụp màn hình thu nhỏ còn 0.469 vẫn truy được nguồn trên vật mang phù hợp.
+
+### Bốn điều rút ra cho kiến trúc V4
+
+1. **Đặt thủy vân theo nội dung, không rải đều.** Chọn vùng nhúng ở nơi ảnh có kết cấu, bỏ qua vùng nền trắng. Cả hai công trình đầu đều làm điều này, bằng hai cơ chế khác nhau.
+2. **Đồng bộ bằng đặc trưng nội dung, không chỉ bằng mẫu pilot tần số.** Đây là hướng chạm trực tiếp vào `insufficient_sync_evidence`, trạng thái chiếm toàn bộ các ô thất bại trên trang chữ.
+3. **Cường độ nhúng thích nghi theo năng lượng cục bộ**, thay cho một bước lượng tử duy nhất toàn trang.
+4. **Xem lại kích thước tải trọng.** Ba công trình dùng 30, 32 đến 64, và 100 bit. Nhóm đang đòi 128 bit trên vật mang khó nhất. Một hướng khả thi là nhúng một mã ngắn rồi tra ngược ra định danh đầy đủ trong cơ sở dữ liệu, vì hệ thống vốn đã giữ hồ sơ cấp phát.
+
+`[Limitation]` Bốn điều trên là kết luận rút ra từ việc đọc mã nguồn, không phải từ phép đo của nhóm. Chưa điều nào được cài đặt và đo trong dự án này, nên chúng là đề xuất có căn cứ chứ chưa phải kết quả.
+
+---
 
 ## 13.4. Kiến trúc V4 đề xuất
 
