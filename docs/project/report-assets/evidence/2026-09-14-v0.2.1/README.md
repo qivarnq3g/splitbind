@@ -37,10 +37,9 @@ xác minh. Bốn vật mang khác nhau để không kết luận dựa trên m�
 | `not-traced-screenshot-distorted-issue.jpg` | Trang chữ dày, cấp phát ở 1400 x 1980 | Chụp màn hình 1920 x 1080, thu nhỏ 0.545, viền đen | Không truy được |
 | `traced-screenshot-canonical-*.jpg` | Ảnh chuyển sắc, cấp phát ở đúng 1152 x 2304 | Chụp màn hình 1920 x 1080, thu nhỏ 0.469, viền đen | **Truy được nguồn** |
 
-Hai hàng cuối là phép so sánh có kiểm soát quan trọng nhất của cả bộ. Cùng một lớp tấn
-công và cùng cách dựng ảnh chụp màn hình; hàng cuối còn bị thu nhỏ mạnh hơn mà vẫn truy
-được. Biến duy nhất khác nhau là tỉ lệ khung hình của tệp đem đi cấp phát, tức là bản cấp
-phát có phải đi qua vòng kéo méo của `_canonicalize_page` hay không.
+Hai hàng cuối chứng minh hệ thống truy được ảnh chụp màn hình thu nhỏ hơn một nửa. Chúng
+khác nhau ở hai biến cùng lúc nên chưa quy được nguyên nhân; phép đo tách biến ở Mục
+4.2.4.5 của báo cáo cho thấy biến quyết định là vật mang, không phải kích thước cấp phát.
 
 `traced-screenshot-canonical-headline.jpg` còn cho thấy một khiếm khuyết giao diện: dòng
 kết luận lớn ghi "Chưa đủ bằng chứng xác minh" trong khi bảng chi tiết ở
