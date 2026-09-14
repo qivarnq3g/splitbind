@@ -101,6 +101,9 @@ TERMS = [
     ("payload", "Chuỗi bit mang thông tin định danh được nhúng vào ảnh"),
     ("pre-gate", "Vòng sàng lọc chạy trước cổng phát hành, dùng để loại sớm các bộ tham số kém"),
     ("tile", "Ô ảnh: vùng hình chữ nhật mà thuật toán chia trang ra để nhúng payload"),
+    ("harness", "Bộ khung thực nghiệm: mã và cấu hình dùng để chạy hàng loạt phép đo lặp lại được, tách biệt với mã sản phẩm."),
+    ("profile", "Hồ sơ tham số đã khoá của một thế hệ thuật toán: kích thước ô, số lần lặp bit, bước lượng tử và các hằng số kèm theo."),
+    ("Reed-Solomon", "Mã sửa lỗi khối trên trường hữu hạn, cho phép khôi phục dữ liệu khi một số ký hiệu bị sai hoặc bị khai là mất."),
 ]
 
 PAGEBREAK = (
@@ -344,7 +347,11 @@ Báo cáo đã hoàn thành bốn nội dung được giao. Về lý thuyết, n
 
 Từ đó nhóm phân tách được ba lớp thất bại vốn bị gộp chung dưới nhãn thủy vân không đủ bền: không tạo được ứng viên hình học, tạo ứng viên sai, và ứng viên đúng nhưng vật mang đã chết. Chỉ lớp thứ ba mới thực sự là vấn đề của thủy vân.
 
-Về các giới hạn đã nhận diện, phân hệ thủy vân bền vững chưa đạt cổng phát hành và được giữ ở tầng nghiên cứu; phiên bản vận hành chỉ kích hoạt xác thực toàn vẹn tệp chính xác. Dưới tỉ lệ co giãn khoảng 0.45 thì payload không còn khôi phục được kể cả khi hình học chính xác. Định vị can thiệp đạt IoU tổng hợp khoảng 0.09 do cơ chế fail-safe kích hoạt trên phần lớn kịch bản có diện tích can thiệp lớn. Và quan trọng nhất: không kết quả nào trong báo cáo chứng minh danh tính người làm rò rỉ, chỉnh sửa hay phát tán tài liệu; thủy vân và chữ ký số cung cấp tín hiệu kỹ thuật phục vụ điều tra, không phải kết luận pháp lý về hành vi của một cá nhân.
+Điều tra tiếp trong hai ngày cuối tìm ra một nguyên nhân gốc thứ ba, và nó buộc nhóm rút lại một phần chẩn đoán của chính mình. Lớp thất bại thứ ba hoá ra không phải vật mang chết: bộ giải mã đo độ tin cậy ở mức bit nhưng khai ký hiệu bị xoá ở mức byte, nên một bit yếu làm cả tám bit cùng byte bị khai xoá, và số ký hiệu xoá vượt quá mức mã Reed-Solomon sửa được. Hệ thống từ chối đúng những từ mã mà nó đã khôi phục ở tỉ lệ lỗi bit bằng 0,000. Một vật mang thay thế được cài đặt để kiểm chứng giả thuyết vật mang đã đo kém hơn ở mọi tỉ lệ và bị loại bỏ. Sửa kế toán ký hiệu xoá khôi phục được nén JPEG q50, thu nhỏ tới 0.375 và cả ca ảnh chụp màn hình có viền, mà không đụng tới khâu nhúng và không phải cấp phát lại tài liệu cũ. Chi tiết và bảng số liệu ở Mục 7.5.
+
+Nhóm cũng ghi nhận một lớp thất bại nằm ngoài thuật toán: dịch vụ đòi hai kết quả giải mã khớp nhau mới công bố danh tính, trong khi số trang là thành phần của phép dẫn xuất có khoá nên một tấm ảnh chỉ sinh được đúng một kết quả. Đường truy vết ảnh vì thế không thể kết luận dù thuật toán hoạt động đúng. Điều này định vị lại mọi bảng độ bền trong báo cáo: chúng được đo bằng cách gọi thẳng bộ giải mã và truyền sẵn số trang, tức mô tả thư viện chứ chưa mô tả sản phẩm.
+
+Về các giới hạn đã nhận diện, phân hệ thủy vân đã được bật trên hệ thống vận hành và mọi kết quả truy vết vẫn mang nhãn độ thu hồi chưa đạt cổng phát hành do chính hệ thống gắn. Ranh giới còn lại là tổn thất chồng nhau chứ không phải một phép biến đổi đơn lẻ: ảnh chụp màn hình cộng nén JPEG q60 thất bại trong khi từng phép một đều sống. Cắt ảnh quá nửa và xoay vẫn chưa giải được ở đây lẫn ở mọi công trình mã nguồn mở đã đối chiếu. Định vị can thiệp đạt IoU tổng hợp khoảng 0.09 do cơ chế fail-safe kích hoạt trên phần lớn kịch bản có diện tích can thiệp lớn. Và quan trọng nhất: không kết quả nào trong báo cáo chứng minh danh tính người làm rò rỉ, chỉnh sửa hay phát tán tài liệu; thủy vân và chữ ký số cung cấp tín hiệu kỹ thuật phục vụ điều tra, không phải kết luận pháp lý về hành vi của một cá nhân.
 
 Hướng phát triển rút ra trực tiếp từ chẩn đoán: chuẩn hoá khung ảnh trước khi giải mã, ước lượng tỉ lệ cắt thay vì liệt kê một giá trị cứng, cho phép hai trục co giãn độc lập, và cuối cùng mới là chọn vật mang theo nội dung. Xa hơn, bước lượng tử thích nghi theo mô hình thị giác người và các kiến trúc học sâu là lối đi cho lớp thất bại thứ ba."""
 

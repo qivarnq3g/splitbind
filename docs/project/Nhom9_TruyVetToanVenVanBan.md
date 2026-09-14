@@ -26,6 +26,7 @@ lang: vi
 | **DWT** | Discrete Wavelet Transform, biến đổi sóng con rời rạc |
 | **ECC** | Error-Correcting Code, mã sửa lỗi |
 | **fixture** | Một trang tài liệu cụ thể trong corpus, đóng vai trò mẫu thử |
+| **harness** | Bộ khung thực nghiệm: mã và cấu hình dùng để chạy hàng loạt phép đo lặp lại được, tách biệt với mã sản phẩm. |
 | **HMAC** | Hash-based Message Authentication Code |
 | **IoU** | Intersection over Union, tỉ số giao trên hợp |
 | **JCS** | JSON Canonicalization Scheme (RFC 8785) |
@@ -36,10 +37,12 @@ lang: vi
 | **ORB** | Oriented FAST and Rotated BRIEF |
 | **payload** | Chuỗi bit mang thông tin định danh được nhúng vào ảnh |
 | **pre-gate** | Vòng sàng lọc chạy trước cổng phát hành, dùng để loại sớm các bộ tham số kém |
+| **profile** | Hồ sơ tham số đã khoá của một thế hệ thuật toán: kích thước ô, số lần lặp bit, bước lượng tử và các hằng số kèm theo. |
 | **PSNR** | Peak Signal-to-Noise Ratio, tỉ số tín hiệu trên nhiễu đỉnh |
 | **QIM** | Quantization Index Modulation, điều chế chỉ số lượng tử |
 | **RANSAC** | Random Sample Consensus |
 | **RBAC** | Role-Based Access Control, kiểm soát truy cập theo vai trò |
+| **Reed-Solomon** | Mã sửa lỗi khối trên trường hữu hạn, cho phép khôi phục dữ liệu khi một số ký hiệu bị sai hoặc bị khai là mất. |
 | **RSS** | Resident Set Size, dung lượng bộ nhớ thường trú |
 | **SSIM** | Structural Similarity Index Measure |
 | **SSOT** | Single Source of Truth, nguồn chân lý duy nhất |
@@ -699,6 +702,101 @@ Và tiêu chí nghiệm thu phải đổi: mọi cổng phát hành về sau ph�
 
 Đây là phép đo trên một hệ thống thật với năm phép thử, cộng một phép thăm dò ba vật mang nhân năm điều kiện. Nó đủ để bác bỏ một giả thuyết cụ thể và đủ để nêu một chẩn đoán, nhưng chưa phải một chiến dịch đo lường có quy mô thống kê. Nhóm công bố nó vì kết quả âm tính là một phần của đóng góp khoa học, và vì nó thay đổi hướng đi của V4.
 
+**Lưu ý đọc tiếp.** Chẩn đoán vật mang nêu ở Mục 7.4.3 và đề nghị đổi miền nhúng ở Mục 7.4.4 đã bị chính nhóm bác bỏ bằng phép đo ngày 13/09/2026. Nguyên nhân thật nằm ở kế toán ký hiệu xoá của bên nhận, không ở vật mang. Đọc Mục 7.5 trước khi sử dụng bất kỳ khuyến nghị nào trong mục này.
+
+### 4.2.4. NGUYÊN NHÂN GỐC THỨ BA VÀ HIỆU CHỈNH CHẨN ĐOÁN Ở MỤC 7.4
+
+*Số liệu đo thực nghiệm*, *tính năng đã triển khai* và *giới hạn đã nhận diện*
+
+Hai ngày 13 và 14/09/2026 nhóm tiếp tục điều tra kết quả âm tính ở Mục 7.4 và tìm được nguyên nhân gốc thứ ba. Kết quả buộc nhóm rút lại một phần chẩn đoán đã công bố ở Mục 7.4.3. Nhóm giữ lại cả hai phiên bản trong báo cáo vì quá trình tự bác bỏ là một phần của đóng góp, và vì việc xoá đi một chẩn đoán sai sẽ khiến người đọc không kiểm chứng được đường đi của lập luận.
+
+#### 4.2.4.1. Bác bỏ giả thuyết vật mang bằng phép đo trực tiếp
+
+*Số liệu đo thực nghiệm* Mục 7.4.3 kết luận rằng vật mang là nút thắt, và đề nghị đổi miền nhúng trước tiên. Để kiểm chứng, nhóm cài đặt một vật mang thứ hai mô phỏng đúng cách `guofei9987/blind_watermark` làm: lượng tử hoá giá trị kỳ dị lớn nhất của mỗi khối, thay vì lượng tử hoá hiệu hai hệ số DCT như thiết kế đang dùng. Hai vật mang dùng chung cách chọn vị trí, cách lặp và cách kế toán ký hiệu bị xoá, nên chỉ khác đúng đại lượng được lượng tử hoá.
+
+Đo trên cùng một ô 512 px kiểu trang văn bản, cùng một từ mã, độ chính xác bit sau một vòng thu nhỏ rồi phóng lại:
+
+| Vật mang | PSNR | 1.0 | 0.875 | 0.75 | 0.625 | 0.5 | 0.375 | 0.25 |
+|---|---|---|---|---|---|---|---|---|
+| Hiệu hai hệ số DCT (đang dùng) | 48.29 | 1.000 | 0.997 | 0.997 | 0.997 | 1.000 | 0.978 | 0.971 |
+| Giá trị kỳ dị lớn nhất (kiểu blind_watermark) | 50.27 | 0.965 | 0.891 | 0.917 | 0.875 | 0.965 | 0.776 | 0.843 |
+
+Giả thuyết bị bác bỏ hai lần. Vật mang thay thế kém hơn ở mọi tỉ lệ, và vật mang đang dùng đã khôi phục 99,7 phần trăm số bit ở đúng tỉ lệ 0.625 mà toàn bộ dây chuyền trả về rỗng. Module thử nghiệm đã bị xoá khỏi kho mã: một vật mang đo kém hơn ở mọi điểm không đáng giữ lại.
+
+Kết luận trung gian: nếu từ mã về tới nơi gần như nguyên vẹn mà hệ thống vẫn không truy vết được, thì lỗi không nằm ở kênh truyền.
+
+#### 4.2.4.2. Nguyên nhân gốc thứ ba: bên nhận tự xoá nhiều hơn mức mã sửa được
+
+*Số liệu đo thực nghiệm* Phép đo quyết định là in tỉ lệ lỗi bit của từ mã trích được cạnh số ký hiệu bị khai là xoá, trong cùng một dòng:
+
+```
+tỉ lệ 0.625   t0 ber=0.000 -- er=21 | t1 ber=0.000 -- er=21 | t2 ber=0.000 -- er=24
+tỉ lệ 0.500   t0 ber=0.000 OK er=3  | t1 ber=0.000 OK er=5  | t2 ber=0.000 OK er=10
+```
+
+Ở tỉ lệ 0.625, tỉ lệ lỗi bit bằng 0,000: từ mã về tới nơi hoàn toàn chính xác. Nhưng bên nhận khai 21 tới 24 ký hiệu là không đáng tin, trong khi mã Reed-Solomon của thiết kế chỉ sửa được tối đa 16. Bộ giải mã vì thế từ chối chính những từ mã mà nó đã khôi phục đúng.
+
+Nguyên nhân là một sai lệch về đơn vị đo. Hệ thống đo độ tin cậy ở mức bit, nhưng khai ký hiệu bị xoá ở mức byte: chỉ cần một bit yếu là cả tám bit cùng byte bị khai xoá. Hệ số khuếch đại giữa hai mức là tám, và không ai kiểm hệ số đó trước khi tin vào phép đếm.
+
+Cách sửa nằm ở bên nhận, không phải ở vật mang. Hệ thống xếp các vị trí byte theo độ tin cậy từ thấp đến cao, rồi thử lần lượt các ngưỡng 16, 12, 8, 4 và 0 ký hiệu xoá, lấy khai báo ban đầu trước tiên. Mã kiểm CRC của payload xác thực từng lần thử, nên một tập xoá lỏng hơn không thể tạo ra một danh tính giả. Không đổi khâu nhúng, không đổi định danh profile, không phải cấp phát lại tài liệu cũ.
+
+**Bài học tổng quát.** Một khai báo xoá là một khoản chi trên ngân sách cố định, nên bộ giải mã không bao giờ được khai nhiều hơn mức mã của nó chịu được. Vượt ngân sách thì "tôi không chắc" và "tôi sai" tốn ngang nhau, và lựa chọn trông có vẻ trung thực lại phá huỷ dữ liệu còn khôi phục được. Hễ độ tin cậy được đo ở đơn vị nhỏ hơn đơn vị dùng để khai xoá, phải kiểm hệ số khuếch đại giữa hai đơn vị trước khi tin vào phép đếm.
+
+#### 4.2.4.3. Ca ảnh chụp màn hình: cần đủ cả hai mảnh ghép
+
+*Số liệu đo thực nghiệm* Ảnh chụp màn hình đặt một trang 1536 x 3072 vào màn hình 1920 x 1080, tức đúng một phép thu nhỏ 0.625 kèm hai dải viền tối. Đó là lý do nó nằm đúng bên thua của vách xoá nói trên. Cùng một trang, cùng khoá, cùng profile, sau khi sửa ngân sách xoá:
+
+| Trường hợp | Kết quả |
+|---|---|
+| Không tấn công | giải mã được |
+| Nén JPEG q70 | giải mã được |
+| Nén JPEG q50 | giải mã được |
+| Ảnh chụp màn hình có viền | giải mã được |
+| Ảnh chụp màn hình kèm JPEG q80 | giải mã được |
+| Ảnh chụp màn hình kèm JPEG q60 | không phát hiện payload |
+
+Ca ảnh chụp màn hình cần cả hai mảnh ghép và không mảnh nào đủ một mình: bóc viền để đưa trang về khung chuẩn, và sửa ngân sách xoá để bên nhận đừng vứt đi từ mã mà khung đã bóc trao cho nó. Ghi nhận ở Mục 13.3, bóc viền một mình chỉ chuyển ca này từ `insufficient_sync_evidence` sang `payload_not_detected`, tức nó sửa xong hình học rồi phơi ra khiếm khuyết thật nằm phía sau.
+
+*Giới hạn đã nhận diện* Ranh giới còn lại là tổn thất chồng nhau, không phải một phép biến đổi đơn lẻ: ảnh chụp màn hình cộng JPEG q60 thất bại trong khi từng phép một đều sống. Phải phát biểu giới hạn theo đúng dạng đó. Nói "sống được qua ảnh chụp màn hình" và "sống được qua nén JPEG" một cách riêng rẽ là đúng, nhưng vẫn gây hiểu sai về hai phép cộng lại.
+
+#### 4.2.4.4. Một lớp thất bại không nằm ở thuật toán: dịch vụ không được phép kết luận
+
+*Đã hiện thực trong mã nguồn* *Giới hạn đã nhận diện* Ngày 14/09 nhóm phát hiện một lớp thất bại khác hẳn ba nguyên nhân trên, và đáng ghi lại vì nó không xuất hiện trong bất kỳ phép đo thuật toán nào.
+
+Khi người dùng tải lên một tấm ảnh, dịch vụ không biết đó là trang thứ mấy của tài liệu, nên nó thử năm giả thuyết số trang. Nhưng số trang là một thành phần của phép dẫn xuất có khoá, nên đúng một giả thuyết có thể giải mã được. Đo trên cả ảnh sạch lẫn ảnh chụp màn hình, kết quả giống nhau: chỉ số trang đúng cho ra `decoded`, bốn số còn lại cho ra `insufficient_sync_evidence` với 0 phiếu.
+
+Trong khi đó, quy tắc chống quy kết nhầm của dịch vụ đòi ít nhất hai kết quả giải mã khớp nhau mới được công bố danh tính. Một tấm ảnh chỉ là một trang, nên chỉ sinh được một kết quả, nên không bao giờ vượt được ngưỡng hai. Đường truy vết ảnh vì thế không thể đưa ra kết luận, bất kể thuật toán tốt đến đâu.
+
+Điều này định vị lại mọi con số ở Mục 7.2 và 7.3: chúng được đo bằng cách gọi thẳng bộ giải mã và truyền sẵn số trang, tức một thông tin mà dịch vụ không có khi nhận một tấm ảnh trần. Bảng độ bền đo bằng cách gọi thư viện mô tả thư viện, không mô tả sản phẩm, mỗi khi bên gọi phải tự đoán một tham số mà harness được cho sẵn.
+
+*Số liệu đo thực nghiệm* Nhóm hạ ngưỡng xuống một kết quả sau khi xác định ngưỡng hai không phải là chốt an toàn mà nó trông giống. Đo trên 120 ảnh âm tính, gồm 60 ảnh chưa từng đóng dấu và 60 ảnh đóng dấu bằng khoá khác, kết quả là 0 lần quy kết nhầm.
+
+Phải đọc con số này cho đúng: cả 120 ảnh đều bị chặn ở khâu đồng bộ có khoá, trước khi một từ mã nào được trích. Nghĩa là phép đo chứng minh nội dung sai khoá không bao giờ chạm tới lớp payload, chứ không chứng minh một kết quả giải mã đơn lẻ là đáng tin. Nó cũng cho thấy ngưỡng hai không hề bảo vệ gì trong các ca này, vì khâu hình học đã từ chối chúng từ trước.
+
+Chốt an toàn thật nằm ở chỗ khác và đã có sẵn: danh tính giải mã được phải tra ra một hồ sơ cấp phát có thật trong cùng tổ chức, nếu không hệ thống tự hạ xuống mức bằng chứng một phần. Một kết quả giả mạo vì thế phải sinh ra một định danh 128 bit trùng với một bản ghi đang tồn tại, sau khi đã vượt qua mã sửa lỗi, chuỗi nhận dạng, byte phiên bản và mã kiểm CRC.
+
+#### 4.2.4.5. Trạng thái hệ thống đang vận hành sau khi sửa
+
+*Đang vận hành trên hệ thống thật* Tính tới 14/09/2026, trên `https://splitbind.qivarn.id.vn`:
+
+- Cấp phát nhận PDF, PNG và JPEG. Đầu vào là ảnh thì kết quả trả về luôn là PNG, vì mã hoá lại bằng JPEG sẽ phá chính dấu chìm vừa nhúng. Ảnh giữ nguyên kích thước gốc, không chèn viền, không kéo méo.
+- Xác minh nhận PDF, PNG và JPEG, kể cả ảnh chụp màn hình có viền.
+- Phép kiểm cuối chạy bằng khoá thật trong container đang phục vụ: một ảnh JPEG 1400 x 900 đi qua đúng hàm cấp phát của hệ thống, rồi đem kết quả qua đúng hàm xác minh, cho ra `decoded` và đúng mã hồ sơ.
+
+*Giới hạn đã nhận diện* Mọi kết quả truy vết vẫn mang nhãn giới hạn `fingerprint.recall_below_release_gate` do chính hệ thống gắn, nghĩa là độ thu hồi chưa đạt ngưỡng phát hành mà nhóm tự đặt. Nhóm giữ nguyên nhãn này thay vì gỡ đi, vì nó đúng.
+
+#### 4.2.4.6. Phần nào của Mục 7.4 bị hiệu chỉnh
+
+*Giới hạn đã nhận diện* Mục 7.4.3 kết luận "trang văn bản là vật mang gần như tệ nhất có thể cho thiết kế này" và Mục 7.4.4 đề nghị đổi vật mang hoặc miền nhúng trước tiên. Đề nghị đó không còn đứng vững:
+
+- Vật mang đang dùng khôi phục 99,7 phần trăm số bit ở đúng tỉ lệ mà dây chuyền trả về rỗng (Mục 7.5.1). Kênh truyền không hỏng.
+- Vật mang thay thế theo hướng được đề nghị đo kém hơn ở mọi tỉ lệ (Mục 7.5.1).
+- Nguyên nhân thật nằm ở kế toán ký hiệu xoá của bên nhận (Mục 7.5.2), và sửa nó khôi phục được cả JPEG q50 lẫn ảnh chụp màn hình mà không đụng tới vật mang.
+
+Phần vẫn đúng của Mục 7.4: yêu cầu đo trên corpus trang văn bản render từ PDF thật thay vì gradient hay hình vector. Đó là một yêu cầu về phương pháp đánh giá, độc lập với việc vật mang nào được chọn, và nó vẫn là điều kiện nghiệm thu cho mọi cổng phát hành về sau.
+
+**Bài học phương pháp.** Ba giả thuyết đầu đều nói về kênh truyền, và kênh truyền không hỏng. Phép đo kết thúc cuộc điều tra chỉ thêm đúng một cột: tỉ lệ lỗi bit đặt cạnh số ký hiệu bị khai xoá. So sánh cái đã khôi phục được với cái lẽ ra phải khôi phục được, thay vì chỉ xem việc giải mã thành công hay thất bại, là thứ tách được "dữ liệu không tới nơi" khỏi "dữ liệu tới nơi rồi bị vứt đi". Nên in cả hai vế của phân biệt đó từ sớm.
+
 ## 4.3. Đề xuất kiến trúc V4: chẩn đoán nguyên nhân gốc
 
 
@@ -840,7 +938,11 @@ Báo cáo đã hoàn thành bốn nội dung được giao. Về lý thuyết, n
 
 Từ đó nhóm phân tách được ba lớp thất bại vốn bị gộp chung dưới nhãn thủy vân không đủ bền: không tạo được ứng viên hình học, tạo ứng viên sai, và ứng viên đúng nhưng vật mang đã chết. Chỉ lớp thứ ba mới thực sự là vấn đề của thủy vân.
 
-Về các giới hạn đã nhận diện, phân hệ thủy vân bền vững chưa đạt cổng phát hành và được giữ ở tầng nghiên cứu; phiên bản vận hành chỉ kích hoạt xác thực toàn vẹn tệp chính xác. Dưới tỉ lệ co giãn khoảng 0.45 thì payload không còn khôi phục được kể cả khi hình học chính xác. Định vị can thiệp đạt IoU tổng hợp khoảng 0.09 do cơ chế fail-safe kích hoạt trên phần lớn kịch bản có diện tích can thiệp lớn. Và quan trọng nhất: không kết quả nào trong báo cáo chứng minh danh tính người làm rò rỉ, chỉnh sửa hay phát tán tài liệu; thủy vân và chữ ký số cung cấp tín hiệu kỹ thuật phục vụ điều tra, không phải kết luận pháp lý về hành vi của một cá nhân.
+Điều tra tiếp trong hai ngày cuối tìm ra một nguyên nhân gốc thứ ba, và nó buộc nhóm rút lại một phần chẩn đoán của chính mình. Lớp thất bại thứ ba hoá ra không phải vật mang chết: bộ giải mã đo độ tin cậy ở mức bit nhưng khai ký hiệu bị xoá ở mức byte, nên một bit yếu làm cả tám bit cùng byte bị khai xoá, và số ký hiệu xoá vượt quá mức mã Reed-Solomon sửa được. Hệ thống từ chối đúng những từ mã mà nó đã khôi phục ở tỉ lệ lỗi bit bằng 0,000. Một vật mang thay thế được cài đặt để kiểm chứng giả thuyết vật mang đã đo kém hơn ở mọi tỉ lệ và bị loại bỏ. Sửa kế toán ký hiệu xoá khôi phục được nén JPEG q50, thu nhỏ tới 0.375 và cả ca ảnh chụp màn hình có viền, mà không đụng tới khâu nhúng và không phải cấp phát lại tài liệu cũ. Chi tiết và bảng số liệu ở Mục 7.5.
+
+Nhóm cũng ghi nhận một lớp thất bại nằm ngoài thuật toán: dịch vụ đòi hai kết quả giải mã khớp nhau mới công bố danh tính, trong khi số trang là thành phần của phép dẫn xuất có khoá nên một tấm ảnh chỉ sinh được đúng một kết quả. Đường truy vết ảnh vì thế không thể kết luận dù thuật toán hoạt động đúng. Điều này định vị lại mọi bảng độ bền trong báo cáo: chúng được đo bằng cách gọi thẳng bộ giải mã và truyền sẵn số trang, tức mô tả thư viện chứ chưa mô tả sản phẩm.
+
+Về các giới hạn đã nhận diện, phân hệ thủy vân đã được bật trên hệ thống vận hành và mọi kết quả truy vết vẫn mang nhãn độ thu hồi chưa đạt cổng phát hành do chính hệ thống gắn. Ranh giới còn lại là tổn thất chồng nhau chứ không phải một phép biến đổi đơn lẻ: ảnh chụp màn hình cộng nén JPEG q60 thất bại trong khi từng phép một đều sống. Cắt ảnh quá nửa và xoay vẫn chưa giải được ở đây lẫn ở mọi công trình mã nguồn mở đã đối chiếu. Định vị can thiệp đạt IoU tổng hợp khoảng 0.09 do cơ chế fail-safe kích hoạt trên phần lớn kịch bản có diện tích can thiệp lớn. Và quan trọng nhất: không kết quả nào trong báo cáo chứng minh danh tính người làm rò rỉ, chỉnh sửa hay phát tán tài liệu; thủy vân và chữ ký số cung cấp tín hiệu kỹ thuật phục vụ điều tra, không phải kết luận pháp lý về hành vi của một cá nhân.
 
 Hướng phát triển rút ra trực tiếp từ chẩn đoán: chuẩn hoá khung ảnh trước khi giải mã, ước lượng tỉ lệ cắt thay vì liệt kê một giá trị cứng, cho phép hai trục co giãn độc lập, và cuối cùng mới là chọn vật mang theo nội dung. Xa hơn, bước lượng tử thích nghi theo mô hình thị giác người và các kiến trúc học sâu là lối đi cho lớp thất bại thứ ba.
 ```{=openxml}
