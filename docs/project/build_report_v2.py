@@ -11,7 +11,7 @@ SOURCE = HERE / "capstone-knowledge-base.md"
 REFERENCE = HERE / "reference-report.docx"
 OUT_MD = HERE / "Nhom9_TruyVetToanVenVanBan.md"
 OUT_DOCX = HERE / "Nhom9_TruyVetToanVenVanBan.docx"
-ASSETS = "report-assets"
+ASSETS = "report-assets/figures"
 
 CHAPTERS = [
     ("CƠ SỞ LÝ THUYẾT KỸ THUẬT DIGITAL WATERMARKING", [(2, None)]),
@@ -26,16 +26,16 @@ CHAPTERS = [
 ]
 
 FIGURES = [
-    ("ui-cap-phat.png", "Giao diện cấp phát tài liệu trên hệ thống đang vận hành"),
-    ("ui-xac-minh-khop.png",
+    ("ui-issuance-result.png", "Giao diện cấp phát tài liệu trên hệ thống đang vận hành"),
+    ("ui-verification-match.png",
      "Kết quả xác minh khi tệp khớp bản cấp phát: mã SHA-256 trùng khớp và chữ ký hồ sơ hợp lệ"),
-    ("ui-xac-minh-khong-khop.png",
+    ("ui-verification-no-match.png",
      "Kết quả xác minh khi tệp đã bị chỉnh sửa: hệ thống báo không khớp và không quy kết hành vi cho bất kỳ ai"),
-    ("bieu-do-v1-v3.png",
+    ("chart-v1-vs-v3.png",
      "Tỉ lệ giải mã của thế hệ V1 và V3 trên cùng hợp đồng corpus, cùng định nghĩa cổng"),
-    ("bieu-do-phong-bi-tan-cong.png",
+    ("chart-attack-envelope.png",
      "Tỉ lệ truy vết của 13 phép biến đổi, phân theo ba lớp nguyên nhân thất bại"),
-    ("bieu-do-boc-vien.png",
+    ("chart-frame-restore.png",
      "Hiệu quả của bước bóc viền letterbox trước khi giải mã, đo trên 12 trang dương tính"),
 ]
 

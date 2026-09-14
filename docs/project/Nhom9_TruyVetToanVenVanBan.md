@@ -919,27 +919,27 @@ Chấm điểm tile ứng viên theo kết cấu trước khi chọn, vẫn tấ
 
 Các hình dưới đây được chụp từ hệ thống đang vận hành và dựng từ dữ liệu đo đã trình bày ở các mục trên.
 
-![](report-assets/ui-cap-phat.png)
+![](report-assets/figures/ui-issuance-result.png)
 
 **Hình 4.1:** Giao diện cấp phát tài liệu trên hệ thống đang vận hành
 
-![](report-assets/ui-xac-minh-khop.png)
+![](report-assets/figures/ui-verification-match.png)
 
 **Hình 4.2:** Kết quả xác minh khi tệp khớp bản cấp phát: mã SHA-256 trùng khớp và chữ ký hồ sơ hợp lệ
 
-![](report-assets/ui-xac-minh-khong-khop.png)
+![](report-assets/figures/ui-verification-no-match.png)
 
 **Hình 4.3:** Kết quả xác minh khi tệp đã bị chỉnh sửa: hệ thống báo không khớp và không quy kết hành vi cho bất kỳ ai
 
-![](report-assets/bieu-do-v1-v3.png)
+![](report-assets/figures/chart-v1-vs-v3.png)
 
 **Hình 4.4:** Tỉ lệ giải mã của thế hệ V1 và V3 trên cùng hợp đồng corpus, cùng định nghĩa cổng
 
-![](report-assets/bieu-do-phong-bi-tan-cong.png)
+![](report-assets/figures/chart-attack-envelope.png)
 
 **Hình 4.5:** Tỉ lệ truy vết của 13 phép biến đổi, phân theo ba lớp nguyên nhân thất bại
 
-![](report-assets/bieu-do-boc-vien.png)
+![](report-assets/figures/chart-frame-restore.png)
 
 **Hình 4.6:** Hiệu quả của bước bóc viền letterbox trước khi giải mã, đo trên 12 trang dương tính
 

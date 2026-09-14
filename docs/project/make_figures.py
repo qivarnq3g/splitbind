@@ -6,7 +6,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 
-OUT = Path(__file__).resolve().parent / "report-assets"
+OUT = Path(__file__).resolve().parent / "report-assets" / "figures"
 OUT.mkdir(exist_ok=True)
 
 BLUE, ORANGE, AQUA = "#2a78d6", "#eb6834", "#1baf7a"
@@ -73,7 +73,7 @@ def figure_v1_v3() -> None:
     ax.set_axisbelow(True)
     _despine(ax)
     ax.legend(frameon=False, loc="upper left", bbox_to_anchor=(0, 1.02), ncol=2)
-    fig.savefig(OUT / "bieu-do-v1-v3.png")
+    fig.savefig(OUT / "chart-v1-vs-v3.png")
     plt.close(fig)
 
 def figure_envelope() -> None:
@@ -115,7 +115,7 @@ def figure_envelope() -> None:
     ax.legend(handles=handles, frameon=False, loc="upper center",
               bbox_to_anchor=(0.5, -0.16), fontsize=9.5, ncol=1,
               handlelength=1.6, handleheight=0.9, labelspacing=0.45)
-    fig.savefig(OUT / "bieu-do-phong-bi-tan-cong.png")
+    fig.savefig(OUT / "chart-attack-envelope.png")
     plt.close(fig)
 
 def figure_letterbox() -> None:
@@ -149,13 +149,13 @@ def figure_letterbox() -> None:
     ax.legend(frameon=False, loc="upper center", bbox_to_anchor=(0.5, -0.38),
               ncol=2, fontsize=9.5, handlelength=1.6, handleheight=0.9,
               columnspacing=2.0)
-    fig.savefig(OUT / "bieu-do-boc-vien.png")
+    fig.savefig(OUT / "chart-frame-restore.png")
     plt.close(fig)
 
 if __name__ == "__main__":
     figure_v1_v3()
     figure_envelope()
     figure_letterbox()
-    for name in ("bieu-do-v1-v3", "bieu-do-phong-bi-tan-cong", "bieu-do-boc-vien"):
+    for name in ("chart-v1-vs-v3", "chart-attack-envelope", "chart-frame-restore"):
         path = OUT / f"{name}.png"
         print(f"{path.name:34} {path.stat().st_size / 1024:7.1f} KB")
