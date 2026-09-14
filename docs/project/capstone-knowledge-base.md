@@ -700,7 +700,8 @@ Chốt an toàn thật nằm ở chỗ khác và đã có sẵn: danh tính gi�
 
 `[Production]` Tính tới 14/09/2026, trên `https://splitbind.qivarn.id.vn`:
 
-- Cấp phát nhận PDF, PNG và JPEG. Đầu vào là ảnh thì nội dung trả về luôn được mã hoá thành PNG, vì nén lại bằng JPEG sẽ phá chính thủy vân vừa nhúng. Ảnh giữ nguyên kích thước gốc, không chèn viền, không kéo méo.
+- Cấp phát nhận PDF, PNG và JPEG. Đầu vào là ảnh thì nội dung trả về luôn được mã hoá thành PNG, vì nén lại bằng JPEG sẽ phá chính thủy vân vừa nhúng. Tệp nhận được giữ đúng kích thước gốc và không có viền chèn thêm.
+- Cần nói rõ một chi tiết mà câu trên dễ gây hiểu nhầm: bên trong đường ống, ảnh không hề được giữ nguyên hình dạng. Hàm `_canonicalize_page` kéo mọi đầu vào về đúng một khung cố định 1152 x 2304 điểm ảnh, không giữ tỉ lệ khung hình (`DEMO_CANONICAL_CANVAS` trong `services/api/splitbind/demo/models.py: L20`). Thủy vân được nhúng trong khung méo đó, rồi ảnh mới được kéo ngược về kích thước ban đầu. Người dùng không thấy sự méo vì nó bị hoàn tác, nhưng tín hiệu thì đã đi qua hai lần lấy mẫu lại.
 - Tệp cấp phát cho tài liệu ảnh được lưu và tải về đúng đuôi `.png`, tên tệp là dạng ASCII đọc được suy từ tên tài liệu gốc. Trước bản `integrity-v0.2.1` đuôi này bị cố định là `.pdf` ở hai nơi cùng lúc nên hai lỗi che nhau và chỉ lộ khi thử trên hệ thống thật.
 - Xác minh nhận PDF, PNG và JPEG, kể cả ảnh chụp màn hình có viền. Nhận được tệp không đồng nghĩa với truy được nguồn; ranh giới đo được nằm ở bảng dưới đây.
 - Phép kiểm cuối chạy bằng khoá thật trong container đang phục vụ: một ảnh JPEG 1400 x 900 đi qua đúng hàm cấp phát của hệ thống, rồi đem kết quả qua đúng hàm xác minh, cho ra `decoded` và đúng mã hồ sơ.
@@ -728,7 +729,17 @@ Vậy ranh giới đo được của bản đang chạy hẹp hơn nhiều so v�
 
 Nói cách khác, hệ thống đang chạy chưa bao giờ chứa thuật toán đạt 9/12. Chính thế hệ V2 đang chạy, khi được đo trong phòng thí nghiệm với mọi điều kiện thuận lợi, cũng chưa bao giờ vượt 3/12 trước JPEG-70 ở bất kỳ mức bước lượng tử nào. Bốn kết quả âm tính ở đây vì thế đúng như dự đoán, không phải một sự cố.
 
-`[Limitation]` Có một yếu tố thứ hai cộng thêm vào. Benchmark gọi thẳng bộ giải mã, truyền sẵn số trang và làm việc trên khung ảnh chuẩn tắc, còn dịch vụ nhận một tấm ảnh trần thì không có hai thứ đó và phải tự đoán hình học. Chính Mục 4.2.4.4 đã nêu trước điều này khi nói bảng độ bền mô tả thư viện chứ chưa mô tả sản phẩm; năm phép thử ở đây là phần kiểm chứng thực nghiệm cho nhận định đó.
+`[Implemented]` Có một yếu tố thứ hai, và nó giải thích vì sao riêng đường ảnh lại mong manh đến vậy. Đọc mã, `_canonicalize_page` kéo mọi ảnh về đúng một khung cố định 1152 x 2304 điểm ảnh mà không giữ tỉ lệ khung hình. Khung này vốn được chọn cho trang tài liệu dọc, nên một ảnh ngang bị biến dạng rất nặng:
+
+| Đầu vào | Tỉ lệ rộng trên cao | Hệ số kéo dọc so với ngang |
+|---|---:|---:|
+| Ảnh nền phẳng 1400 x 900 | 1.556 | 3.11 lần |
+| Trang chữ dày 1400 x 1980 | 0.707 | 1.41 lần |
+| Trang render từ PDF 1344 x 1901 | 0.707 | 1.41 lần |
+
+Đường đi đầy đủ của một bản cấp phát ảnh vì thế là: kéo về khung chuẩn, nhúng thủy vân trong khung đã méo, rồi kéo ngược về kích thước gốc. Lúc xác minh, ảnh nộp lên lại bị kéo về khung chuẩn một lần nữa trước khi giải mã. Một bản sao giống hệt từng điểm ảnh đi qua đúng chuỗi phép biến đổi ấy nên khớp lại được, và đó chính là lý do phép thử dương tính duy nhất thành công. Nhưng nếu người nhận chỉ cần thu nhỏ hay nén thêm một lần, phép lấy mẫu lại thứ ba chồng lên một tín hiệu vốn đã qua hai lần biến dạng.
+
+`[Limitation]` Có một yếu tố thứ ba cộng thêm vào. Benchmark gọi thẳng bộ giải mã, truyền sẵn số trang và làm việc trên khung ảnh chuẩn tắc, còn dịch vụ nhận một tấm ảnh trần thì không có hai thứ đó và phải tự đoán hình học. Chính Mục 4.2.4.4 đã nêu trước điều này khi nói bảng độ bền mô tả thư viện chứ chưa mô tả sản phẩm; năm phép thử ở đây là phần kiểm chứng thực nghiệm cho nhận định đó.
 
 `[Limitation]` Vì sao không triển khai thẳng V3 lên hệ thống đang chạy: V3 không vượt qua cổng phát hành 0.95 mà nhóm tự đặt, hồ sơ tham số của nó mang trạng thái `profile_promoted: False` và danh sách ứng viên đạt chuẩn rỗng. Đưa lên một thuật toán chưa qua cổng chỉ vì nó cho số đẹp hơn là đúng thứ kỷ luật kỹ thuật mà báo cáo này phản đối ở mọi mục khác. Đây là một đánh đổi có chủ đích, và cái giá của nó là năng lực truy vết thực tế thấp hơn con số benchmark.
 
