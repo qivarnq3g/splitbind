@@ -21,7 +21,7 @@ vận hành, dựng từ commit `52751f2`. Cửa sổ trình duyệt 1436x840.
 
 Ảnh cuối là bằng chứng cho bản vá đuôi tệp: trước `integrity-v0.2.1`, chỗ này là `.pdf`.
 
-## Năm phép thử truy vết
+## Sáu phép thử truy vết
 
 Cấp phát trên hệ thống thật, tải bản cấp phát về, biến đổi rồi nộp lại qua đúng biểu mẫu
 xác minh. Ba vật mang khác nhau để không kết luận dựa trên một loại ảnh duy nhất.
@@ -32,15 +32,17 @@ xác minh. Ba vật mang khác nhau để không kết luận dựa trên một 
 | `not-traced-jpeg-q70.jpg` | Ảnh nền phẳng | Nén JPEG 70 | Không truy được |
 | `not-traced-resize-075-jpeg-q70.jpg` | Ảnh nền phẳng | Thu nhỏ 0.75 rồi nén JPEG 70 | Không truy được |
 | `not-traced-textured-jpeg-q70.jpg` | Trang chữ dày, nhiều kết cấu | Nén JPEG 70 | Không truy được |
+| `not-traced-resize-075-lossless.jpg` | Trang chữ dày, nhiều kết cấu | Thu nhỏ 0.75, không nén | Không truy được |
 | `not-traced-pdf-page-jpeg-q70.jpg` | Trang render từ PDF đã cấp phát | Nén JPEG 70 | Không truy được |
 
 Ảnh đầu là ảnh quan trọng nhất của cả bộ và được đưa vào báo cáo thành Hình 4.4, bản đầy
 đủ nằm ở `../../figures/ui-verification-traced.png`.
 
-Bốn ảnh còn lại là kết quả âm tính và được giữ lại vì chúng bác bỏ chính giả thuyết đầu
+Năm ảnh còn lại là kết quả âm tính và được giữ lại vì chúng bác bỏ chính giả thuyết đầu
 tiên của nhóm. Ban đầu nhóm cho rằng ảnh mẫu quá phẳng nên ít chỗ giấu tín hiệu; hai phép
-thử sau dùng vật mang nhiều kết cấu hơn hẳn và vẫn trượt. Kết luận đúng là trên đường đi
-thật của sản phẩm, nén JPEG 70 làm mất khả năng truy vết ở cả ba vật mang.
+thử sau dùng vật mang nhiều kết cấu hơn hẳn và vẫn trượt. Giả thuyết thứ hai là chỉ nén mới phá tín hiệu, còn thu nhỏ thuần tuý thì phục hồi khung
+ảnh sẽ cứu được; hàng thu nhỏ không nén bác bỏ nốt. Kết luận đúng là trên đường đi thật
+của sản phẩm, mọi phép biến đổi làm đổi điểm ảnh đều khiến hệ thống mất khả năng truy vết.
 
 ## Chi tiết kỹ thuật trên trang kết quả
 
