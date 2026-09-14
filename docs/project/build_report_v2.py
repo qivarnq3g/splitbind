@@ -104,6 +104,9 @@ TERMS = [
     ("harness", "Bộ khung thực nghiệm: mã và cấu hình dùng để chạy hàng loạt phép đo lặp lại được, tách biệt với mã sản phẩm."),
     ("profile", "Hồ sơ tham số đã khoá của một thế hệ thuật toán: kích thước ô, số lần lặp bit, bước lượng tử và các hằng số kèm theo."),
     ("Reed-Solomon", "Mã sửa lỗi khối trên trường hữu hạn, cho phép khôi phục dữ liệu khi một số ký hiệu bị sai hoặc bị khai là mất."),
+    ("artifact", "Tệp kết quả do một lần chạy thực nghiệm sinh ra và được lưu lại để kiểm chứng về sau."),
+    ("benchmark", "Bộ phép đo chuẩn hoá chạy trên cùng một corpus, để các lần chạy khác nhau so sánh được với nhau."),
+    ("production", "Môi trường máy chủ đang phục vụ người dùng thật, phân biệt với môi trường thử nghiệm. Giữ nguyên tiếng Anh theo cách gọi phổ biến trong ngành phần mềm."),
 ]
 
 PAGEBREAK = (

@@ -16,7 +16,9 @@ lang: vi
 
 | Từ viết tắt / thuật ngữ | Nghĩa đầy đủ |
 |---|---|
+| **artifact** | Tệp kết quả do một lần chạy thực nghiệm sinh ra và được lưu lại để kiểm chứng về sau. |
 | **BCH** | Bose-Chaudhuri-Hocquenghem, một họ mã sửa lỗi khối |
+| **benchmark** | Bộ phép đo chuẩn hoá chạy trên cùng một corpus, để các lần chạy khác nhau so sánh được với nhau. |
 | **BER** | Bit Error Rate, tỉ lệ lỗi bit |
 | **BTL** | Bài tập lớn |
 | **canvas** | Khung ảnh chuẩn tắc mà mọi trang tài liệu được đưa về trước khi nhúng |
@@ -37,6 +39,7 @@ lang: vi
 | **ORB** | Oriented FAST and Rotated BRIEF |
 | **payload** | Chuỗi bit mang thông tin định danh được nhúng vào ảnh |
 | **pre-gate** | Vòng sàng lọc chạy trước cổng phát hành, dùng để loại sớm các bộ tham số kém |
+| **production** | Môi trường máy chủ đang phục vụ người dùng thật, phân biệt với môi trường thử nghiệm. Giữ nguyên tiếng Anh theo cách gọi phổ biến trong ngành phần mềm. |
 | **profile** | Hồ sơ tham số đã khoá của một thế hệ thuật toán: kích thước ô, số lần lặp bit, bước lượng tử và các hằng số kèm theo. |
 | **PSNR** | Peak Signal-to-Noise Ratio, tỉ số tín hiệu trên nhiễu đỉnh |
 | **QIM** | Quantization Index Modulation, điều chế chỉ số lượng tử |
@@ -206,7 +209,7 @@ Nhóm 9 đã tiếp cận và triển khai thực nghiệm cả hai bài toán �
   * `CRC-32`: Chỉ đóng vai trò phát hiện lỗi ngẫu nhiên trong kênh truyền và giải mã tín hiệu (transmission error detection), giúp bộ giải mã phát hiện các trường hợp sai lệch bit; CRC-32 không dùng khóa và hoàn toàn không cung cấp tính toàn vẹn mật mã hay khả năng chống giả mạo.
   * `HMAC`: Cung cấp cơ chế xác thực nguồn gốc và toàn vẹn có khóa (keyed authentication / integrity) cho các thẻ xác thực trong thuật toán Semi-fragile.
   * `Chữ ký số Ed25519 trên Manifest`: Cung cấp tính toàn vẹn mật mã, xác thực nguồn gốc phát hành và hỗ trợ đặc tính chống chối bỏ kỹ thuật (non-repudiation) khi danh tính và vòng đời khóa ký được quản lý chặt chẽ theo chính sách tin cậy phù hợp. (Lưu ý: Khóa bí mật nhúng thủy vân không tạo ra đặc tính chống chối bỏ).
-* **Mã sửa lỗi Reed-Solomon (ECC):** 23 byte thông điệp kết hợp với 16 byte kiểm tra chẵn lẻ Reed-Solomon trên trường $GF(256)$ tạo thành từ mã (codeword) 39 byte, cho phép tự sửa lỗi tối đa 8 ký hiệu byte bị suy biến trong quá trình giải mã.
+* **Mã sửa lỗi Reed-Solomon (ECC):** 23 byte thông điệp kết hợp với 16 ký hiệu kiểm tra Reed-Solomon trên trường $GF(256)$ tạo thành một từ mã (codeword) dài 39 byte, cho phép tự sửa tối đa 8 ký hiệu byte bị sai trong quá trình giải mã. Thuật ngữ "ký hiệu kiểm tra" ở đây là phần dư mà bộ mã hoá thêm vào để bên nhận khôi phục được dữ liệu, không phải phép kiểm tra chẵn lẻ một bit.
 * *Kiểm chứng thực tế:* Bộ test suite `test_payload.py` vượt qua 10/10 ca kiểm thử về đóng gói, mã hóa và phục hồi nguyên vẹn `issuance_id`.
 
 ### 2.1.2. Pipeline nhúng và trích xuất thủy vân DWT-DCT-QIM
@@ -714,7 +717,7 @@ Hai ngày 13 và 14/09/2026 nhóm tiếp tục điều tra kết quả âm tính
 
 *Số liệu đo thực nghiệm* Mục 7.4.3 kết luận rằng vật mang là nút thắt, và đề nghị đổi miền nhúng trước tiên. Để kiểm chứng, nhóm cài đặt một vật mang thứ hai mô phỏng đúng cách `guofei9987/blind_watermark` làm: lượng tử hoá giá trị kỳ dị lớn nhất của mỗi khối, thay vì lượng tử hoá hiệu hai hệ số DCT như thiết kế đang dùng. Hai vật mang dùng chung cách chọn vị trí, cách lặp và cách kế toán ký hiệu bị xoá, nên chỉ khác đúng đại lượng được lượng tử hoá.
 
-Đo trên cùng một ô 512 px kiểu trang văn bản, cùng một từ mã, độ chính xác bit sau một vòng thu nhỏ rồi phóng lại:
+Đo trên cùng một ô (tile) 512 px kiểu trang văn bản, cùng một từ mã, độ chính xác bit sau một vòng thu nhỏ rồi phóng lại. Đây là kích thước ô của bộ khung thực nghiệm V3; hồ sơ tham số đang chạy trên dịch vụ dùng ô 384 px, nên con số dưới đây mô tả vật mang chứ không mô tả sản phẩm:
 
 | Vật mang | PSNR | 1.0 | 0.875 | 0.75 | 0.625 | 0.5 | 0.375 | 0.25 |
 |---|---|---|---|---|---|---|---|---|
@@ -744,7 +747,7 @@ Cách sửa nằm ở bên nhận, không phải ở vật mang. Hệ thống x�
 
 #### 4.2.4.3. Ca ảnh chụp màn hình: cần đủ cả hai mảnh ghép
 
-*Số liệu đo thực nghiệm* Ảnh chụp màn hình đặt một trang 1536 x 3072 vào màn hình 1920 x 1080, tức đúng một phép thu nhỏ 0.625 kèm hai dải viền tối. Đó là lý do nó nằm đúng bên thua của vách xoá nói trên. Cùng một trang, cùng khoá, cùng profile, sau khi sửa ngân sách xoá:
+*Số liệu đo thực nghiệm* Ảnh chụp màn hình đặt một trang 1536 x 3072 pixel vào màn hình 1920 x 1080, tức đúng một phép thu nhỏ 0.625 kèm hai dải viền tối. Kích thước 1536 x 3072 là khung chuẩn của bộ khung thực nghiệm (`research/python/scripts/run_v5_envelope.py`), chia vừa đúng 3 x 6 = 18 ô; khung chuẩn của dịch vụ đang chạy là 1152 x 2304. Đó là lý do nó nằm đúng bên thua của vách xoá nói trên. Cùng một trang, cùng khoá, cùng profile, sau khi sửa ngân sách xoá:
 
 | Trường hợp | Kết quả |
 |---|---|
@@ -1010,6 +1013,11 @@ Bảng đối chiếu toàn diện giữa các tuyên bố kỹ thuật trong t�
 | Chuẩn hóa khung ảnh khôi phục nguyên vẹn payload sau thu nhỏ 0.75x, 0.50x và 0.35x | *Số liệu đo thực nghiệm* | Thí nghiệm đối chứng trên trang render 1190x1684 của chính hệ thống, bộ mã hóa thủy vân [19], payload 64 bit; kết quả ở Bảng 4.7 | Đã kiểm chứng: 0.453, 0.422 và 0.438 khi giải trực tiếp; 1.000 sau khi phục hồi khung. |
 | Bước lượng tử không phải đòn bẩy: sống sót JPEG không đơn điệu theo cường độ nhúng | *Giới hạn đã nhận diện* | Quét `d1` từ 36 đến 160 trên cùng vật mang; kết quả ở Bảng 4.8 | Đã kiểm chứng: PSNR giảm 13 dB trên toàn dải mà JPEG-70 dao động 0.422 đến 0.984 không theo chiều. |
 | Nén, thu nhỏ và chụp màn hình đã được giải trong công trình công khai; cắt một nửa và xoay thì chưa | *Số liệu đo thực nghiệm* (bên thứ ba) | Tệp `results/results.json` công bố kèm [16]; trích ở Bảng 4.6 | Đã đọc lại từ tệp công bố, không tự tái lập phép đo. |
+| Vật mang kiểu blind_watermark đo kém hơn vật mang đang dùng ở mọi tỉ lệ | *Số liệu đo thực nghiệm* | Bảng Mục 7.5.1; vật mang đang dùng cài trong `research/python/src/splitbind_ref/fingerprint_v2_codec.py` | Đã kiểm chứng: 7 tỉ lệ, vật mang thay thế thua ở cả 7; module thử nghiệm đã gỡ khỏi kho sau khi đo. |
+| Nguyên nhân gốc thứ ba: bên nhận khai nhiều ký hiệu bị xoá hơn mức mã sửa được | *Số liệu đo thực nghiệm* và *Đã hiện thực trong mã nguồn* | Nhật ký đo in kèm ở Mục 7.5.2; ngân sách xoá cài trong `research/python/src/splitbind_ref/fingerprint_v2_codec.py`; hợp đồng mã ở `contracts/algorithm/payload-profile.v1.json` | Đã kiểm chứng: tỉ lệ lỗi bit 0,000 đi kèm 21-24 ký hiệu bị khai xoá, vượt ngưỡng 16 mà mã chịu được. |
+| Bóc viền đưa ảnh về khung chuẩn trước khi giải mã | *Đã hiện thực trong mã nguồn* và *Đang vận hành trên hệ thống thật* | `research/python/src/splitbind_ref/frame_restore.py`; nối vào dịch vụ tại `services/api/splitbind/demo/verification.py` (`_geometry_hypotheses`) | Đã kiểm chứng bằng `services/api/tests/demo/test_screenshot_frame_restore.py`: ảnh chụp màn hình có viền chuyển từ `insufficient_sync_evidence` sang giải mã đúng mã hồ sơ. |
+| Ngưỡng hai kết quả khớp nhau khiến một tấm ảnh không bao giờ được quy kết | *Đã hiện thực trong mã nguồn* và *Giới hạn đã nhận diện* | `_aggregate_unknown_page_decisions` trong `services/api/splitbind/demo/verification.py` | Đã kiểm chứng: số trang nằm trong phép dẫn xuất có khoá nên đúng một giả thuyết giải mã được; 120 ảnh âm tính cho 0 lần quy kết nhầm, tất cả dừng ở khâu đồng bộ có khoá. |
+| Cấp phát ảnh: đầu vào PNG hoặc JPEG, đầu ra luôn PNG, giữ nguyên kích thước gốc | *Đã hiện thực trong mã nguồn* và *Đang vận hành trên hệ thống thật* | `_build_issuance_artifact` trong `services/api/splitbind/demo/issuance.py`; đuôi tệp kết quả suy ra tại `services/api/splitbind/demo/worker.py` | Đã kiểm chứng bằng `services/api/tests/demo/test_image_issuance.py`: ảnh JPEG 1400 x 900 cấp phát xong truy ngược lại đúng mã hồ sơ, kích thước không đổi. |
 
 ---
 
