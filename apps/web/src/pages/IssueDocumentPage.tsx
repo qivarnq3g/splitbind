@@ -139,6 +139,8 @@ export function IssueDocumentPage() {
                     : `PDF · tối đa ${MAX_PDF_LABEL} · PDF tối đa ${MAX_PDF_PAGES} trang`)}
               </p>
             </div>
+            <fieldset className="field-group">
+              <legend>Người nhận</legend>
             <div className="field">
               <label htmlFor="recipient-email">Email người nhận</label>
               <input
@@ -174,6 +176,7 @@ export function IssueDocumentPage() {
                 Không bắt buộc. Dùng để dễ nhận biết người nhận trong hồ sơ.
               </p>
             </div>
+            </fieldset>
             <WorkflowSteps stage={stage} />
             {error ? (
               <p className="form-error" role="alert">

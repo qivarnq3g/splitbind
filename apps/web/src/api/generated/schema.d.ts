@@ -440,6 +440,20 @@ export interface components {
             username: string;
             password: string;
         };
+        ManifestAttestation: {
+            /** @description SHA-256 the issuer signed for this issuance, read from the public manifest. */
+            expected_sha256: string;
+            /** @description SHA-256 of the exact canonical manifest bytes that were signed. */
+            manifest_sha256: string;
+            /** @description Issuance time as stated inside the signed payload. */
+            issued_at?: string;
+            /** @description Identifier of the key whose signature covers the manifest. */
+            signing_key_id: string;
+            /** @description Signature algorithm named in the manifest envelope. */
+            signing_algorithm?: string;
+            /** @description Integrity algorithm named inside the signed payload. */
+            integrity_algorithm?: string;
+        };
         ManifestPublicKey: {
             key_id: string;
             algorithm: string;
@@ -562,6 +576,8 @@ export interface components {
              */
             matched_issuance_id: string | null;
             evidence: components["schemas"]["VerificationEvidence"];
+            /** @description Public manifest facts behind a match: the signed hash, the digest of the signed bytes, and the key that signed them. Null when no issuance matched. */
+            attestation: components["schemas"]["ManifestAttestation"] | null;
             metrics: components["schemas"]["VerificationMetrics"];
         };
         VerificationCreateRequest: {

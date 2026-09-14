@@ -10,6 +10,14 @@
 /docs/project-context.md
 /docs/superpowers/
 /artifacts/
+# Local research output: regenerable experiment runs, not source. The two
+# directories below are committed evidence for published results, so they stay
+# visible; everything else under reports/ is local.
+/reports/*
+!/reports/fingerprint-v5-envelope-20260911/
+!/reports/letterbox-probe-20260911/
+# Internal working report from a past session, not product documentation.
+/docs/runbooks/frontend-refinement-report.md
 .hallmark/
 .neon
 tmp/

@@ -30,8 +30,11 @@ def capabilities(request):
         ),
     }
     if integrity_mode:
+        fingerprint_enabled = bool(
+            getattr(settings, "SPLITBIND_FINGERPRINT_ENABLED", False)
+        )
         payload.update(
-            hidden_fingerprint_enabled=False,
-            transformed_attribution_available=False,
+            hidden_fingerprint_enabled=fingerprint_enabled,
+            transformed_attribution_available=fingerprint_enabled,
         )
     return Response(payload)

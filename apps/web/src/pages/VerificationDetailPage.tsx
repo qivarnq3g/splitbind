@@ -110,6 +110,9 @@ export function VerificationDetailPage() {
                   </p>
                   <h2>{copy.label}</h2>
                   <p>{copy.inference}</p>
+                  <p className="verdict-next">
+                    {integrity?.next ?? "Kết quả không xác định ai đã chỉnh sửa hoặc phát tán tài liệu."}
+                  </p>
                 </div>
               </section>
               <div className="result-next" data-motion-block>
@@ -117,9 +120,6 @@ export function VerificationDetailPage() {
                   Kiểm tra tệp khác
                   <ArrowRight size={16} aria-hidden="true" />
                 </Link>
-                <p>
-                  {integrity?.next ?? "Kết quả không xác định ai đã chỉnh sửa hoặc phát tán tài liệu."}
-                </p>
               </div>
               <div data-motion-block>
                 <EvidenceSummary
@@ -128,6 +128,7 @@ export function VerificationDetailPage() {
                   showConclusion={false}
                   inputSha256={data.input_sha256}
                   matchedIssuanceId={data.matched_issuance_id}
+                  attestation={data.attestation}
                 />
               </div>
             </>

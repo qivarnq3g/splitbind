@@ -228,11 +228,17 @@ describe("verification browser workflow", () => {
     expect(screen.queryByText(/Bằng chứng sẽ xuất hiện/)).not.toBeInTheDocument();
   });
 
-  function stubCapabilities(algorithmLabel: string | null) {
+  function stubCapabilities(algorithmLabel: string | null, transformedAttribution?: boolean) {
     vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>(async (input) => {
       const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
       if (path === "/api/v1/demo/capabilities") {
-        return json(algorithmLabel === null ? { enabled: false } : { enabled: false, algorithm_label: algorithmLabel });
+        if (algorithmLabel === null) return json({ enabled: false });
+        const payload: Record<string, unknown> = { enabled: false, algorithm_label: algorithmLabel };
+        if (transformedAttribution !== undefined) {
+          payload.hidden_fingerprint_enabled = transformedAttribution;
+          payload.transformed_attribution_available = transformedAttribution;
+        }
+        return json(payload);
       }
       return json(session("verifier"));
     }));
@@ -258,6 +264,23 @@ describe("verification browser workflow", () => {
     await waitFor(() => expect(input.getAttribute("accept")).toMatch(/image\/png/));
     expect(screen.getByText(/PDF, PNG hoặc JPEG/)).toBeVisible();
     expect(screen.queryByText(/Kiểm tra ảnh thuộc đường nhận diện dấu vết/)).not.toBeInTheDocument();
+  });
+
+  it("offers images when the integrity release reports fingerprinting switched on", async () => {
+    stubCapabilities("integrity_release_v1", true);
+    renderApp();
+
+    const input = await screen.findByLabelText("Tệp cần kiểm chứng");
+    await waitFor(() => expect(input.getAttribute("accept")).toMatch(/image\/png/));
+    expect(screen.getByText(/PDF, PNG hoặc JPEG/)).toBeVisible();
+  });
+
+  it("keeps PDF only when the integrity release reports fingerprinting switched off", async () => {
+    stubCapabilities("integrity_release_v1", false);
+    renderApp();
+
+    const input = await screen.findByLabelText("Tệp cần kiểm chứng");
+    await waitFor(() => expect(input).toHaveAttribute("accept", "application/pdf,.pdf"));
   });
 
   it("narrows to PDF when the capability is unknown, rather than guessing wide", async () => {

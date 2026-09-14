@@ -158,6 +158,27 @@ class VerificationMetricsSerializer(serializers.Serializer):
     cleanup_failures = serializers.IntegerField(min_value=0, required=False)
 
 
+class ManifestAttestationSerializer(serializers.Serializer):
+    expected_sha256 = serializers.CharField(
+        help_text="SHA-256 the issuer signed for this issuance, read from the public manifest."
+    )
+    manifest_sha256 = serializers.CharField(
+        help_text="SHA-256 of the exact canonical manifest bytes that were signed."
+    )
+    issued_at = serializers.CharField(
+        help_text="Issuance time as stated inside the signed payload.", required=False
+    )
+    signing_key_id = serializers.CharField(
+        help_text="Identifier of the key whose signature covers the manifest."
+    )
+    signing_algorithm = serializers.CharField(
+        help_text="Signature algorithm named in the manifest envelope.", required=False
+    )
+    integrity_algorithm = serializers.CharField(
+        help_text="Integrity algorithm named inside the signed payload.", required=False
+    )
+
+
 class VerificationSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     job_id = serializers.UUIDField(allow_null=True)
@@ -177,6 +198,13 @@ class VerificationSerializer(serializers.Serializer):
         ),
     )
     evidence = VerificationEvidenceSerializer()
+    attestation = ManifestAttestationSerializer(
+        allow_null=True,
+        help_text=(
+            "Public manifest facts behind a match: the signed hash, the digest of the "
+            "signed bytes, and the key that signed them. Null when no issuance matched."
+        ),
+    )
     metrics = VerificationMetricsSerializer()
 
 

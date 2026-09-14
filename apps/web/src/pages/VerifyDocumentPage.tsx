@@ -31,8 +31,13 @@ export function VerifyDocumentPage() {
     staleTime: 30_000,
     retry: false,
   });
-  const algorithmLabel = capabilities.data?.algorithm_label;
-  const exactOnly = algorithmLabel === undefined || algorithmLabel === "integrity_release_v1";
+  const capability = capabilities.data;
+  const exactOnly =
+    capability === undefined
+      ? true
+      : capability.algorithm_label === "integrity_release_v1"
+        ? capability.transformed_attribution_available !== true
+        : false;
 
   useEffect(() => () => abortRef.current?.abort(), []);
 

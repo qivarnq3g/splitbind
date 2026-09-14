@@ -1,3 +1,5 @@
+import hashlib
+import json
 import re
 
 from django.conf import settings
@@ -180,6 +182,59 @@ def serialize_issuance(record, job=None):
     }
 
 
+ATTESTATION_FIELDS = (
+    "expected_sha256",
+    "manifest_sha256",
+    "issued_at",
+    "signing_key_id",
+    "signing_algorithm",
+    "integrity_algorithm",
+)
+
+
+def manifest_attestation(*, organization_id, issuance_id):
+    if issuance_id is None:
+        return None
+    from splitbind.documents.models import Issuance
+
+    issuance = (
+        Issuance.objects.filter(organization_id=organization_id, pk=issuance_id)
+        .select_related("manifest__signing_key")
+        .first()
+    )
+    manifest = getattr(issuance, "manifest", None) if issuance else None
+    if manifest is None:
+        return None
+    try:
+        payload = json.loads(manifest.public_payload)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    envelope = manifest.public_signature_envelope
+    signing_algorithm = (
+        envelope.get("algorithm") if isinstance(envelope, dict) else None
+    )
+    expected_sha256 = payload.get("output_sha256")
+    if not isinstance(expected_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", expected_sha256):
+        return None
+    projected = {
+        "expected_sha256": expected_sha256,
+        "manifest_sha256": hashlib.sha256(
+            manifest.public_payload.encode("utf-8")
+        ).hexdigest(),
+        "issued_at": payload.get("issued_at"),
+        "signing_key_id": manifest.signing_key.key_id,
+        "signing_algorithm": signing_algorithm,
+        "integrity_algorithm": payload.get("integrity_algorithm"),
+    }
+    return {
+        key: value
+        for key, value in projected.items()
+        if key in ATTESTATION_FIELDS and isinstance(value, str)
+    }
+
+
 def serialize_verification(record, job=None):
     job = job or record.jobs.order_by("created_at").first()
     demo_result = getattr(record, "demo_result", None)
@@ -197,5 +252,9 @@ def serialize_verification(record, job=None):
             else None
         ),
         "evidence": _contract_evidence(record.evidence),
+        "attestation": manifest_attestation(
+            organization_id=record.organization_id,
+            issuance_id=demo_result.recovered_issuance_id if demo_result else None,
+        ),
         "metrics": _contract_metrics(record.metrics),
     }

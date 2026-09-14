@@ -124,3 +124,50 @@ def test_authenticated_capabilities_report_fixed_demo_contract(issuer):
         },
         "algorithm_label": "experimental_unreleased_fingerprint_v2",
     }
+
+
+@pytest.mark.django_db
+@override_settings(
+    SPLITBIND_RELEASE_MODE="integrity_v1", SPLITBIND_FINGERPRINT_ENABLED=False
+)
+def test_integrity_capabilities_report_fingerprint_disabled(issuer):
+    client = Client()
+    client.force_login(issuer)
+
+    payload = client.get("/api/v1/demo/capabilities").json()
+
+    assert payload["algorithm_label"] == "integrity_release_v1"
+    assert payload["hidden_fingerprint_enabled"] is False
+    assert payload["transformed_attribution_available"] is False
+
+
+@pytest.mark.django_db
+@override_settings(
+    SPLITBIND_RELEASE_MODE="integrity_v1", SPLITBIND_FINGERPRINT_ENABLED=True
+)
+def test_integrity_capabilities_follow_the_fingerprint_setting(issuer):
+    client = Client()
+    client.force_login(issuer)
+
+    payload = client.get("/api/v1/demo/capabilities").json()
+
+    assert payload["algorithm_label"] == "integrity_release_v1"
+    assert payload["hidden_fingerprint_enabled"] is True
+    assert payload["transformed_attribution_available"] is True
+
+
+@pytest.mark.django_db
+def test_integrity_capability_payload_distinguishes_the_fingerprint_setting(issuer):
+    client = Client()
+    client.force_login(issuer)
+
+    with override_settings(
+        SPLITBIND_RELEASE_MODE="integrity_v1", SPLITBIND_FINGERPRINT_ENABLED=False
+    ):
+        disabled = client.get("/api/v1/demo/capabilities").json()
+    with override_settings(
+        SPLITBIND_RELEASE_MODE="integrity_v1", SPLITBIND_FINGERPRINT_ENABLED=True
+    ):
+        enabled = client.get("/api/v1/demo/capabilities").json()
+
+    assert disabled != enabled

@@ -1678,6 +1678,40 @@
                     "username"
                 ]
             },
+            "ManifestAttestation": {
+                "type": "object",
+                "properties": {
+                    "expected_sha256": {
+                        "type": "string",
+                        "description": "SHA-256 the issuer signed for this issuance, read from the public manifest."
+                    },
+                    "manifest_sha256": {
+                        "type": "string",
+                        "description": "SHA-256 of the exact canonical manifest bytes that were signed."
+                    },
+                    "issued_at": {
+                        "type": "string",
+                        "description": "Issuance time as stated inside the signed payload."
+                    },
+                    "signing_key_id": {
+                        "type": "string",
+                        "description": "Identifier of the key whose signature covers the manifest."
+                    },
+                    "signing_algorithm": {
+                        "type": "string",
+                        "description": "Signature algorithm named in the manifest envelope."
+                    },
+                    "integrity_algorithm": {
+                        "type": "string",
+                        "description": "Integrity algorithm named inside the signed payload."
+                    }
+                },
+                "required": [
+                    "expected_sha256",
+                    "manifest_sha256",
+                    "signing_key_id"
+                ]
+            },
             "ManifestPublicKey": {
                 "type": "object",
                 "properties": {
@@ -2046,11 +2080,21 @@
                     "evidence": {
                         "$ref": "#/components/schemas/VerificationEvidence"
                     },
+                    "attestation": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/ManifestAttestation"
+                            }
+                        ],
+                        "nullable": true,
+                        "description": "Public manifest facts behind a match: the signed hash, the digest of the signed bytes, and the key that signed them. Null when no issuance matched."
+                    },
                     "metrics": {
                         "$ref": "#/components/schemas/VerificationMetrics"
                     }
                 },
                 "required": [
+                    "attestation",
                     "completed_at",
                     "created_at",
                     "evidence",

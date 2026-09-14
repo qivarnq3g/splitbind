@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
 import { EvidenceSummary } from "../features/evidence/EvidenceSummary";
 import { verificationCopy } from "../features/evidence/copy";
@@ -74,4 +74,80 @@ it("states explicitly that no digest exists yet instead of an empty cell", () =>
     manifest_signature_valid: null,
   }} inputSha256={null} />);
   expect(screen.getByText("Chưa có mã băm tệp đã tải lên")).toBeInTheDocument();
+});
+
+const DIGEST = "1234567890abcdef".repeat(4);
+const ATTESTATION = {
+  expected_sha256: DIGEST,
+  manifest_sha256: "c".repeat(64),
+  issued_at: "2026-08-30T00:00:00Z",
+  signing_key_id: "key-prod-1",
+  signing_algorithm: "Ed25519",
+  integrity_algorithm: "integrity-v1",
+};
+
+function openDisclosure() {
+  fireEvent.click(screen.getByText("Xem chi tiết kỹ thuật"));
+}
+
+function renderMatched(attestation: typeof ATTESTATION | null = ATTESTATION) {
+  render(<EvidenceSummary status="VERIFIED_INTACT" evidence={{
+    algorithm_label: "integrity_release_v1", exact_file_hash_match: true,
+    manifest_signature_valid: true,
+  }} inputSha256={DIGEST} matchedIssuanceId="6172004d-7953-4b17-bee0-3b365fc29648"
+     attestation={attestation} />);
+  openDisclosure();
+}
+
+it("puts the signed hash beside the uploaded one so a reader compares them", () => {
+  renderMatched();
+
+  expect(screen.getByText("Mã băm tệp đã tải lên · SHA-256")).toBeInTheDocument();
+  expect(screen.getByText("Mã băm trong bản cấp phát đã ký · SHA-256")).toBeInTheDocument();
+  expect(screen.getAllByText(DIGEST)).toHaveLength(2);
+  expect(screen.getByText("Hai giá trị trùng nhau")).toBeVisible();
+});
+
+it("names the key and the exact bytes the signature covers", () => {
+  renderMatched();
+
+  expect(screen.getByText("key-prod-1")).toBeInTheDocument();
+  expect(screen.getByText("Ed25519")).toBeInTheDocument();
+  expect(screen.getByText(ATTESTATION.manifest_sha256)).toBeInTheDocument();
+});
+
+it("says there is nothing to compare rather than implying a comparison happened", () => {
+  render(<EvidenceSummary status="NO_WATERMARK" evidence={{
+    algorithm_label: "integrity_release_v1", exact_file_hash_match: false,
+    manifest_signature_valid: null,
+  }} inputSha256={DIGEST} attestation={null} />);
+  openDisclosure();
+
+  expect(screen.getByText("Không có bản cấp phát nào để đối chiếu")).toBeVisible();
+  expect(screen.queryByText("Hai giá trị trùng nhau")).not.toBeInTheDocument();
+  expect(screen.queryByText("Hai giá trị khác nhau")).not.toBeInTheDocument();
+});
+
+it("keeps the page count out of the facts the verdict rests on", () => {
+  render(<EvidenceSummary status="VERIFIED_INTACT" evidence={{
+    algorithm_label: "integrity_release_v1", exact_file_hash_match: true,
+    manifest_signature_valid: true, analyzed_page_count: 5,
+  }} inputSha256={DIGEST} attestation={ATTESTATION} />);
+  openDisclosure();
+
+  const comparison = screen.getByRole("heading", { name: "Đối chiếu mã băm" })
+    .closest("section")!;
+  expect(comparison).not.toHaveTextContent("Số trang đã đọc");
+  const processing = screen.getByRole("heading", { name: "Ghi nhận xử lý" })
+    .closest("section")!;
+  expect(processing).toHaveTextContent("Số trang đã đọc");
+  expect(processing).toHaveTextContent("Không tham gia vào kết luận");
+});
+
+it("tells the reader how to repeat the check outside the app", () => {
+  renderMatched();
+
+  expect(screen.getByRole("heading", { name: "Cách tự kiểm chứng" })).toBeVisible();
+  expect(screen.getByText(/certutil -hashfile/)).toBeVisible();
+  expect(screen.getByRole("button", { name: "Tải hồ sơ kiểm chứng" })).toBeVisible();
 });
