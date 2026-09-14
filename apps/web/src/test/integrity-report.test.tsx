@@ -2,7 +2,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
 import { EvidenceSummary } from "../features/evidence/EvidenceSummary";
-import { verificationCopy } from "../features/evidence/copy";
+import { integrityVerdict, verificationCopy } from "../features/evidence/copy";
 
 afterEach(cleanup);
 
@@ -150,4 +150,17 @@ it("tells the reader how to repeat the check outside the app", () => {
   expect(screen.getByRole("heading", { name: "Cách tự kiểm chứng" })).toBeVisible();
   expect(screen.getByText(/certutil -hashfile/)).toBeVisible();
   expect(screen.getByRole("button", { name: "Tải hồ sơ kiểm chứng" })).toBeVisible();
+});
+
+it("announces a watermark attribution instead of calling it insufficient evidence", () => {
+  const verdict = integrityVerdict("SOURCE_IDENTIFIED_MODIFIED", false, true);
+  expect(verdict.label).toBe("Truy được nguồn, tệp đã bị biến đổi");
+  expect(verdict.label).not.toBe("Chưa đủ bằng chứng xác minh");
+  expect(verdict.inference).toMatch(/đọc được thủy vân/);
+  render(<EvidenceSummary status="SOURCE_IDENTIFIED_MODIFIED" evidence={{
+    algorithm_label: "integrity_release_v1", exact_file_hash_match: false,
+    manifest_signature_valid: true, analyzed_page_count: 1,
+    fingerprint_confidence: 0.5, valid_vote_count: 1, integrity_score: null,
+  }} />);
+  expect(screen.getByText(/chỉ về một bản cấp phát của tổ chức/)).toBeVisible();
 });

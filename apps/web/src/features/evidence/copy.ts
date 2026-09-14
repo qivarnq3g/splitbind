@@ -70,6 +70,12 @@ export function integrityVerdict(
     tone: "success" as const,
     next: "Giữ nguyên tệp này để đối chiếu khi cần. Lưu mã kiểm chứng cùng hồ sơ tài liệu.",
   };
+  if (status === "SOURCE_IDENTIFIED_MODIFIED") return {
+    label: "Truy được nguồn, tệp đã bị biến đổi",
+    inference: "Mã SHA-256 không khớp bản cấp phát nào, nhưng đọc được thủy vân trong tệp và nó chỉ về một bản cấp phát của tổ chức. Tệp bắt nguồn từ bản cấp phát đó và đã bị đổi so với lúc phát hành.",
+    tone: "warning" as const,
+    next: "Xem mã hồ sơ cấp phát ở phần chi tiết kỹ thuật. Kết quả này không xác định ai đã biến đổi hay phát tán tệp.",
+  };
   if (status === "NO_WATERMARK" && exactMatch === false && signatureValid == null) return {
     label: "Chưa tìm thấy bản cấp phát khớp",
     inference: "Không tìm thấy bản cấp phát có mã SHA-256 trùng với tệp trong tổ chức. Kết quả này chưa đủ để kết luận tệp đã bị chỉnh sửa.",
