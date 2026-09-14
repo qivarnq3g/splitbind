@@ -832,7 +832,7 @@ def test_modified_issued_pdf_requires_real_decode_and_keeps_hash_fact_separate(
     ("extension", "page_index"),
     [(".png", 1), (".jpg", 4)],
 )
-def test_standalone_issued_page_does_not_attribute_from_one_page_index_hypothesis(
+def test_standalone_issued_page_attributes_to_the_issuance_it_came_from(
     issued_five_page_pdf_bytes,
     monkeypatch,
     extension,
@@ -873,11 +873,12 @@ def test_standalone_issued_page_does_not_attribute_from_one_page_index_hypothesi
     result = process_verification_job(job_id=job.id, storage=storage)
 
     verification.refresh_from_db()
-    assert result.status == VerificationStatus.PARTIAL_EVIDENCE
-    assert result.decode_status == "partial_payload_evidence"
-    assert result.recovered_issuance_id is None
+    assert result.status == VerificationStatus.SOURCE_IDENTIFIED_MODIFIED
+    assert result.decode_status == "decoded"
+    assert result.recovered_issuance_id == ISSUANCE_ID
+    assert result.exact_file_hash_match is False
     assert result.pages_analyzed == 1
-    assert verification.recovered_issuance_id is None
+    assert verification.recovered_issuance_id == ISSUANCE_ID
 
 
 def test_unknown_page_index_requires_two_consistent_uuid_decodes():
@@ -897,7 +898,7 @@ def test_unknown_page_index_requires_two_consistent_uuid_decodes():
     assert summary.valid_votes == 5
 
 
-def test_unknown_page_index_rejects_lone_uuid_decode():
+def test_unknown_page_index_accepts_a_lone_uuid_decode():
     from splitbind.demo import verification as verification_module
     from splitbind_ref.fingerprint_v2 import DecodeV2Decision
 
@@ -909,9 +910,24 @@ def test_unknown_page_index_rejects_lone_uuid_decode():
 
     summary = verification_module._aggregate_unknown_page_decisions(decisions)
 
+    assert summary.status == "decoded"
+    assert summary.issuance_id == ISSUANCE_ID
+    assert summary.valid_votes == 3
+
+
+def test_unknown_page_index_refuses_two_decodes_that_disagree():
+    from splitbind.demo import verification as verification_module
+    from splitbind_ref.fingerprint_v2 import DecodeV2Decision
+
+    decisions = [
+        DecodeV2Decision(ISSUANCE_ID, 0.9, 3, 0.0, "decoded"),
+        DecodeV2Decision(uuid.uuid4(), 0.9, 3, 0.0, "decoded"),
+    ]
+
+    summary = verification_module._aggregate_unknown_page_decisions(decisions)
+
     assert summary.status == "partial_payload_evidence"
     assert summary.issuance_id is None
-    assert summary.valid_votes == 3
 
 
 def test_unknown_page_index_rejects_consistent_non_uuid_values():

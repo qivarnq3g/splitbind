@@ -48,12 +48,13 @@ from splitbind.jobs.state import transition_job
 from splitbind.release.mode import integrity_release_enabled
 from splitbind.uploads.models import PromotionStatus, UploadPurpose, UploadRequest
 from splitbind_ref.fingerprint_v2 import DecodeV2Decision, decode_fingerprint_v2
+from splitbind_ref.frame_restore import restore_frame
 
 
 PAGE_INDEX_HYPOTHESES = 5
 PDF_RENDER_SCALE = 2.0
 _LEGACY_CANONICAL_PAGE_CONTENT = b"q\n1152 0 0 2304 0 0 cm\n/Im0 Do\nQ\n"
-_UNKNOWN_PAGE_MIN_CONSISTENT_DECODES = 2
+_UNKNOWN_PAGE_MIN_CONSISTENT_DECODES = 1
 _BASE_LIMITATIONS = DEMO_VERIFICATION_LIMITATIONS
 INTEGRITY_ALGORITHM_LABEL = "integrity_release_v1"
 TRANSFORMED_ATTRIBUTION_UNAVAILABLE = "fingerprint.transformed_attribution_unavailable"
@@ -399,6 +400,14 @@ def _decode_jpeg(source: bytes, *, fingerprint_key: bytes, candidate) -> tuple[_
     )
 
 
+def _geometry_hypotheses(raster: np.ndarray) -> list[np.ndarray]:
+    hypotheses = [np.ascontiguousarray(_canonicalize_page(raster).canvas)]
+    restored = restore_frame(raster, DEMO_CANONICAL_CANVAS)
+    if restored is not None:
+        hypotheses.append(np.ascontiguousarray(restored.image))
+    return hypotheses
+
+
 def _decode_image(
     source: bytes,
     *,
@@ -415,18 +424,24 @@ def _decode_image(
         or raster.shape != (height, width, 3)
     ):
         raise DemoVerificationError("DEMO_IMAGE_INVALID")
-    contiguous = np.ascontiguousarray(_canonicalize_page(raster).canvas)
-    decisions = [
-        decode_fingerprint_v2(
-            contiguous,
-            fingerprint_key,
-            page_index,
-            DEMO_CANONICAL_CANVAS,
-            (candidate,),
-        )
-        for page_index in range(PAGE_INDEX_HYPOTHESES)
-    ]
-    return _aggregate_unknown_page_decisions(decisions), 1
+    fallback = None
+    for page in _geometry_hypotheses(raster):
+        decisions = [
+            decode_fingerprint_v2(
+                page,
+                fingerprint_key,
+                page_index,
+                DEMO_CANONICAL_CANVAS,
+                (candidate,),
+            )
+            for page_index in range(PAGE_INDEX_HYPOTHESES)
+        ]
+        summary = _aggregate_unknown_page_decisions(decisions)
+        if summary.status in ("decoded", "partial_payload_evidence"):
+            return summary, 1
+        if fallback is None:
+            fallback = summary
+    return fallback, 1
 
 
 def _jpeg_dimensions(source: bytes) -> tuple[int, int]:
