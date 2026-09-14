@@ -99,7 +99,6 @@ export function openIssuanceResult(downloadUrl: string) {
   }
   const anchor = document.createElement("a");
   anchor.href = parsed.href;
-  anchor.download = "splitbind-result.pdf";
   anchor.rel = "noopener noreferrer";
   anchor.click();
 }

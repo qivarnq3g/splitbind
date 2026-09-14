@@ -1,4 +1,5 @@
 import hashlib
+from datetime import timedelta
 import tracemalloc
 import uuid
 
@@ -498,3 +499,66 @@ def test_s3_client_is_built_with_bounded_timeouts_and_capped_retries(monkeypatch
     assert config.retries["max_attempts"] == s3_module.MAX_ATTEMPTS
     assert config.retries["mode"] == "standard"
     assert config.connect_timeout < 60 and config.read_timeout < 60
+
+
+def test_presigned_get_asks_the_provider_for_an_attachment_with_a_safe_name():
+    key = f"outputs/issuance/{uuid.uuid4()}/{uuid.uuid4()}.pdf"
+
+    class Client:
+        def __init__(self):
+            self.params = None
+
+        def generate_presigned_url(self, operation, **kwargs):
+            self.params = (operation, kwargs)
+            return "https://storage.invalid/signed"
+
+    client = Client()
+    url = S3ObjectStorage(bucket="bucket", client=client).presign_get(
+        key=key,
+        expires=timedelta(minutes=5),
+        filename="splitbind-issuance-3348a8a1.pdf",
+    )
+
+    assert url == "https://storage.invalid/signed"
+    operation, kwargs = client.params
+    assert operation == "get_object"
+    assert kwargs["Params"]["ResponseContentDisposition"] == (
+        'attachment; filename="splitbind-issuance-3348a8a1.pdf"; '
+        "filename*=UTF-8''splitbind-issuance-3348a8a1.pdf"
+    )
+    assert kwargs["Params"]["ResponseContentType"] == "application/pdf"
+
+
+def test_presigned_get_without_a_filename_leaves_response_headers_untouched():
+    key = f"outputs/issuance/{uuid.uuid4()}/{uuid.uuid4()}.pdf"
+
+    class Client:
+        def __init__(self):
+            self.params = None
+
+        def generate_presigned_url(self, operation, **kwargs):
+            self.params = (operation, kwargs)
+            return "https://storage.invalid/signed"
+
+    client = Client()
+    S3ObjectStorage(bucket="bucket", client=client).presign_get(
+        key=key, expires=timedelta(minutes=5)
+    )
+
+    _operation, kwargs = client.params
+    assert "ResponseContentDisposition" not in kwargs["Params"]
+
+
+def test_presigned_get_refuses_a_filename_that_could_break_out_of_the_header():
+    key = f"outputs/issuance/{uuid.uuid4()}/{uuid.uuid4()}.pdf"
+
+    class Client:
+        def generate_presigned_url(self, operation, **kwargs):
+            return "https://storage.invalid/signed"
+
+    storage = S3ObjectStorage(bucket="bucket", client=Client())
+    for hostile in ('a"; rm -rf /.pdf', "a\r\nX-Injected: 1.pdf", "../escape.pdf"):
+        with pytest.raises(ValueError):
+            storage.presign_get(
+                key=key, expires=timedelta(minutes=5), filename=hostile
+            )

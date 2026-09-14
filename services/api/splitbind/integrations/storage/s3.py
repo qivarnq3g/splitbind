@@ -13,6 +13,8 @@ from .base import (
     collect_bounded_bytes,
     validate_copy_boundary,
     validate_checksum,
+    content_disposition,
+    download_content_type,
     validate_controlled_key,
     validate_expiry,
     validate_put_constraints,
@@ -150,10 +152,14 @@ class S3ObjectStorage:
             raise StorageUnavailable("storage provider request failed") from error
         return ObjectMetadata(key, response["ContentLength"], response.get("ContentType"), response.get("Metadata", {}).get("sha256"))
 
-    def presign_get(self, *, key, expires):
+    def presign_get(self, *, key, expires, filename=None):
         validate_controlled_key(key)
         validate_expiry(expires)
-        return self._call("generate_presigned_url", "get_object", Params={"Bucket": self.bucket, "Key": key}, ExpiresIn=int(expires.total_seconds()), HttpMethod="GET")
+        params = {"Bucket": self.bucket, "Key": key}
+        if filename is not None:
+            params["ResponseContentDisposition"] = content_disposition(filename)
+            params["ResponseContentType"] = download_content_type(filename)
+        return self._call("generate_presigned_url", "get_object", Params=params, ExpiresIn=int(expires.total_seconds()), HttpMethod="GET")
 
     def download_bytes(self, *, key: str, max_bytes: int, expected_sha256: str) -> ObjectBytes:
         validate_controlled_key(key)

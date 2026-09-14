@@ -33,10 +33,12 @@ class RecordingStorage(FakeObjectStorage):
     def __init__(self):
         super().__init__()
         self.presign_get_expiry = None
+        self.presign_get_filename = None
 
-    def presign_get(self, *, key, expires):
+    def presign_get(self, *, key, expires, filename=None):
         self.presign_get_expiry = expires
-        return super().presign_get(key=key, expires=expires)
+        self.presign_get_filename = filename
+        return super().presign_get(key=key, expires=expires, filename=filename)
 
 
 def make_user(organization, role, suffix):
@@ -172,6 +174,7 @@ def test_issuer_owner_may_download_committed_result_and_grant_is_audited(issuanc
         response = client.get(f"/api/v1/issuances/{issuance.id}/result")
 
     assert response.status_code == 200
+    assert storage.presign_get_filename == f"splitbind-{str(issuance.id)[:8]}.pdf"
     assert_private_no_store(response)
     event = AuditEvent.objects.get(action="issuance.result_download_granted")
     assert event.actor_id == issuer.id
@@ -346,3 +349,53 @@ def test_result_download_throttle_rejects_excess_without_more_audit_rows(issuanc
         assert AuditEvent.objects.count() == audit_count == 1
     finally:
         cache.clear()
+
+
+@pytest.mark.django_db
+def test_download_name_keeps_the_uploaded_name_and_stays_traceable(issuance_context):
+    organization, issuer, issuance, job, storage = issuance_context
+    commit_result(issuance, job)
+    upload = issuance.document.upload_request
+    UploadRequest.objects.filter(pk=upload.pk).update(
+        source_filename="30 câu trắc nghiệm ôn tập.pdf"
+    )
+    client = Client()
+    login(client, issuer)
+
+    with override_settings(SPLITBIND_OBJECT_STORAGE=storage):
+        response = client.get(f"/api/v1/issuances/{issuance.id}/result")
+
+    assert response.status_code == 200
+    assert storage.presign_get_filename == (
+        f"30-cau-trac-nghiem-on-tap-splitbind-{str(issuance.id)[:8]}.pdf"
+    )
+    assert storage.presign_get_filename.isascii()
+
+
+@pytest.mark.django_db
+def test_download_name_falls_back_when_the_stored_name_is_unusable(issuance_context):
+    organization, issuer, issuance, job, storage = issuance_context
+    commit_result(issuance, job)
+    upload = issuance.document.upload_request
+    UploadRequest.objects.filter(pk=upload.pk).update(source_filename=".pdf")
+    client = Client()
+    login(client, issuer)
+
+    with override_settings(SPLITBIND_OBJECT_STORAGE=storage):
+        response = client.get(f"/api/v1/issuances/{issuance.id}/result")
+
+    assert response.status_code == 200
+    assert storage.presign_get_filename == f"splitbind-{str(issuance.id)[:8]}.pdf"
+
+
+def test_document_name_slug_produces_a_portable_ascii_name():
+    from splitbind.documents.views import document_name_slug
+
+    assert document_name_slug("30 câu trắc nghiệm ôn tập") == "30-cau-trac-nghiem-on-tap"
+    assert document_name_slug("Đề cương ĐẠI SỐ") == "de-cuong-dai-so"
+    assert document_name_slug("  spaced   out  ") == "spaced-out"
+    assert document_name_slug("a___b...c") == "a-b-c"
+    assert document_name_slug("!!!") == ""
+    assert document_name_slug("") == ""
+    assert len(document_name_slug("x" * 300)) <= 80
+    assert not document_name_slug("tài liệu").endswith("-")

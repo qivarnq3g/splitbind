@@ -843,3 +843,23 @@ class UploadLegacyMigrationContractTests(TransactionTestCase):
             assert migrated.size_bytes is None
         finally:
             MigrationExecutor(connection).migrate(latest_targets)
+
+
+def test_stored_source_filename_strips_paths_and_refuses_hostile_names():
+    from splitbind.uploads.services import safe_source_filename
+
+    assert safe_source_filename("bao cao.pdf") == "bao cao.pdf"
+    windows_path = "C:" + chr(92) + "Users" + chr(92) + "me" + chr(92) + "bao cao.pdf"
+    assert safe_source_filename(windows_path) == "bao cao.pdf"
+    assert safe_source_filename("/etc/passwd/bao cao.pdf") == "bao cao.pdf"
+    assert safe_source_filename("30 câu trắc nghiệm.pdf") == "30 câu trắc nghiệm.pdf"
+    assert safe_source_filename("../../escape.pdf") == "escape.pdf"
+    stripped_quote = safe_source_filename('quote".pdf')
+    assert '"' not in stripped_quote and stripped_quote.endswith(".pdf")
+    stripped_header = safe_source_filename("break\r\nX-Injected: 1.pdf")
+    assert not any(bad in stripped_header for bad in ("\r", "\n", ":"))
+    assert stripped_header.endswith(".pdf")
+    assert safe_source_filename(".hidden.pdf") == "hidden.pdf"
+    assert safe_source_filename("noextension") == ""
+    assert safe_source_filename(None) == ""
+    assert len(safe_source_filename("n" * 400 + ".pdf")) <= 180

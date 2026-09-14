@@ -1,3 +1,5 @@
+import re
+import unicodedata
 import uuid
 from datetime import timedelta
 
@@ -29,7 +31,11 @@ from splitbind.documents.serializers import (
 )
 from splitbind.documents.manifests import shareable_public_manifest
 from splitbind.documents.services import get_issuance, get_verification
-from splitbind.integrations.storage.base import StorageUnavailable, UploadRejected
+from splitbind.integrations.storage.base import (
+    StorageUnavailable,
+    UploadRejected,
+    validate_download_filename,
+)
 from splitbind.jobs.services import (
     JobConflict,
     WorkflowNotFound,
@@ -175,6 +181,33 @@ class IssuanceManifestView(APIView):
         return Response(projection)
 
 
+def document_name_slug(name: str) -> str:
+    folded = unicodedata.normalize("NFD", name)
+    latinised = "".join(
+        character
+        for character in folded
+        if unicodedata.category(character) != "Mn"
+    )
+    latinised = latinised.replace("đ", "d").replace("Đ", "D")
+    ascii_only = latinised.encode("ascii", "ignore").decode("ascii").lower()
+    slug = re.sub(r"[^a-z0-9]+", "-", ascii_only).strip("-")
+    return slug[:80].strip("-")
+
+
+def issuance_download_filename(issuance) -> str:
+    reference = f"splitbind-{str(issuance.id)[:8]}"
+    document = getattr(issuance, "document", None)
+    upload = getattr(document, "upload_request", None)
+    original = (getattr(upload, "source_filename", "") or "").strip()
+    stem, dotted, _extension = original.rpartition(".")
+    slug = document_name_slug(stem if dotted else original)
+    candidate = f"{slug}-{reference}.pdf" if slug else f"{reference}.pdf"
+    try:
+        return validate_download_filename(candidate)
+    except ValueError:
+        return f"{reference}.pdf"
+
+
 @method_decorator(never_cache, name="dispatch")
 class IssuanceResultView(APIView):
     permission_classes = [IsAuthenticated]
@@ -206,6 +239,7 @@ class IssuanceResultView(APIView):
             download_url = get_storage().presign_get(
                 key=evidence.output_object_key,
                 expires=ISSUANCE_RESULT_TTL,
+                filename=issuance_download_filename(record),
             )
         except StorageUnavailable:
             _result_download_audit(

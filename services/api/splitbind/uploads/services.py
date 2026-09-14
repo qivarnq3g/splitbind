@@ -10,7 +10,12 @@ from django.utils import timezone
 from splitbind.access.models import Role
 from splitbind.audit.models import AuditOutcome
 from splitbind.audit.services import record_event
-from splitbind.integrations.storage.base import StorageUnavailable, UploadRejected
+from splitbind.integrations.storage.base import (
+    FORBIDDEN_FILENAME_CHARACTERS,
+    StorageUnavailable,
+    UploadRejected,
+    validate_download_filename,
+)
 from splitbind.integrations.storage.s3 import S3ObjectStorage
 from splitbind.uploads.models import UploadPurpose, UploadRequest
 from splitbind.validators import SHA256_PATTERN
@@ -77,6 +82,26 @@ def _validate_intent(actor, *, kind: str, content_type: str, size_bytes: int, sh
         _reject(actor, "UPLOAD_SHA256", action="upload.intent.denied", kind=kind)
 
 
+def safe_source_filename(filename: object) -> str:
+    if not isinstance(filename, str):
+        return ""
+    candidate = filename.replace(chr(92), "/").rsplit("/", 1)[-1].strip()
+    cleaned = "".join(
+        character
+        for character in candidate
+        if ord(character) >= 32 and ord(character) != 127 and character not in FORBIDDEN_FILENAME_CHARACTERS
+    ).strip()
+    while cleaned.startswith("."):
+        cleaned = cleaned[1:].strip()
+    if len(cleaned) > 120:
+        stem, separator, extension = cleaned.rpartition(".")
+        cleaned = (stem[:120] + separator + extension) if separator else cleaned[:120]
+    try:
+        return validate_download_filename(cleaned)
+    except ValueError:
+        return ""
+
+
 def create_upload(actor, *, kind: str, filename: str, content_type: str, size_bytes: int, sha256: str) -> UploadIntent:
     """Create an exact-key, 15-minute browser upload intent; filename never affects storage."""
     _validate_intent(actor, kind=kind, content_type=content_type, size_bytes=size_bytes, sha256=sha256)
@@ -96,6 +121,7 @@ def create_upload(actor, *, kind: str, filename: str, content_type: str, size_by
             requested_by=actor,
             purpose=_KIND_TO_PURPOSE[kind],
             object_key=key,
+            source_filename=safe_source_filename(filename),
             expected_sha256=sha256,
             size_bytes=size_bytes,
             expires_at=now + UPLOAD_TTL,

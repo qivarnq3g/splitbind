@@ -11,6 +11,7 @@ from .base import (
     collect_bounded_bytes,
     validate_copy_boundary,
     validate_checksum,
+    validate_download_filename,
     validate_controlled_key,
     validate_expiry,
     validate_put_constraints,
@@ -107,11 +108,14 @@ class FakeObjectStorage:
         self._maybe_fail("head")
         return self.objects.get(key)
 
-    def presign_get(self, *, key, expires):
+    def presign_get(self, *, key, expires, filename=None):
         validate_controlled_key(key)
         validate_expiry(expires)
+        if filename is not None:
+            validate_download_filename(filename)
         self._maybe_fail("presign_get")
-        return f"https://fake-storage.invalid/{quote(key)}?signed=opaque"
+        suffix = f"&filename={quote(filename)}" if filename else ""
+        return f"https://fake-storage.invalid/{quote(key)}?signed=opaque{suffix}"
 
     def download_bytes(self, *, key: str, max_bytes: int, expected_sha256: str) -> ObjectBytes:
         validate_controlled_key(key)

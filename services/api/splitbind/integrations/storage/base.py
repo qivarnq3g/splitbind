@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import re
+from urllib.parse import quote
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Iterable, Mapping, Protocol
@@ -71,7 +72,9 @@ class ObjectStorage(Protocol):
 
     def head(self, *, key: str) -> ObjectMetadata | None: ...
 
-    def presign_get(self, *, key: str, expires: timedelta) -> str: ...
+    def presign_get(
+        self, *, key: str, expires: timedelta, filename: str | None = None
+    ) -> str: ...
 
     def download_bytes(
         self, *, key: str, max_bytes: int, expected_sha256: str
@@ -88,6 +91,48 @@ class ObjectStorage(Protocol):
     def delete(self, *, key: str) -> None:
         """Delete exactly ``key``; succeed when that exact key is already absent."""
         ...
+
+
+DOWNLOAD_FILENAME_EXTENSION = re.compile(r"\A[A-Za-z0-9]{1,8}\Z")
+FORBIDDEN_FILENAME_CHARACTERS = '"' + chr(92) + "/:*?<>|"
+DOWNLOAD_CONTENT_TYPES = {
+    "pdf": "application/pdf",
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "json": "application/json",
+}
+
+
+def validate_download_filename(filename: str) -> str:
+    if not isinstance(filename, str) or not 1 <= len(filename) <= 180:
+        raise ValueError("download filename must be a short non-empty string")
+    if any(
+        ord(character) < 32
+        or ord(character) == 127
+        or character in FORBIDDEN_FILENAME_CHARACTERS
+        for character in filename
+    ):
+        raise ValueError("download filename must not contain control or path characters")
+    if filename.startswith(".") or filename != filename.strip():
+        raise ValueError("download filename must not be dot-led or padded")
+    stem, separator, extension = filename.rpartition(".")
+    if not separator or not stem or not DOWNLOAD_FILENAME_EXTENSION.fullmatch(extension):
+        raise ValueError("download filename must end in a short alphanumeric extension")
+    return filename
+
+
+def download_content_type(filename: str) -> str:
+    return DOWNLOAD_CONTENT_TYPES.get(
+        filename.rsplit(".", 1)[-1].lower(), "application/octet-stream"
+    )
+
+
+def content_disposition(filename: str) -> str:
+    validate_download_filename(filename)
+    ascii_fallback = filename.encode("ascii", "replace").decode("ascii").replace("?", "_")
+    encoded = quote(filename, safe="")
+    return f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{encoded}"
 
 
 def validate_controlled_key(key: str) -> None:
