@@ -85,7 +85,7 @@ lang: vi
 | Hình 4.1 | Giao diện cấp phát tài liệu trên hệ thống đang vận hành |
 | Hình 4.2 | Kết quả xác minh khi tệp khớp bản cấp phát: mã SHA-256 trùng khớp và chữ ký hồ sơ hợp lệ |
 | Hình 4.3 | Kết quả xác minh khi tệp đã bị chỉnh sửa: hệ thống báo không khớp và không quy kết hành vi cho bất kỳ ai |
-| Hình 4.4 | Truy nguồn bằng thủy vân khi mã băm không khớp: hệ thống báo hai giá trị mã băm khác nhau nhưng vẫn chỉ đúng bản cấp phát gốc |
+| Hình 4.4 | Truy nguồn bằng thủy vân khi mã băm không khớp: tệp là ảnh chụp màn hình đã thu nhỏ còn 0,469 kèm viền đen, mã băm khác hẳn bản đã ký, nhưng hệ thống vẫn chỉ đúng bản cấp phát gốc |
 | Hình 4.5 | Tỉ lệ giải mã của thế hệ V1 và V3 trên cùng hợp đồng corpus, cùng định nghĩa cổng |
 | Hình 4.6 | Tỉ lệ truy vết của 13 phép biến đổi, phân theo ba lớp nguyên nhân thất bại |
 | Hình 4.7 | Hiệu quả của bước bóc viền letterbox trước khi giải mã, đo trên 12 trang dương tính |
@@ -1102,7 +1102,7 @@ Các hình dưới đây được chụp từ hệ thống đang vận hành và
 
 ![](report-assets/figures/ui-verification-traced.png)
 
-**Hình 4.4:** Truy nguồn bằng thủy vân khi mã băm không khớp: hệ thống báo hai giá trị mã băm khác nhau nhưng vẫn chỉ đúng bản cấp phát gốc
+**Hình 4.4:** Truy nguồn bằng thủy vân khi mã băm không khớp: tệp là ảnh chụp màn hình đã thu nhỏ còn 0,469 kèm viền đen, mã băm khác hẳn bản đã ký, nhưng hệ thống vẫn chỉ đúng bản cấp phát gốc
 
 ![](report-assets/figures/chart-v1-vs-v3.png)
 

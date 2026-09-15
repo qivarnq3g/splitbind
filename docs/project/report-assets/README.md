@@ -23,7 +23,8 @@ với phần chữ trong báo cáo.
 
 ## `evidence/`
 
-Ảnh chụp hệ thống thật để làm bằng chứng, không nhúng vào báo cáo. Mỗi lần chụp là một
+Ảnh chụp hệ thống thật để làm bằng chứng, không nhúng vào báo cáo. Bộ mới nhất là
+`2026-09-15-v0.2.3/`; các bộ trước giữ lại để đối chiếu trạng thái theo từng bản phát hành. Mỗi lần chụp là một
 thư mục đặt tên theo ngày và bản phát hành được chụp, kèm `README.md` ghi rõ chụp cái gì
 và vào lúc nào. Giữ lại các lần chụp cũ thay vì ghi đè, vì chúng là bằng chứng về trạng
 thái hệ thống tại đúng thời điểm đó.
