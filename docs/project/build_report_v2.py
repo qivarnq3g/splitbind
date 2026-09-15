@@ -14,13 +14,13 @@ OUT_DOCX = HERE / "Nhom9_TruyVetToanVenVanBan.docx"
 ASSETS = "report-assets/figures"
 
 CHAPTERS = [
-    ("CƠ SỞ LÝ THUYẾT KỸ THUẬT DIGITAL WATERMARKING", [(2, None)]),
+    ("CƠ SỞ LÝ THUYẾT KỸ THUẬT THỦY VÂN SỐ", [(2, None)]),
     ("ỨNG DỤNG THỦY VÂN TRONG TRUY VẾT VÀ TOÀN VẸN HÌNH ẢNH", [(3, None)]),
     ("ỨNG DỤNG CHỮ KÝ SỐ VÀ SO SÁNH CÁC KỸ THUẬT TOÀN VẸN",
      [(4, "Ứng dụng chữ ký số trong bảo vệ thông tin truy vết"),
       (5, "So sánh với các kỹ thuật xác minh bảo vệ tính toàn vẹn khác")]),
-    ("HỆ THỐNG SPLITBIND: HIỆN THỰC, THỰC NGHIỆM VÀ ĐỀ XUẤT",
-     [(6, "Kiến trúc và hiện thực hệ thống"),
+    ("HỆ THỐNG SPLITBIND: XÂY DỰNG, THỰC NGHIỆM VÀ ĐỀ XUẤT",
+     [(6, "Kiến trúc và cách xây dựng hệ thống"),
       (7, "Kết quả thực nghiệm"),
       (13, "Đề xuất kiến trúc V4: chẩn đoán nguyên nhân gốc")]),
 ]
@@ -44,7 +44,7 @@ FIGURES = [
 ]
 
 TABLE_CAPTIONS = [
-    ("Hàm băm mật mã (Cryptographic Hash)",
+    ("Hàm băm mật mã (cryptographic hash)",
      "Ma trận so sánh sáu kỹ thuật bảo vệ toàn vẹn trên bảy tiêu chí an ninh"),
     ("Số liệu thực nghiệm | Giá trị khóa",
      "Các số liệu thực nghiệm đã khóa của thế hệ V1"),
@@ -82,6 +82,8 @@ ABBREVIATIONS = [
     ("BCH", "Bose-Chaudhuri-Hocquenghem, một họ mã sửa lỗi khối"),
     ("JPEG", "Joint Photographic Experts Group, chuẩn nén ảnh có tổn hao; JPEG-70 nghĩa là nén ở mức chất lượng 70"),
     ("MAC", "Message Authentication Code, mã xác thực thông điệp dùng khóa bí mật chung"),
+    ("MOS", "Mean Opinion Score, điểm đánh giá trung bình do người thật chấm khi đo chất lượng cảm nhận"),
+    ("PKI", "Public Key Infrastructure, hạ tầng khóa công khai"),
     ("HMAC", "Hash-based Message Authentication Code"),
     ("IoU", "Intersection over Union, tỉ số giao trên hợp"),
     ("JCS", "JSON Canonicalization Scheme (RFC 8785)"),
@@ -371,13 +373,13 @@ lang: vi
 
 LOI_MO_DAU = """Tài liệu điện tử ngày nay rò rỉ chủ yếu qua các kênh làm mất tính toàn vẹn bit: chụp ảnh màn hình, in ra rồi quét lại, hoặc chụp lại bằng điện thoại. Chữ ký số bảo vệ rất tốt biểu diễn số nguyên bản, nhưng chỉ cần một byte thay đổi là phép xác minh thất bại, và nó không cung cấp cơ chế nào để đối chiếu một bản sao đã qua biến đổi tín hiệu với hồ sơ phát hành gốc. Khoảng trống đó là lý do nhóm chọn đề tài này.
 
-Báo cáo bám sát bốn nội dung được giao. Chương 1 trình bày lý thuyết kỹ thuật Digital Watermarking. Chương 2 trình bày ứng dụng thủy vân trong truy vết thay đổi hình ảnh. Chương 3 gồm hai phần: ứng dụng ký số trong bảo vệ thông tin truy vết, và so sánh với các kỹ thuật xác minh toàn vẹn khác. Chương 4 trình bày hệ thống SplitBind mà nhóm đã hiện thực, đo đạc và đề xuất cải tiến.
+Báo cáo bám sát bốn nội dung được giao. Chương 1 trình bày lý thuyết kỹ thuật thủy vân số. Chương 2 trình bày ứng dụng thủy vân trong truy vết thay đổi hình ảnh. Chương 3 gồm hai phần: ứng dụng ký số trong bảo vệ thông tin truy vết, và so sánh với các kỹ thuật xác minh toàn vẹn khác. Chương 4 trình bày hệ thống SplitBind mà nhóm đã hiện thực, đo đạc và đề xuất cải tiến.
 
 Nhóm chủ trương công bố giới hạn thay vì che giấu. Mọi khẳng định kỹ thuật trong báo cáo đều được gắn một trong năm nhãn phân định cấp độ tri thức, in nghiêng ngay trước nội dung: *lý thuyết đã công bố* cho lý thuyết kinh điển, *đã hiện thực trong mã nguồn* cho tính năng đã có mã nguồn, *số liệu đo thực nghiệm* cho kết quả đo có artifact và mã băm xác thực, *đang vận hành trên hệ thống thật* cho tính năng đang chạy thực tế, và *giới hạn đã nhận diện* cho ranh giới thất bại đã xác định. Các kết quả âm tính và các giả thuyết đã bị bác bỏ đều được trình bày đầy đủ, vì chúng là một phần của đóng góp khoa học chứ không phải điều cần giấu."""
 
 KET_LUAN = """# KẾT LUẬN
 
-Báo cáo đã hoàn thành bốn nội dung được giao. Về lý thuyết, nhóm trình bày cơ sở kỹ thuật Digital Watermarking, phân loại theo miền nhúng và theo mục tiêu an ninh, cùng bài toán đánh đổi giữa độ bền, tính vô hình và dung lượng nhúng. Về ứng dụng, nhóm phân tích vai trò của thủy vân bền vững trong truy vết nguồn phát hành, của thủy vân bán dễ vỡ trong định vị can thiệp, và của chữ ký số Ed25519 trên manifest chuẩn tắc RFC 8785 trong bảo vệ thông tin truy vết. Về so sánh, nhóm đặt sáu kỹ thuật toàn vẹn cạnh nhau trên bảy tiêu chí an ninh.
+Báo cáo đã hoàn thành bốn nội dung được giao. Về lý thuyết, nhóm trình bày cơ sở kỹ thuật thủy vân số, phân loại theo miền nhúng và theo mục tiêu an ninh, cùng bài toán đánh đổi giữa độ bền, tính vô hình và dung lượng nhúng. Về ứng dụng, nhóm phân tích vai trò của thủy vân bền vững trong truy vết nguồn phát hành, của thủy vân bán dễ vỡ trong định vị can thiệp, và của chữ ký số Ed25519 trên manifest chuẩn tắc RFC 8785 trong bảo vệ thông tin truy vết. Về so sánh, nhóm đặt sáu kỹ thuật toàn vẹn cạnh nhau trên bảy tiêu chí an ninh.
 
 Điểm khác biệt của báo cáo là toàn bộ phần lý thuyết đều được kiểm chứng bằng một hệ thống hiện thực đầy đủ và đang vận hành, chứ không dừng ở mô hình.
 
