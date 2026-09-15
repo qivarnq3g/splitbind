@@ -11,36 +11,40 @@ SOURCE = HERE / "capstone-knowledge-base.md"
 REFERENCE = HERE / "reference-report.docx"
 OUT_MD = HERE / "Nhom9_TruyVetToanVenVanBan.md"
 OUT_DOCX = HERE / "Nhom9_TruyVetToanVenVanBan.docx"
-ASSETS = "report-assets"
+ASSETS = "report-assets/figures"
 
 CHAPTERS = [
-    ("CƠ SỞ LÝ THUYẾT KỸ THUẬT DIGITAL WATERMARKING", [(2, None)]),
+    ("CƠ SỞ LÝ THUYẾT KỸ THUẬT THỦY VÂN SỐ", [(2, None)]),
     ("ỨNG DỤNG THỦY VÂN TRONG TRUY VẾT VÀ TOÀN VẸN HÌNH ẢNH", [(3, None)]),
     ("ỨNG DỤNG CHỮ KÝ SỐ VÀ SO SÁNH CÁC KỸ THUẬT TOÀN VẸN",
      [(4, "Ứng dụng chữ ký số trong bảo vệ thông tin truy vết"),
       (5, "So sánh với các kỹ thuật xác minh bảo vệ tính toàn vẹn khác")]),
-    ("HỆ THỐNG SPLITBIND: HIỆN THỰC, THỰC NGHIỆM VÀ ĐỀ XUẤT",
-     [(6, "Kiến trúc và hiện thực hệ thống"),
+    ("HỆ THỐNG SPLITBIND: XÂY DỰNG, THỰC NGHIỆM VÀ ĐỀ XUẤT",
+     [(6, "Kiến trúc và cách xây dựng hệ thống"),
       (7, "Kết quả thực nghiệm"),
       (13, "Đề xuất kiến trúc V4: chẩn đoán nguyên nhân gốc")]),
 ]
 
 FIGURES = [
-    ("ui-cap-phat.png", "Giao diện cấp phát tài liệu trên hệ thống đang vận hành"),
-    ("ui-xac-minh-khop.png",
+    ("ui-issuance-result.png", "Giao diện cấp phát tài liệu trên hệ thống đang vận hành"),
+    ("ui-verification-match.png",
      "Kết quả xác minh khi tệp khớp bản cấp phát: mã SHA-256 trùng khớp và chữ ký hồ sơ hợp lệ"),
-    ("ui-xac-minh-khong-khop.png",
-     "Kết quả xác minh khi tệp đã bị chỉnh sửa: hệ thống báo không khớp và không quy kết hành vi cho bất kỳ ai"),
-    ("bieu-do-v1-v3.png",
-     "Tỉ lệ giải mã của thế hệ V1 và V3 trên cùng hợp đồng corpus, cùng định nghĩa cổng"),
-    ("bieu-do-phong-bi-tan-cong.png",
-     "Tỉ lệ truy vết của 13 phép biến đổi, phân theo ba lớp nguyên nhân thất bại"),
-    ("bieu-do-boc-vien.png",
+    ("ui-verification-no-match.png",
+     "Kết quả khi không tìm được bản cấp phát nào trùng mã băm: hệ thống nói rõ đây chưa phải bằng chứng tệp đã bị chỉnh sửa, và không quy kết hành vi cho bất kỳ ai"),
+    ("ui-verification-traced.png",
+     "Truy nguồn bằng thủy vân khi mã băm không khớp: tệp là ảnh chụp màn hình đã thu nhỏ còn 0,469 kèm viền đen, mã băm khác hẳn bản đã ký, nhưng hệ thống vẫn chỉ đúng bản cấp phát gốc"),
+    ("chart-v1-vs-v3.png",
+     "Tỉ lệ giải mã của thế hệ V1 và V3 trên cùng một bộ trang mẫu đã khoá, cùng định nghĩa cổng"),
+    ("chart-attack-envelope.png",
+     "Tỉ lệ truy vết của 13 phép biến đổi đo ngày 11/09/2026, phân theo ba lớp nguyên nhân thất bại. Hàng JPEG 50 về sau được khôi phục nhờ bản sửa ngân sách ký hiệu xoá ở Mục 4.2.4"),
+    ("chart-frame-restore.png",
      "Hiệu quả của bước bóc viền letterbox trước khi giải mã, đo trên 12 trang dương tính"),
+    ("chart-carrier-decides.png",
+     "Vật mang quyết định, không phải cường độ nhúng: hai trang chữ khác nhau độ dày nét trả cùng một cái giá về chất lượng nhưng cho kết quả truy vết ngược nhau"),
 ]
 
 TABLE_CAPTIONS = [
-    ("Hàm băm mật mã (Cryptographic Hash)",
+    ("Hàm băm mật mã (cryptographic hash)",
      "Ma trận so sánh sáu kỹ thuật bảo vệ toàn vẹn trên bảy tiêu chí an ninh"),
     ("Số liệu thực nghiệm | Giá trị khóa",
      "Các số liệu thực nghiệm đã khóa của thế hệ V1"),
@@ -62,6 +66,22 @@ TABLE_CAPTIONS = [
      "Năm phép thử thủy vân trên môi trường production"),
     ("Vật mang | không tấn công",
      "Ảnh hưởng của loại vật mang tới khả năng giải mã, ba vật mang trên năm điều kiện"),
+    ("Vật mang | PSNR | 1.0",
+     "Đối chiếu hai cách chọn đại lượng lượng tử hóa, đo độ chính xác bit qua bảy tỉ lệ thu nhỏ"),
+    ("Trường hợp | Kết quả",
+     "Kết quả giải mã ca ảnh chụp màn hình sau khi sửa ngân sách ký hiệu xoá"),
+    ("Vật mang | Phép biến đổi | Kết quả",
+     "Sáu phép thử truy vết qua đúng giao diện người dùng, ngày 14/09/2026"),
+    ("Cách ảnh được cấp phát | Phép biến đổi",
+     "Hai phép thử ảnh chụp màn hình khác nhau ở vật mang và kích thước cấp phát"),
+    ("Vật mang | Kích thước cấp phát",
+     "Phép đo tách biến: hai vật mang nhân hai kích thước cấp phát nhân ba điều kiện"),
+    ("Màn hình | Ảnh thô | Sau khi bóc viền",
+     "Tác động của bước bóc viền lên tỉ lệ truy vết, đo trên hai độ phân giải màn hình"),
+    ("# | qim | pilot | lặp | PSNR | Không tấn công | Chụp màn hình",
+     "Quét tám ứng viên dùng được của thế hệ V2 trên một trang chữ nét dày"),
+    ("# | qim | pilot | lặp | PSNR | Không tấn công | Nén JPEG 70",
+     "Quét lại đúng tám ứng viên đó trên một trang chữ nét mảnh, tỉ lệ điểm tối 9,24 phần trăm"),
     ("Phép biến đổi | Kích thước ra",
      "Đối chiếu khả năng sinh giả thuyết hình học với tỉ lệ truy vết đo được"),
     ("Lớp | Dấu hiệu | Ví dụ",
@@ -69,38 +89,61 @@ TABLE_CAPTIONS = [
 ]
 
 ABBREVIATIONS = [
-    ("BER", "Bit Error Rate, tỉ lệ lỗi bit"),
-    ("BTL", "Bài tập lớn"),
-    ("CRC", "Cyclic Redundancy Check, mã kiểm dư vòng"),
-    ("DCT", "Discrete Cosine Transform, biến đổi cosin rời rạc"),
-    ("DWT", "Discrete Wavelet Transform, biến đổi sóng con rời rạc"),
-    ("ECC", "Error-Correcting Code, mã sửa lỗi"),
-    ("BCH", "Bose-Chaudhuri-Hocquenghem, một họ mã sửa lỗi khối"),
-    ("JPEG", "Joint Photographic Experts Group, chuẩn nén ảnh có tổn hao; JPEG-70 nghĩa là nén ở mức chất lượng 70"),
-    ("MAC", "Message Authentication Code, mã xác thực thông điệp dùng khóa bí mật chung"),
-    ("HMAC", "Hash-based Message Authentication Code"),
-    ("IoU", "Intersection over Union, tỉ số giao trên hợp"),
-    ("JCS", "JSON Canonicalization Scheme (RFC 8785)"),
-    ("ORB", "Oriented FAST and Rotated BRIEF"),
-    ("PSNR", "Peak Signal-to-Noise Ratio, tỉ số tín hiệu trên nhiễu đỉnh"),
-    ("QIM", "Quantization Index Modulation, điều chế chỉ số lượng tử"),
-    ("RANSAC", "Random Sample Consensus"),
-    ("RBAC", "Role-Based Access Control, kiểm soát truy cập theo vai trò"),
-    ("RSS", "Resident Set Size, dung lượng bộ nhớ thường trú"),
-    ("SSIM", "Structural Similarity Index Measure"),
-    ("SSOT", "Single Source of Truth, nguồn chân lý duy nhất"),
-    ("WM", "Watermark, thủy vân số"),
+    ("BER", "Bit Error Rate. Phần trăm số bit sai trong tổng số bit đọc ra được."),
+    ("CRC", "Cyclic Redundancy Check. Một con số ngắn tính ra từ dữ liệu rồi gửi kèm theo nó; bên nhận tính lại và so, hai số khác nhau nghĩa là dữ liệu đã sai trên đường truyền. Chỉ bắt được lỗi ngẫu nhiên, không chống được sửa đổi có chủ đích."),
+    ("DCT", "Discrete Cosine Transform, biến đổi cosin rời rạc. Phép tách một khối ảnh thành các thành phần biến thiên nhanh chậm khác nhau, để có thể sửa riêng từng thành phần. Đây chính là phép mà chuẩn nén JPEG dùng."),
+    ("DWT", "Discrete Wavelet Transform, biến đổi wavelet rời rạc. Phép tách một ảnh thành một bản thu nhỏ giữ phần thô, cộng với ba phần chi tiết theo chiều ngang, chiều dọc và đường chéo."),
+    ("ECC", "Error-Correcting Code. Mã thêm một ít dữ liệu dư vào sau thông điệp, đủ để bên nhận tự sửa vài chỗ sai mà không phải hỏi lại bên gửi."),
+    ("BCH", "Tên ghép từ ba người tìm ra nó: Bose, Ray-Chaudhuri và Hocquenghem. Một họ mã sửa lỗi cho phép chọn trước số bit sai tối đa mà mã tự sửa được."),
+    ("JPEG", "Joint Photographic Experts Group. Chuẩn nén ảnh có tổn hao, tức mỗi lần nén là bỏ bớt một phần chi tiết không lấy lại được, đổi lấy tệp nhỏ hơn. JPEG-70 nghĩa là nén ở mức chất lượng 70 trên thang 100."),
+    ("MAC", "Message Authentication Code. Mã ngắn tính từ thông điệp cộng với một khóa bí mật mà hai bên cùng giữ; ai không có khóa thì không tạo được mã hợp lệ."),
+    ("MOS", "Mean Opinion Score. Điểm trung bình do người thật chấm khi đo chất lượng cảm nhận, đối lại với các chỉ số máy tính ra như PSNR."),
+    ("PKI", "Public Key Infrastructure, hạ tầng khóa công khai. Hệ thống cấp và thu hồi chứng thư số, để một bên tin được rằng khóa công khai của bên kia đúng là của họ."),
+    ("HMAC", "Hash-based Message Authentication Code. Mã xác thực tính bằng hàm băm kết hợp một khóa bí mật."),
+    ("IoU", "Intersection over Union. Tỉ số giữa phần giao và phần hợp của hai vùng, dùng để chấm xem vùng mà hệ thống khoanh trùng với vùng bị sửa thật đến đâu. Bằng 1 là trùng khít, bằng 0 là không chạm nhau."),
+    ("JCS", "JSON Canonicalization Scheme (RFC 8785). Quy tắc viết một đối tượng JSON theo đúng một dạng duy nhất, để hai máy khác nhau luôn ký lên cùng một chuỗi byte."),
+    ("ORB", "Oriented FAST and Rotated BRIEF. Phép tìm các điểm đặc trưng trên ảnh rồi mô tả chúng, dùng để khớp hai ảnh chụp cùng một cảnh."),
+    ("PSNR", "Peak Signal-to-Noise Ratio, tỉ số tín hiệu trên nhiễu đỉnh. Đo bằng decibel (dB); số càng lớn thì ảnh sau khi xử lý càng giống ảnh gốc, trên 40 dB thì mắt thường gần như không phân biệt được."),
+    ("QIM", "Quantization Index Modulation. Cách giấu tin bằng việc làm tròn một hệ số về điểm lưới chẵn hay lẻ, tùy bit cần giấu là 0 hay 1."),
+    ("RANSAC", "Random Sample Consensus. Phép ước lượng chịu được nhiễu: lấy ngẫu nhiên vài điểm, dựng thử một phép biến đổi, rồi giữ phép nào được nhiều điểm còn lại ủng hộ nhất."),
+    ("RBAC", "Role-Based Access Control. Cách phân quyền theo vai trò của người dùng thay vì gán quyền cho từng người một."),
+    ("RSS", "Resident Set Size. Lượng bộ nhớ thật mà một tiến trình đang chiếm."),
+    ("SSIM", "Structural Similarity Index Measure. Đo mức giống nhau về cấu trúc giữa hai ảnh, theo cách gần với cảm nhận của mắt hơn PSNR. Bằng 1 là hai ảnh trùng khít."),
+    ("SSOT", "Single Source of Truth. Một tài liệu duy nhất giữ bản đúng của mọi con số, các tài liệu khác chép lại từ đó chứ không tự sửa."),
+    ("WM", "Watermark, thủy vân số."),
+    ("API", "Application Programming Interface. Tập các lệnh mà một chương trình mở ra cho chương trình khác gọi vào."),
+    ("CSPRNG", "Cryptographically Secure Pseudo-Random Number Generator. Bộ sinh dãy số trông như ngẫu nhiên nhưng dựng lại được từ một khóa; biết một đoạn của dãy vẫn không đoán được đoạn tiếp theo."),
+    ("DPI", "Dots Per Inch. Số điểm ảnh trên mỗi inch, dùng để nói độ phân giải khi chuyển một trang tài liệu thành ảnh."),
+    ("SIFT", "Scale-Invariant Feature Transform. Phép tìm điểm đặc trưng trên ảnh mà vẫn nhận ra được sau khi ảnh bị phóng to hay thu nhỏ."),
+    ("SVD", "Singular Value Decomposition, phân tích giá trị kỳ dị. Phép tách một ma trận thành các thành phần xếp theo mức đóng góp, thành phần đầu giữ phần lớn năng lượng."),
+    ("UUID", "Universally Unique Identifier. Một định danh 128 bit sinh ngẫu nhiên, đủ dài để hai lần sinh trùng nhau là điều không xảy ra trên thực tế."),
 ]
 
 TERMS = [
-    ("canvas", "Khung ảnh chuẩn tắc mà mọi trang tài liệu được đưa về trước khi nhúng"),
-    ("corpus", "Bộ trang tài liệu mẫu cố định dùng cho mọi phép đo, để các lần chạy so sánh được với nhau"),
-    ("fixture", "Một trang tài liệu cụ thể trong corpus, đóng vai trò mẫu thử"),
-    ("letterbox", "Dải viền trơn mà ảnh chụp màn hình thêm vào hai bên khung ảnh khi tỉ lệ không khớp"),
-    ("manifest", "Hồ sơ toàn vẹn: tệp mô tả một lần cấp phát, được ký số để chống sửa đổi"),
-    ("payload", "Chuỗi bit mang thông tin định danh được nhúng vào ảnh"),
-    ("pre-gate", "Vòng sàng lọc chạy trước cổng phát hành, dùng để loại sớm các bộ tham số kém"),
-    ("tile", "Ô ảnh: vùng hình chữ nhật mà thuật toán chia trang ra để nhúng payload"),
+    ("canvas", "Khung ảnh cố định mà mọi trang tài liệu bị kéo về trước khi nhúng, để bên nhúng và bên đọc cùng làm việc trên một kích thước. Trong hệ thống này là 1152 x 2304 điểm ảnh."),
+    ("crop, resize", "Tên các phép tấn công trong bảng đo, giữ nguyên như trong mã nguồn: crop 0.25 là cắt bỏ 25 phần trăm diện tích tính từ ngoài vào, resize 0.75 là thu nhỏ ảnh còn 75 phần trăm mỗi cạnh."),
+    ("corpus", "Bộ trang tài liệu mẫu cố định dùng cho mọi phép đo. Giữ nguyên bộ này qua các lần chạy thì kết quả hai lần mới so với nhau được."),
+    ("fixture", "Một trang tài liệu cụ thể trong bộ trang mẫu, đóng vai trò mẫu thử."),
+    ("letterbox", "Dải viền trơn mà màn hình thêm vào hai bên hoặc trên dưới khung ảnh, khi tỉ lệ của ảnh không khớp tỉ lệ của màn hình."),
+    ("manifest", "Tệp mô tả một lần cấp phát: ai nhận, mã băm của tệp gốc và tệp phát hành, khóa nào đã ký. Chính tệp này được ký số, chứ không phải bản thân tài liệu."),
+    ("payload", "Chuỗi bit mang thông tin định danh được giấu vào trong ảnh."),
+    ("pre-gate", "Vòng đo sàng lọc chạy trước cổng phát hành, dùng để loại sớm những bộ tham số kém mà không phải chạy hết bộ đo đầy đủ."),
+    ("tile", "Ô ảnh, tức vùng hình chữ nhật mà thuật toán chia trang ra để giấu payload vào từng ô."),
+    ("harness", "Bộ mã và cấu hình dùng riêng cho việc chạy hàng loạt phép đo lặp lại được, nằm tách khỏi mã chạy thật của sản phẩm."),
+    ("profile", "Bộ tham số đã chốt của một thế hệ thuật toán: kích thước ô, số lần lặp bit, bước lượng tử và các hằng số kèm theo."),
+    ("Reed-Solomon", "Mã sửa lỗi làm việc theo từng byte chứ không theo từng bit. Nó thêm một số byte dư vào sau dữ liệu, đủ để bên nhận tự sửa vài byte hỏng."),
+    ("artifact", "Tệp kết quả do một lần chạy thực nghiệm sinh ra và được giữ lại để kiểm chứng về sau."),
+    ("benchmark", "Bộ phép đo chuẩn hóa chạy trên cùng một bộ trang mẫu, để hai lần chạy khác nhau so sánh được với nhau."),
+    ("StegaStamp", "Tên một kiến trúc thủy vân học sâu công bố năm 2019, huấn luyện đồng thời bộ mã hóa và bộ giải mã qua một tầng mô phỏng biến dạng."),
+    ("vật mang", "Dữ liệu dùng để chở thủy vân. Trong hệ thống này vật mang là ảnh của từng trang tài liệu, nên nội dung trang quyết định thủy vân sống được hay không."),
+    ("chuỗi xử lý (pipeline)", "Dãy bước xử lý nối tiếp nhau, đầu ra của bước trước là đầu vào của bước sau."),
+    ("fail-safe", "Cơ chế tự chuyển về trạng thái an toàn khi không đủ căn cứ kết luận. Ở đây là thà không chỉ ra vùng nào bị sửa, còn hơn khoanh bừa một vùng."),
+    ("kết xuất (render)", "Chuyển một trang tài liệu thành lưới điểm ảnh, để các thuật toán xử lý tín hiệu làm việc được trên đó."),
+    ("luminance", "Kênh độ sáng của ảnh, tách riêng khỏi kênh màu. Thủy vân chỉ được nhúng trên kênh này."),
+    ("pilot", "Tín hiệu mốc cài sẵn ở những vị trí tần số đã biết trước. Bên giải mã dò lại chùm tần số này để đoán xem ảnh đã bị phóng to, thu nhỏ hay xoay bao nhiêu so với lúc nhúng."),
+    ("raster", "Cách biểu diễn ảnh bằng lưới điểm ảnh, phân biệt với ảnh vector vẽ bằng đường nét."),
+    ("trải phổ (spread spectrum)", "Kỹ thuật rải một bit thông tin ra nhiều hệ số tín hiệu, để mất một phần hệ số thì vẫn đọc lại được bit đó."),
+    ("production", "Môi trường máy chủ đang phục vụ người dùng thật, phân biệt với môi trường thử nghiệm."),
 ]
 
 PAGEBREAK = (
@@ -130,11 +173,27 @@ def extract(text: str, part: int) -> str:
     nxt = re.search(r"^# PHẦN \d+:", text[start:], re.MULTILINE)
     body = text[start: start + nxt.start()] if nxt else text[start:]
     body = body.strip("\n").rstrip("- \n")
+    body = drop_horizontal_rules(body)
     body = drop_epistemic_labels(body)
     if part != 11:
         body = translate_labels(body)
         body = ampersand_to_word(body)
     return body
+
+RULE_ONLY = re.compile(r"^ {0,3}(?:-{3,}|\*{3,}|_{3,})\s*$")
+
+
+def drop_horizontal_rules(body: str) -> str:
+    kept = []
+    fenced = False
+    for line in body.splitlines():
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+        elif not fenced and RULE_ONLY.match(line):
+            continue
+        kept.append(line)
+    return "\n".join(kept)
+
 
 LABEL_ONLY = re.compile(r"^\s*(?:`\[[^\]]+\]`\s*(?:&|và)?\s*)+$")
 
@@ -216,14 +275,17 @@ def number_sections(body: str, chapter_no: int) -> str:
     return re.sub(r"^(#{2,4}) +(.*)$", fix, body, flags=re.MULTILINE)
 
 def caption_tables(body: str, counters: dict) -> str:
+    found = []
     for fragment, caption in TABLE_CAPTIONS:
         idx = body.find(fragment)
-        if idx == -1:
-            continue
-        line_start = body.rfind("\n", 0, idx) + 1
-        counters["table"] += 1
-        label = f"**Bảng {counters['chapter']}.{counters['table']}:** {caption}\n\n"
+        if idx != -1:
+            found.append((body.rfind("\n", 0, idx) + 1, caption))
+    for line_start, caption in sorted(found, reverse=True):
+        found_before = sum(1 for start, _ in found if start < line_start)
+        number = counters["table"] + found_before + 1
+        label = f"**Bảng {counters['chapter']}.{number}:** {caption}\n\n"
         body = body[:line_start] + label + body[line_start:]
+    counters["table"] += len(found)
     return body
 
 def build() -> str:
@@ -265,20 +327,21 @@ def build() -> str:
         for match in re.finditer(r"\*\*Bảng (\d+\.\d+):\*\* (.+)", chapter_md):
             table_list.append(f"| Bảng {match.group(1)} | {match.group(2)} |")
 
-        if chapter_no == len(CHAPTERS):
-            gallery = []
-            for filename, caption in FIGURES:
-                figure_index += 1
-                number = f"{chapter_no}.{figure_index}"
-                gallery.append(
-                    f"\n![]({ASSETS}/{filename})\n\n**Hình {number}:** {caption}\n"
-                )
-                figure_list.append(f"| Hình {number} | {caption} |")
-            chapter_md += (
-                "\n## Hình ảnh minh hoạ hệ thống và biểu đồ kết quả\n\n"
-                "Các hình dưới đây được chụp từ hệ thống đang vận hành và dựng từ "
-                "dữ liệu đo đã trình bày ở các mục trên.\n" + "".join(gallery)
+        captions = dict(FIGURES)
+
+        def place(match: "re.Match[str]") -> str:
+            nonlocal figure_index
+            filename = match.group(1)
+            if filename not in captions:
+                raise SystemExit(f"không có chú thích cho hình {filename}")
+            figure_index += 1
+            number = f"{chapter_no}.{figure_index}"
+            figure_list.append(f"| Hình {number} | {captions[filename]} |")
+            return (
+                f"![]({ASSETS}/{filename})\n\n**Hình {number}:** {captions[filename]}"
             )
+
+        chapter_md = re.sub(r"<<<HINH:([^>]+)>>>", place, chapter_md)
         out.append(chapter_md + PAGEBREAK)
 
     out.append(KET_LUAN + PAGEBREAK)
@@ -330,13 +393,13 @@ lang: vi
 
 LOI_MO_DAU = """Tài liệu điện tử ngày nay rò rỉ chủ yếu qua các kênh làm mất tính toàn vẹn bit: chụp ảnh màn hình, in ra rồi quét lại, hoặc chụp lại bằng điện thoại. Chữ ký số bảo vệ rất tốt biểu diễn số nguyên bản, nhưng chỉ cần một byte thay đổi là phép xác minh thất bại, và nó không cung cấp cơ chế nào để đối chiếu một bản sao đã qua biến đổi tín hiệu với hồ sơ phát hành gốc. Khoảng trống đó là lý do nhóm chọn đề tài này.
 
-Báo cáo bám sát bốn nội dung được giao. Chương 1 trình bày lý thuyết kỹ thuật Digital Watermarking. Chương 2 trình bày ứng dụng thủy vân trong truy vết thay đổi hình ảnh. Chương 3 gồm hai phần: ứng dụng ký số trong bảo vệ thông tin truy vết, và so sánh với các kỹ thuật xác minh toàn vẹn khác. Chương 4 trình bày hệ thống SplitBind mà nhóm đã hiện thực, đo đạc và đề xuất cải tiến.
+Báo cáo bám sát bốn nội dung được giao. Chương 1 trình bày lý thuyết kỹ thuật thủy vân số. Chương 2 trình bày ứng dụng thủy vân trong truy vết thay đổi hình ảnh. Chương 3 gồm hai phần: ứng dụng ký số trong bảo vệ thông tin truy vết, và so sánh với các kỹ thuật xác minh toàn vẹn khác. Chương 4 trình bày hệ thống SplitBind mà nhóm đã hiện thực, đo đạc và đề xuất cải tiến.
 
 Nhóm chủ trương công bố giới hạn thay vì che giấu. Mọi khẳng định kỹ thuật trong báo cáo đều được gắn một trong năm nhãn phân định cấp độ tri thức, in nghiêng ngay trước nội dung: *lý thuyết đã công bố* cho lý thuyết kinh điển, *đã hiện thực trong mã nguồn* cho tính năng đã có mã nguồn, *số liệu đo thực nghiệm* cho kết quả đo có artifact và mã băm xác thực, *đang vận hành trên hệ thống thật* cho tính năng đang chạy thực tế, và *giới hạn đã nhận diện* cho ranh giới thất bại đã xác định. Các kết quả âm tính và các giả thuyết đã bị bác bỏ đều được trình bày đầy đủ, vì chúng là một phần của đóng góp khoa học chứ không phải điều cần giấu."""
 
 KET_LUAN = """# KẾT LUẬN
 
-Báo cáo đã hoàn thành bốn nội dung được giao. Về lý thuyết, nhóm trình bày cơ sở kỹ thuật Digital Watermarking, phân loại theo miền nhúng và theo mục tiêu an ninh, cùng bài toán đánh đổi giữa độ bền, tính vô hình và dung lượng nhúng. Về ứng dụng, nhóm phân tích vai trò của thủy vân bền vững trong truy vết nguồn phát hành, của thủy vân bán dễ vỡ trong định vị can thiệp, và của chữ ký số Ed25519 trên manifest chuẩn tắc RFC 8785 trong bảo vệ thông tin truy vết. Về so sánh, nhóm đặt sáu kỹ thuật toàn vẹn cạnh nhau trên bảy tiêu chí an ninh.
+Báo cáo đã hoàn thành bốn nội dung được giao. Về lý thuyết, nhóm trình bày cơ sở kỹ thuật thủy vân số, phân loại theo miền nhúng và theo mục tiêu an ninh, cùng bài toán đánh đổi giữa độ bền, tính vô hình và dung lượng nhúng. Về ứng dụng, nhóm phân tích vai trò của thủy vân bền vững trong truy vết nguồn phát hành, của thủy vân bán dễ vỡ trong định vị can thiệp, và của chữ ký số Ed25519 trên manifest chuẩn tắc RFC 8785 trong bảo vệ thông tin truy vết. Về so sánh, nhóm đặt sáu kỹ thuật toàn vẹn cạnh nhau trên bảy tiêu chí an ninh.
 
 Điểm khác biệt của báo cáo là toàn bộ phần lý thuyết đều được kiểm chứng bằng một hệ thống hiện thực đầy đủ và đang vận hành, chứ không dừng ở mô hình.
 
@@ -344,7 +407,11 @@ Báo cáo đã hoàn thành bốn nội dung được giao. Về lý thuyết, n
 
 Từ đó nhóm phân tách được ba lớp thất bại vốn bị gộp chung dưới nhãn thủy vân không đủ bền: không tạo được ứng viên hình học, tạo ứng viên sai, và ứng viên đúng nhưng vật mang đã chết. Chỉ lớp thứ ba mới thực sự là vấn đề của thủy vân.
 
-Về các giới hạn đã nhận diện, phân hệ thủy vân bền vững chưa đạt cổng phát hành và được giữ ở tầng nghiên cứu; phiên bản vận hành chỉ kích hoạt xác thực toàn vẹn tệp chính xác. Dưới tỉ lệ co giãn khoảng 0.45 thì payload không còn khôi phục được kể cả khi hình học chính xác. Định vị can thiệp đạt IoU tổng hợp khoảng 0.09 do cơ chế fail-safe kích hoạt trên phần lớn kịch bản có diện tích can thiệp lớn. Và quan trọng nhất: không kết quả nào trong báo cáo chứng minh danh tính người làm rò rỉ, chỉnh sửa hay phát tán tài liệu; thủy vân và chữ ký số cung cấp tín hiệu kỹ thuật phục vụ điều tra, không phải kết luận pháp lý về hành vi của một cá nhân.
+Điều tra tiếp trong hai ngày cuối tìm ra một nguyên nhân gốc thứ ba, và nó buộc nhóm rút lại một phần chẩn đoán của chính mình. Lớp thất bại thứ ba hoá ra không phải vật mang chết: bộ giải mã đo độ tin cậy ở mức bit nhưng khai ký hiệu bị xoá ở mức byte, nên một bit yếu làm cả tám bit cùng byte bị khai xoá, và số ký hiệu xoá vượt quá mức mã Reed-Solomon sửa được. Hệ thống từ chối đúng những từ mã mà nó đã khôi phục ở tỉ lệ lỗi bit bằng 0,000. Một vật mang thay thế được cài đặt để kiểm chứng giả thuyết vật mang đã đo kém hơn ở mọi tỉ lệ và bị loại bỏ. Sửa kế toán ký hiệu xoá khôi phục được nén JPEG q50 và cả ca ảnh chụp màn hình có viền, mà không đụng tới khâu nhúng và không phải cấp phát lại tài liệu cũ. Chi tiết và bảng số liệu ở Mục 4.2.4.
+
+Nhóm cũng ghi nhận một lớp thất bại nằm ngoài thuật toán: dịch vụ đòi hai kết quả giải mã khớp nhau mới công bố danh tính, trong khi số trang là thành phần của phép dẫn xuất có khoá nên một tấm ảnh chỉ sinh được đúng một kết quả. Đường truy vết ảnh vì thế không thể kết luận dù thuật toán hoạt động đúng. Điều này định vị lại mọi bảng độ bền trong báo cáo: chúng được đo bằng cách gọi thẳng bộ giải mã và truyền sẵn số trang, tức mô tả thư viện chứ chưa mô tả sản phẩm.
+
+Về các giới hạn đã nhận diện, phân hệ thủy vân đã được bật trên hệ thống vận hành và mọi kết quả truy vết vẫn mang nhãn độ thu hồi chưa đạt cổng phát hành do chính hệ thống gắn. Ranh giới còn lại là tổn thất chồng nhau chứ không phải một phép biến đổi đơn lẻ: ảnh chụp màn hình cộng nén JPEG q60 thất bại trong khi từng phép một đều sống. Cắt ảnh quá nửa và xoay vẫn chưa giải được ở đây lẫn ở mọi công trình mã nguồn mở đã đối chiếu. Định vị can thiệp đạt IoU tổng hợp khoảng 0.09 do cơ chế fail-safe kích hoạt trên phần lớn kịch bản có diện tích can thiệp lớn. Và quan trọng nhất: không kết quả nào trong báo cáo chứng minh danh tính người làm rò rỉ, chỉnh sửa hay phát tán tài liệu; thủy vân và chữ ký số cung cấp tín hiệu kỹ thuật phục vụ điều tra, không phải kết luận pháp lý về hành vi của một cá nhân.
 
 Hướng phát triển rút ra trực tiếp từ chẩn đoán: chuẩn hoá khung ảnh trước khi giải mã, ước lượng tỉ lệ cắt thay vì liệt kê một giá trị cứng, cho phép hai trục co giãn độc lập, và cuối cùng mới là chọn vật mang theo nội dung. Xa hơn, bước lượng tử thích nghi theo mô hình thị giác người và các kiến trúc học sâu là lối đi cho lớp thất bại thứ ba."""
 

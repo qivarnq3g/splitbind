@@ -2,31 +2,34 @@
 
 Document integrity tracing for the Information Security capstone project of Group 9.
 
-SplitBind issues a per-recipient copy of a PDF, records signed evidence of what it issued, and later answers one question about a suspect file: does this document match an issuance this system performed, and has it been altered since. The live deployment runs at [splitbind.qivarn.id.vn](https://splitbind.qivarn.id.vn) with a Vietnamese interface.
+SplitBind issues a per-recipient copy of a document, records signed evidence of what it issued, and later answers two separate questions about a suspect file: which issuance did this come from, and have the bytes changed since. The live deployment runs at [splitbind.qivarn.id.vn](https://splitbind.qivarn.id.vn) with a Vietnamese interface.
 
 ## Status
 
-Integrity Release 0.1 is deployed and serving. Its processing mode is `integrity_v1`, defined by [ADR-002](docs/decisions/002-integrity-release-python-worker.md).
+`integrity-v0.2.3` is deployed and serving. The processing mode is `integrity_v1`, defined by [ADR-002](docs/decisions/002-integrity-release-python-worker.md).
 
 | Capability | State |
 |---|---|
-| Issuance with a visible pseudonymous marker | Released |
 | Exact-file integrity verification against a signed manifest | Released |
 | Ed25519 signing over RFC 8785 canonical manifests | Released |
 | Role-scoped access, append-only audit evidence, bounded retention | Released |
-| Transformed-copy attribution by fingerprint decoding | Off by default, see [ADR-003](docs/decisions/003-enable-transformed-attribution.md) |
+| Issuance of a watermarked image, not only a PDF | Released in `v0.2.0` |
+| Transformed-copy attribution by fingerprint decoding | Enabled in production since 2026-09-12 |
+| `SOURCE_IDENTIFIED_MODIFIED` as a verdict of its own | Released in `v0.2.2` |
 | Robust fingerprint profile passing Gate G1 | Not released |
 | Rust worker, RabbitMQ delivery | Not implemented in this release |
+
+The four releases since `v0.1.9` were corrections rather than features: issue a watermarked image as well as a PDF (`v0.2.0`), give an issued image its real file extension (`v0.2.1`), stop reporting a successful trace as insufficient evidence (`v0.2.2`), and select the fingerprint profile by issuance identifier instead of by grid position (`v0.2.3`).
 
 ## What the evidence means
 
 The distinction below is the point of the project, not a disclaimer.
 
-A verification answers from two sources. The exact SHA-256 of the file is compared against the hash recorded in a signed issuance manifest, and the manifest signature is checked against a registered Ed25519 public key. A match identifies the issuance and proves the bytes are unchanged. A mismatch proves the bytes differ from what was issued.
+A verification answers from two independent sources. The exact SHA-256 of the file is compared against the hash recorded in a signed issuance manifest, and the manifest signature is checked against a registered Ed25519 public key. A match identifies the issuance and proves the bytes are unchanged. A mismatch proves the bytes differ from what was issued. Separately, a fingerprint decoder may recover an issuance identifier from a transformed copy; it may add a positive identification and may never contradict the hash result.
 
-It does not prove who leaked, altered, or redistributed a document. A byte-identical match identifies a document, not a person's conduct. The interface and every result payload state this limit rather than implying attribution.
+None of this proves who leaked, altered, or redistributed a document. A match identifies a document, not a person's conduct. The interface and every result payload state that limit rather than implying attribution.
 
-When transformed attribution is enabled, a fingerprint decoder may add a positive identification, and it may never contradict the hash result. Measured across five production trials, no transformed copy was attributed and every failure returned zero valid votes with no attribution, so the capability cannot accuse anyone; it simply does not answer. [ADR-003](docs/decisions/003-enable-transformed-attribution.md) records the measurement and the carrier root cause behind it.
+**Attribution works, and the carrier decides whether it works.** Since the fingerprint subsystem was enabled in production on 2026-09-12, a file whose hash no longer matched has been traced back to the correct issuance from a downscaled, letterboxed screenshot. The same build returns `insufficient_sync_evidence` for a dense text page that has only been recompressed to JPEG quality 70. The binding constraint is not the watermark strength but the page content: a text page is close to the worst carrier this design can be given, being mostly white with sparse glyph edges and almost no mid-frequency texture where the QIM payload lives. A robustness rate measured on gradient or vector corpora is therefore not a product capability, and this repository does not present one as such.
 
 ## Architecture
 
@@ -58,7 +61,11 @@ Runtime ceilings are declared once in [`services/api/config/limits.py`](services
 | `infra` | Caddy edge, Compose topologies, deployment and audit scripts |
 | `tests/platform` | Static contract checks over the Compose graph, the Caddy edge, and the operational scripts |
 | `fixtures` | Deterministic synthetic corpora; no real document or personal data |
-| `docs` | Decisions, evaluations, runbooks, and the knowledge base |
+| `reports` | Raw benchmark output, one directory per run |
+| `docs/decisions` | Architecture decision records |
+| `docs/evaluation` | Measured profile and pre-gate results |
+| `docs/runbooks` | Operating procedures |
+| `docs/project` | The capstone report, its figure sources, and the production screenshots it cites |
 
 ## Running it
 
@@ -96,15 +103,18 @@ No script stores the deployment target. The host, administrator account, and sto
 
 ## Research status
 
-No fingerprint profile has been promoted. Gate G1 is unchanged and every result below is recorded as a factual no-release outcome.
+No fingerprint profile has been promoted. Gate G1 is unchanged, and every result below is recorded as a factual no-release outcome.
 
 | Run | Rows | Outcome |
 |---|---|---|
 | [V1 full matrix](docs/evaluation/fingerprint-profile-v1.md) | 32,736 | Completed with 1,488 execution errors; no candidate promoted |
 | [V2 pre-gate](docs/evaluation/fingerprint-pregate-v2.md) | 1,408 | Zero execution errors, zero false attributions, empty qualified selection |
 | [V3 pre-gate](docs/evaluation/fingerprint-pregate-v3.md) | 352 | Zero execution errors, zero false attributions, empty qualified selection |
+| V5 attack envelope (`research/python/scripts/run_v5_envelope.py`) | 286 | Thirteen attacks, nine of them never measured before; zero execution errors, zero false attributions |
 
-Precision has held throughout: no run has ever produced a false attribution. Robustness has not. The production measurement in ADR-003 identified why the benchmark could not: a text page is close to the worst carrier this design can be given, being mostly white with sparse glyph edges and almost no mid-frequency texture where the QIM payload lives. A gradient carrier retained payload evidence through a 0.50 rescale while a text page produced nothing even unattacked, and every document this product issues is a text page. A robustness rate measured on gradient and vector corpora is therefore not a product capability.
+The V5 envelope is the first run to measure what actually survives. Identity, JPEG 85 and JPEG 70 attribute 11 of 12 pages; upscaling is nearly free at 11 of 12; resize 0.75 and 0.50 hold at 10 and 9. JPEG 50, crop 0.50 and every screenshot variant attribute none. The screenshot failures report `insufficient_sync_evidence`, meaning geometry search never recovered the page and the payload layer was never reached, so the decoder cannot produce a wrong answer there either.
+
+Precision has held throughout. Across every run, on 130 never-embedded negative rows in V5 alone, no false attribution has ever been produced. Robustness has not held, and the production measurements above explain why: the carrier is the constraint.
 
 ## Documentation
 
@@ -112,15 +122,15 @@ Precision has held throughout: no run has ever produced a false attribution. Rob
 - [ADR-002: Python data plane for Integrity Release 0.1](docs/decisions/002-integrity-release-python-worker.md)
 - [ADR-003: Transformed attribution as an off-by-default capability](docs/decisions/003-enable-transformed-attribution.md)
 - [Local and offline runbook](docs/runbooks/local-and-offline.md)
-- [Knowledge base](docs/knowledge/)
+- [Capstone report (Vietnamese, .docx)](docs/project/Nhom9_TruyVetToanVenVanBan.docx) and the [evidence screenshots](docs/project/report-assets/evidence/) it cites
 
-Course materials, correspondence, and deployment evidence are kept local and are not part of this repository.
+Course materials, correspondence, and the working knowledge base are kept local and are not part of this repository.
 
 ## Security boundaries
 
 - No personal data, real documents, secrets, or production keys are committed. Environment variables are documented by name, never by value.
 - The private signing key exists only on the worker and is never mounted into the edge or the API.
-- No PDF enters a message queue; only identifiers and minimal metadata cross a process boundary.
+- No document enters a message queue; only identifiers and minimal metadata cross a process boundary.
 - Every success, failure, timeout, and cancellation path removes its temporary files.
 - The system is never presented as proof of who leaked a document.
 

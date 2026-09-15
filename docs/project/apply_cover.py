@@ -116,6 +116,8 @@ def number_cell(cell: str, ordinal: int) -> str:
     if text is None:
         return cell
     cut = text.end()
+    if re.match(r"\s*\d+\s*[.)]\s", cell[cut:]):
+        return cell
     return cell[:cut] + f"{ordinal}. " + cell[cut:]
 
 
@@ -239,6 +241,132 @@ def compact_table_cells(xml: str) -> str:
     return re.sub(r"<w:tc>.*?</w:tc>", fix_cell, xml, flags=re.S)
 
 
+BREAK_ONLY = re.compile(
+    r'<w:p(?:\s[^>]*)?>(?:(?!</w:p>).)*?<w:br w:type="page"\s*/>(?:(?!</w:p>).)*?</w:p>',
+    re.S,
+)
+
+
+def fold_page_breaks(xml: str) -> str:
+    def carries_text(block: str) -> bool:
+        return bool(re.search(r"<w:t(?:\s[^>]*)?>[^<]", block))
+
+    while True:
+        found = BREAK_ONLY.search(xml)
+        while found is not None and carries_text(found.group(0)):
+            found = BREAK_ONLY.search(xml, found.end())
+        if found is None:
+            return xml
+        after = re.compile(r"<w:p(?:\s[^>]*)?>", re.S).search(xml, found.end())
+        if after is None or xml[found.end():after.start()].strip():
+            xml = xml[:found.start()] + xml[found.end():]
+            continue
+        target = re.compile(r"<w:p(?:\s[^>]*)?>.*?</w:p>", re.S).match(xml, after.start())
+        folded = insert_paragraph_props(target.group(0), "<w:pageBreakBefore/>")
+        xml = xml[:found.start()] + folded + xml[target.end():]
+
+
+def attach_section(cover: str, properties: str) -> str:
+    cover = re.sub(r"<w:sectPr(?:\s[^>]*)?>.*?</w:sectPr>", "", cover, flags=re.S)
+    cover = re.sub(r"<w:sectPr(?:\s[^>]*)?/>", "", cover)
+    while True:
+        blocks = list(re.finditer(r"<w:p(?:\s[^>]*)?>.*?</w:p>", cover, re.S))
+        if not blocks or cover[blocks[-1].end():].strip():
+            break
+        tail = blocks[-1].group(0)
+        if re.search(r"<w:t(?:\s[^>]*)?>[^<]", tail) or "<w:drawing>" in tail:
+            break
+        cover = cover[:blocks[-1].start()] + cover[blocks[-1].end():]
+    blocks = list(re.finditer(r"<w:p(?:\s[^>]*)?>.*?</w:p>", cover, re.S))
+    if not blocks or cover[blocks[-1].end():].strip():
+        return cover + "<w:p><w:pPr>" + properties + "</w:pPr></w:p>"
+    last = blocks[-1]
+    block = last.group(0)
+    if "<w:pPr>" in block:
+        block = block.replace("</w:pPr>", properties + "</w:pPr>", 1)
+    else:
+        opening = re.match(r"<w:p(?:\s[^>]*)?>", block).group(0)
+        block = block.replace(opening, opening + "<w:pPr>" + properties + "</w:pPr>", 1)
+    return cover[:last.start()] + block + cover[last.end():]
+
+
+FOOTER_NS = (
+    '<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+)
+FOOTER_BODY = (
+    '<w:p><w:pPr><w:jc w:val="center"/>'
+    '<w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/>'
+    '<w:sz w:val="26"/><w:szCs w:val="26"/></w:rPr></w:pPr>'
+    '<w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/>'
+    '<w:sz w:val="26"/><w:szCs w:val="26"/></w:rPr>'
+    '<w:fldChar w:fldCharType="begin"/></w:r>'
+    '<w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>'
+    '<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>'
+)
+FOOTER_XML = FOOTER_NS + FOOTER_BODY + "</w:ftr>"
+FOOTER_REL = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer"
+)
+FOOTER_TYPE = (
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"
+)
+
+
+def add_footers(items: dict) -> tuple[str, str]:
+    rels = items["word/_rels/document.xml.rels"].decode("utf-8")
+    ids = []
+    for index, name in (("1", "footer-front.xml"), ("2", "footer-body.xml")):
+        rel_id = f"rIdFooter{index}"
+        items[f"word/{name}"] = FOOTER_XML.encode("utf-8")
+        entry = f'<Relationship Id="{rel_id}" Type="{FOOTER_REL}" Target="{name}"/>'
+        if rel_id not in rels:
+            rels = rels.replace("</Relationships>", entry + "</Relationships>")
+        ids.append(rel_id)
+        types = items["[Content_Types].xml"].decode("utf-8")
+        override = f'<Override PartName="/word/{name}" ContentType="{FOOTER_TYPE}"/>'
+        if override not in types:
+            types = types.replace("</Types>", override + "</Types>")
+        items["[Content_Types].xml"] = types.encode("utf-8")
+    items["word/_rels/document.xml.rels"] = rels.encode("utf-8")
+    return ids[0], ids[1]
+
+
+def number_pages(document: str, front_id: str, body_id: str, page_size: str) -> str:
+    heading = re.search(
+        r'<w:p(?:\s[^>]*)?>(?:(?!</w:p>).)*?<w:t(?:\s[^>]*)?>LỜI MỞ ĐẦU</w:t>',
+        document, re.S,
+    )
+    if heading is None:
+        raise SystemExit("không thấy tiêu đề LỜI MỞ ĐẦU để chia phần")
+
+    tail = re.search(r"<w:sectPr>.*?</w:sectPr>", document[heading.end():], re.S)
+    if tail is None:
+        raise SystemExit("không thấy sectPr cuối tài liệu")
+    start, end = heading.end() + tail.start(), heading.end() + tail.end()
+    body_section = document[start:end]
+    margins = re.search(r"<w:pgMar[^/]*/>", body_section).group(0)
+
+    numbered_body = body_section.replace(
+        "<w:sectPr>",
+        f'<w:sectPr><w:footerReference w:type="default" r:id="{body_id}"/>',
+        1,
+    ).replace(
+        "</w:sectPr>",
+        '<w:pgNumType w:fmt="decimal" w:start="1"/></w:sectPr>',
+        1,
+    )
+    document = document[:start] + numbered_body + document[end:]
+
+    front_section = (
+        "<w:p><w:pPr><w:sectPr>"
+        f'<w:footerReference w:type="default" r:id="{front_id}"/>'
+        + page_size + margins
+        + '<w:pgNumType w:fmt="lowerRoman" w:start="1"/>'
+        "</w:sectPr></w:pPr></w:p>"
+    )
+    return document[:heading.start()] + front_section + document[heading.start():]
+
+
 def drop_third_student(xml: str) -> str:
     for row in re.findall(r"<w:tr[ >].*?</w:tr>", xml, re.S):
         if "Tên sv 3" in row or "MSSV 3" in row:
@@ -312,16 +440,16 @@ def main() -> int:
         document = document.replace("<w:sectPr>", "<w:sectPr>" + PAGE_SIZE)
 
     cover_section = (
-        "<w:p><w:pPr><w:sectPr>"
-        + PAGE_SIZE
-        + cover_margin
-        + borders
-        + "</w:sectPr></w:pPr></w:p>"
+        "<w:sectPr>" + PAGE_SIZE + cover_margin + borders + "</w:sectPr>"
     )
     cover = rebuild_cover_table(single_spaced(cover), available)
+    cover = attach_section(cover, cover_section)
     document = compact_table_cells(document)
     document = unjustify_code_paragraphs(document)
-    document = document.replace("<w:body>", "<w:body>" + cover + cover_section, 1)
+    document = fold_page_breaks(document)
+    front_id, body_id = add_footers(items)
+    document = number_pages(document, front_id, body_id, PAGE_SIZE)
+    document = document.replace("<w:body>", "<w:body>" + cover, 1)
     items["word/document.xml"] = document.encode("utf-8")
 
     backup = REPORT.with_suffix(".pre-cover.docx")
