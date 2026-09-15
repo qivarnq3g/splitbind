@@ -200,7 +200,6 @@ Nhóm 9 đã tiếp cận và triển khai thực nghiệm cả hai bài toán �
 1. **Bài toán A:** Ứng dụng thủy vân bền vững trong truy vết nguồn phát hành (Traitor Tracing / Source Attribution).
 2. **Bài toán B:** Ứng dụng thủy vân bán dễ vỡ trong phát hiện và định vị sửa đổi (Tamper Detection & Localization).
 
----
 
 ## 2.1. Bài toán A: truy vết nguồn phát hành (Traitor Tracing)
 
@@ -252,7 +251,6 @@ Nhóm 9 đã tiếp cận và triển khai thực nghiệm cả hai bài toán �
 **Ba ranh giới trên là số đo của thế hệ V1 và đã thay đổi.** Một nguyên nhân khiến JPEG-70 và Resize-0.75 thất bại nằm ở cách bên nhận kế toán ký hiệu bị xoá chứ không ở vật mang; sau khi sửa phần kế toán đó, cả hai ca này giải mã được trên bộ khung nghiên cứu, và ca ảnh chụp màn hình cũng vậy. Cần nói rõ phạm vi: đó là số đo của bộ khung nghiên cứu, còn trên đường đi thật của dịch vụ thì vật mang mới là yếu tố quyết định, và với trang chữ nét mảnh thì nén JPEG-70 vẫn chưa truy được. Số đo sau khi sửa cùng chẩn đoán đầy đủ nằm ở Mục 4.2.4, phần đo trên dịch vụ ở Mục 4.2.4.5. Giữ nguyên các con số V1 ở đây vì chúng là mốc so sánh của quá trình, không phải mô tả hiện trạng.
 * **Kết luận học thuật:** Thuật toán chứng minh tính khả thi của việc nhúng định danh 128-bit với độ trung thực tín hiệu cao trên mảng điểm ảnh, nhưng còn hạn chế trước các biến đổi phi tuyến và nén lossy nặng. Một hướng nghiên cứu tiếp theo có thể xem xét là Deep Watermarking (như kiến trúc HiDDeN, StegaStamp) kết hợp mạng nơ-ron tích chập tự mã hóa (Autoencoder) bên cạnh việc tối ưu hóa bước lượng tử hóa thích nghi theo đặc trưng cục bộ.
 
----
 
 ## 2.2. Bài toán B: thủy vân bán dễ vỡ phát hiện và định vị sửa đổi (Tamper Localization)
 
@@ -323,7 +321,6 @@ Nhóm 9 đã tiếp cận và triển khai thực nghiệm cả hai bài toán �
   * Trên đường đi có một khiếm khuyết đáng ghi lại vì cách nó ẩn mình. Khóa đối tượng đầu ra bị cố định đuôi `.pdf` ở hai nơi cùng lúc, tại bước nhận việc của tiến trình xử lý và tại ràng buộc hợp lệ của bản ghi kết quả, nên hai lỗi triệt tiêu nhau và mọi kiểm tra nội bộ đều xanh. Hậu quả là tệp cấp phát cho tài liệu ảnh tuy đúng là PNG về nội dung nhưng lại mang tên và kiểu nội dung `.pdf`. Nó chỉ lộ ra khi đem thử trên hệ thống thật. Bản `integrity-v0.2.1` suy đuôi tệp từ kiểu nội dung của tài liệu nguồn ở cả ba nơi (`services/api/splitbind/demo/worker.py: L45`, `services/api/splitbind/demo/issuance.py: L172`, `services/api/splitbind/documents/views.py: L200-L203`). Việc truy vết chưa bao giờ bị ảnh hưởng, vì bên nhận nhận dạng định dạng bằng chuỗi byte mở đầu tệp chứ không bằng phần mở rộng (`services/api/splitbind/demo/verification.py: L276-L280`).
   * Đây vẫn là năng lực chưa qua cổng phát hành mà nhóm tự đặt: mọi kết quả truy vết đều mang nhãn giới hạn về độ thu hồi, do chính hệ thống gắn vào chứ không phải do người viết báo cáo thêm vào.
 
----
 
 ### 3.1.2. Kiến trúc hồ sơ toàn vẹn (Signed Manifest)
 *Đã hiện thực trong mã nguồn* và *Đang vận hành trên hệ thống thật* (Tệp `services/api/splitbind/release/manifest.py: L58-L119`)
@@ -356,7 +353,6 @@ Hệ thống không ký trực tiếp lên file PDF nhị phân, mà sử dụng
 * **Vai trò của Ed25519:** Chữ ký số hiệu năng cao trên đường cong Edwards Curve 25519 (RFC 8032). Ký trên biểu diễn chuẩn hóa RFC 8785 để xác thực nguồn gốc cơ quan phát hành và bảo vệ tính toàn vẹn của hồ sơ truy vết. Về mặt mật mã học, chữ ký số cung cấp đặc tính chống chối bỏ kỹ thuật (cryptographic non-repudiation); giá trị chứng cứ pháp lý ràng buộc trong thực tế phụ thuộc vào quy trình định danh chủ thể, quản lý khóa riêng và chính sách chứng thư theo khuôn khổ pháp luật hiện hành.
 * **Chuẩn hóa RFC 8785 JCS:** Tạo biểu diễn JSON xác định / chuẩn tắc (canonical representation) độc lập với thư viện tuần tự hóa, bảo đảm đầu vào của hàm băm và chữ ký số luôn ổn định, lặp lại được (deterministic input for hashing and signing).
 
----
 
 ### 3.1.3. Giải quyết "Mâu thuẫn giữa thủy vân số và chữ ký số"
 *Lý thuyết đã công bố* (Giải quyết thắc mắc của Giảng viên TS. Hồ Đăng Thế)
@@ -374,7 +370,6 @@ Hệ thống không ký trực tiếp lên file PDF nhị phân, mà sử dụng
      * **Kênh rò rỉ biến đổi (Analog / Lossy Leak Channel):** Nếu tài liệu bị in ra giấy, chụp màn hình, hoặc nén gửi qua mạng xã hội, tệp bị biến đổi các byte nhị phân thô nên mã băm của tệp nghi vấn sẽ không còn khớp với `output_sha256` ghi trong Manifest. Bản thân chữ ký Ed25519 trên Manifest gốc vẫn hoàn toàn hợp lệ (chứng minh Manifest không bị giả mạo), nhưng giá trị hash trong đó xác nhận tệp nghi vấn không phải là tệp nguyên bản phát hành. Về mặt lý thuyết thiết kế, Thủy vân số bền vững (Robust Watermark) được kỳ vọng đóng vai trò là cơ chế chủ động (proactive) sống sót qua biến đổi tín hiệu để trích xuất lại `issuance_id`, từ đó làm cầu nối đối chiếu ngược về Manifest gốc đã ký số trong cơ sở dữ liệu. Cần phân định rõ giữa mục tiêu thiết kế và năng lực đã đo được. Thế hệ V1 thất bại hoàn toàn trước JPEG-70 và Resize-0.75 (0/12 ở cả hai) và chỉ khôi phục một phần dưới Crop-0.25. Thế hệ V3, đo trên cùng một corpus, đạt 9/12 ở JPEG-70, 8/12 ở Resize-0.75 và 9/12 ở Crop-0.25 (Mục 4.2.1.1). Cả hai mức đều dưới cổng phát hành 0.95 mà nhóm tự đặt, nên phân hệ thủy vân vẫn mang nhãn nghiên cứu dù đã bật trên hệ thống đang chạy (Mục 4.2.4). (Bên cạnh thủy vân, các kỹ thuật điều tra số khác như perceptual hashing, đối soát OCR văn bản cũng có thể hỗ trợ nhưng thủy vân nhúng sẵn định danh trực tiếp trong nội dung ảnh).
   * **Kết luận:** Hai cơ chế không triệt tiêu nhau mà tạo thành Hai tầng phòng thủ bổ trợ nhau (Defense-in-Depth).
 
----
 
 ### 3.1.4. Minh bạch ngữ nghĩa trạng thái trên production (`NO_WATERMARK`)
 
@@ -407,7 +402,6 @@ Hệ thống không ký trực tiếp lên file PDF nhị phân, mà sử dụng
 | **6. Yêu cầu quản lý khóa** | Không cần khóa (Unkeyed primitive). | Khóa đối xứng bí mật (Symmetric Shared Key). | Cặp khóa bất đối xứng (Private/Public). Phân phối qua PKI CA, pinning hoặc Web of Trust. | Có thể dùng khóa/seed tùy thiết kế; SplitBind dùng secret seed/key để chọn vị trí nhúng. | Khóa đối xứng HMAC tạo thẻ và khóa định tuyến đối tác (Ring Key). | Có thể dùng stego-key tùy lược đồ; cũng tồn tại phương pháp không dùng khóa. |
 | **7. Giá trị pháp lý / chống chối bỏ** | Không có tính chứng thực nguồn gốc hay chống chối bỏ. | Không có tính chống chối bỏ (bên nhận có cùng khóa có thể tự tạo MAC). | **Cung cấp tính chống chối bỏ mật mã học;** giá trị pháp lý phụ thuộc quản lý khóa và luật sở tại. | Bằng chứng kỹ thuật hỗ trợ điều tra số nội bộ; cần bằng chứng bổ trợ. | Bằng chứng kỹ thuật định vị vùng sửa đổi phục vụ giám định số. | Không có giá trị chứng cứ pháp lý công khai. |
 
----
 
 ### 3.2.2. Phân tích tương phản chuyên sâu giữa các cặp kỹ thuật
 
@@ -492,7 +486,6 @@ Mọi con số trình bày trên slide thuyết trình và báo cáo bắt buộ
 | **IoU định vị can thiệp** | **`0.089981` (~0.09)** | `docs/evaluation/integrity-profile-v1.md` | Chỉ số giao trên hợp (IoU) tổng hợp trên toàn bộ 48 hàng thử nghiệm. | Minh bạch giới hạn thuật toán: 38/48 hàng kích hoạt cơ chế fail-safe bảo vệ trước nén mạnh, làm giảm IoU. |
 | **Tỷ lệ giải mã JPEG-70 và Resize** | **`0%` (0 / 12)** | `fingerprint-profile-v1.md` | Thực nghiệm dưới nén JPEG Q=70 và co giãn 0.75x. | Minh chứng lý do thuật toán được giữ ở tầng nghiên cứu. Từ 12/09/2026 phân hệ này được bật trên production để đo thực tế; kết quả âm tính ban đầu ở Mục 4.2.3, kết quả sau khi sửa nguyên nhân gốc ở Mục 4.2.4. |
 
----
 
 ### 4.2.1. BỔ SUNG: KẾT QUẢ ĐO THẾ HỆ V3 (KHÔNG THAY THẾ FROZEN METRICS V1)
 
@@ -575,7 +568,6 @@ Dung lượng tệp tạm bằng 0 ở mọi hàng vì toàn bộ pipeline tấn
 - Không slide hay đoạn báo cáo nào được mô tả V3 như năng lực đã phát hành. Cần phân biệt hai mốc: ở thời điểm lần chạy này (06/09/2026), bản đang chạy trên production là Integrity Release 0.1, chỉ xác thực toàn vẹn tệp chính xác và không nhúng thủy vân ở bất kỳ thế hệ nào. Từ 12/09/2026, bản đang chạy có nhúng và có đọc thủy vân, nhưng là thế hệ V2 chứ không phải V3 (Mục 4.2.3 và 4.2.4). Nói cách khác, các con số trong mục này vẫn không phải số liệu của bản đang chạy.
 - Ngược lại, cũng không được trình bày con số 0/12 của V1 như "độ bền thủy vân của dự án" mà không nói rõ đó là thế hệ V1. Trên cùng corpus, thế hệ nghiên cứu hiện tại đạt 0.750 ở JPEG-70.
 
----
 
 ### 4.2.2. ĐỊNH VỊ KẾT QUẢ CỦA NHÓM SO VỚI CÁC CÔNG TRÌNH MÃ NGUỒN MỞ
 
@@ -1020,7 +1012,6 @@ Ba điều kèm theo cần nêu vì chúng là phần khó của thay đổi, kh
 
 *Giới hạn đã nhận diện* Trước thay đổi này, mã chọn hồ sơ bằng cách lấy phần tử đầu của lưới ứng viên rồi mới đối chiếu định danh. Thứ tự của một tệp hợp đồng vì thế quyết định thuật toán nào thực sự chạy trên hệ thống thật, một sự phụ thuộc không được ghi ở đâu cả. Nay mã tra hồ sơ theo định danh, nên hợp đồng có sắp xếp lại thì hành vi vẫn giữ nguyên.
 
----
 
 ### 4.3.5. Đối chiếu ba công trình mã nguồn mở về đúng bài toán trang văn bản
 
@@ -1067,7 +1058,6 @@ Thư viện này được dùng rộng rãi trong các sản phẩm sinh ảnh, 
 
 *Giới hạn đã nhận diện* Bốn điều trên là kết luận rút ra từ việc đọc mã nguồn, không phải từ phép đo của nhóm. Chưa điều nào được cài đặt và đo trong dự án này, nên chúng là đề xuất có căn cứ chứ chưa phải kết quả.
 
----
 
 ### 4.3.6. Kiến trúc V4 đề xuất
 

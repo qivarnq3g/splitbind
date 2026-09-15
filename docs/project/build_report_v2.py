@@ -147,11 +147,27 @@ def extract(text: str, part: int) -> str:
     nxt = re.search(r"^# PHẦN \d+:", text[start:], re.MULTILINE)
     body = text[start: start + nxt.start()] if nxt else text[start:]
     body = body.strip("\n").rstrip("- \n")
+    body = drop_horizontal_rules(body)
     body = drop_epistemic_labels(body)
     if part != 11:
         body = translate_labels(body)
         body = ampersand_to_word(body)
     return body
+
+RULE_ONLY = re.compile(r"^ {0,3}(?:-{3,}|\*{3,}|_{3,})\s*$")
+
+
+def drop_horizontal_rules(body: str) -> str:
+    kept = []
+    fenced = False
+    for line in body.splitlines():
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+        elif not fenced and RULE_ONLY.match(line):
+            continue
+        kept.append(line)
+    return "\n".join(kept)
+
 
 LABEL_ONLY = re.compile(r"^\s*(?:`\[[^\]]+\]`\s*(?:&|và)?\s*)+$")
 
