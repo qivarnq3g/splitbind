@@ -66,6 +66,22 @@ TABLE_CAPTIONS = [
      "Năm phép thử thủy vân trên môi trường production"),
     ("Vật mang | không tấn công",
      "Ảnh hưởng của loại vật mang tới khả năng giải mã, ba vật mang trên năm điều kiện"),
+    ("Vật mang | PSNR | 1.0",
+     "Đối chiếu hai cách chọn đại lượng lượng tử hóa, đo độ chính xác bit qua bảy tỉ lệ thu nhỏ"),
+    ("Trường hợp | Kết quả",
+     "Kết quả giải mã ca ảnh chụp màn hình sau khi sửa ngân sách ký hiệu xoá"),
+    ("Vật mang | Phép biến đổi | Kết quả",
+     "Sáu phép thử truy vết qua đúng giao diện người dùng, ngày 14/09/2026"),
+    ("Cách ảnh được cấp phát | Phép biến đổi",
+     "Hai phép thử ảnh chụp màn hình khác nhau ở vật mang và kích thước cấp phát"),
+    ("Vật mang | Kích thước cấp phát",
+     "Phép đo tách biến: hai vật mang nhân hai kích thước cấp phát nhân ba điều kiện"),
+    ("Màn hình | Ảnh thô | Sau khi bóc viền",
+     "Tác động của bước bóc viền lên tỉ lệ truy vết, đo trên hai độ phân giải màn hình"),
+    ("# | qim | pilot | lặp | PSNR | Không tấn công | Chụp màn hình",
+     "Quét tám ứng viên dùng được của thế hệ V2 trên một trang chữ nét dày"),
+    ("# | qim | pilot | lặp | PSNR | Không tấn công | Nén JPEG 70",
+     "Quét lại đúng tám ứng viên đó trên một trang chữ nét mảnh, tỉ lệ điểm tối 9,24 phần trăm"),
     ("Phép biến đổi | Kích thước ra",
      "Đối chiếu khả năng sinh giả thuyết hình học với tỉ lệ truy vết đo được"),
     ("Lớp | Dấu hiệu | Ví dụ",
@@ -259,14 +275,17 @@ def number_sections(body: str, chapter_no: int) -> str:
     return re.sub(r"^(#{2,4}) +(.*)$", fix, body, flags=re.MULTILINE)
 
 def caption_tables(body: str, counters: dict) -> str:
+    found = []
     for fragment, caption in TABLE_CAPTIONS:
         idx = body.find(fragment)
-        if idx == -1:
-            continue
-        line_start = body.rfind("\n", 0, idx) + 1
-        counters["table"] += 1
-        label = f"**Bảng {counters['chapter']}.{counters['table']}:** {caption}\n\n"
+        if idx != -1:
+            found.append((body.rfind("\n", 0, idx) + 1, caption))
+    for line_start, caption in sorted(found, reverse=True):
+        found_before = sum(1 for start, _ in found if start < line_start)
+        number = counters["table"] + found_before + 1
+        label = f"**Bảng {counters['chapter']}.{number}:** {caption}\n\n"
         body = body[:line_start] + label + body[line_start:]
+    counters["table"] += len(found)
     return body
 
 def build() -> str:
@@ -308,20 +327,21 @@ def build() -> str:
         for match in re.finditer(r"\*\*Bảng (\d+\.\d+):\*\* (.+)", chapter_md):
             table_list.append(f"| Bảng {match.group(1)} | {match.group(2)} |")
 
-        if chapter_no == len(CHAPTERS):
-            gallery = []
-            for filename, caption in FIGURES:
-                figure_index += 1
-                number = f"{chapter_no}.{figure_index}"
-                gallery.append(
-                    f"\n![]({ASSETS}/{filename})\n\n**Hình {number}:** {caption}\n"
-                )
-                figure_list.append(f"| Hình {number} | {caption} |")
-            chapter_md += (
-                "\n## Hình ảnh minh hoạ hệ thống và biểu đồ kết quả\n\n"
-                "Các hình dưới đây được chụp từ hệ thống đang vận hành và dựng từ "
-                "dữ liệu đo đã trình bày ở các mục trên.\n" + "".join(gallery)
+        captions = dict(FIGURES)
+
+        def place(match: "re.Match[str]") -> str:
+            nonlocal figure_index
+            filename = match.group(1)
+            if filename not in captions:
+                raise SystemExit(f"không có chú thích cho hình {filename}")
+            figure_index += 1
+            number = f"{chapter_no}.{figure_index}"
+            figure_list.append(f"| Hình {number} | {captions[filename]} |")
+            return (
+                f"![]({ASSETS}/{filename})\n\n**Hình {number}:** {captions[filename]}"
             )
+
+        chapter_md = re.sub(r"<<<HINH:([^>]+)>>>", place, chapter_md)
         out.append(chapter_md + PAGEBREAK)
 
     out.append(KET_LUAN + PAGEBREAK)

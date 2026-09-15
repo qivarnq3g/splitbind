@@ -49,7 +49,7 @@ Mọi nội dung, khẳng định kỹ thuật và số liệu trong tài liệu
 # PHẦN 2: CƠ SỞ LÝ THUYẾT THỦY VÂN SỐ (PHỤC VỤ YÊU CẦU 1)
 
 ### 2.1. Khái niệm và định nghĩa chuẩn mực
-`[Established theory]` (tổng hợp từ [2] và [3])
+`[Established theory]` (tổng hợp từ [5] và [1])
 
 * **Thủy vân số (digital watermarking):** Là kỹ thuật nhúng một lượng thông tin số xác định (gọi là thủy vân hoặc watermark - như định danh bản quyền, mã số cấp phát, nhãn toàn vẹn) trực tiếp vào trong dữ liệu đa phương tiện vật mang (ảnh, tài liệu, âm thanh, video) bằng cách hiệu chỉnh các đặc trưng tín hiệu của vật mang.
 * **Mục tiêu an ninh:** Thông tin thủy vân gắn liền chặt chẽ với nội dung vật mang; mức độ bền vững (tồn tại qua các phép xử lý tín hiệu) hoặc mức độ dễ vỡ (bị phá hủy khi có can thiệp) được thiết kế có chủ đích nhằm phục vụ mục tiêu an ninh cụ thể (như truy vết bản quyền hoặc phát hiện sửa đổi).
@@ -306,7 +306,7 @@ Hệ thống không ký trực tiếp lên file PDF nhị phân, mà sử dụng
 
 # PHẦN 5: MA TRẬN SO SÁNH CÁC KỸ THUẬT TOÀN VẸN (PHỤC VỤ YÊU CẦU 4)
 
-`[Established theory]` (tổng hợp từ [1], [2], [14] và [15])
+`[Established theory]` (tổng hợp từ [19], [5], [10] và [6])
 
 ## 5.1. Ma trận so sánh: bảy tiêu chí trên sáu kỹ thuật
 
@@ -379,9 +379,15 @@ Hệ thống được tổ chức thành hai phân hệ độc lập:
    * Người cấp phát tải lên tệp nguồn, định dạng PDF, PNG hoặc JPEG $\rightarrow$ hệ thống sinh mã cấp phát `issuance_id` $\rightarrow$ đưa ảnh từng trang về khung chuẩn rồi nhúng thủy vân ẩn mang mã ấy $\rightarrow$ trả ảnh về đúng kích thước ban đầu $\rightarrow$ tính mã băm SHA-256 của tệp nguồn và tệp phát hành $\rightarrow$ dựng manifest chuẩn hoá theo RFC 8785 $\rightarrow$ ký số bằng khoá riêng Ed25519 $\rightarrow$ lưu hồ sơ cấp phát và cấp liên kết tải có thời hạn.
    * Đầu vào là ảnh thì đầu ra luôn là PNG, vì mã hoá lại bằng JPEG sẽ làm hỏng chính thủy vân vừa nhúng. Đầu vào là PDF thì đầu ra là PDF.
    * Khi cấu hình tắt phân hệ thủy vân, hệ thống chuyển sang in một nhãn cấp phát nhìn thấy được lên mỗi trang, dạng `SB1-` ghép với 20 ký tự đầu của mã cấp phát mã hoá base32 thay cho thủy vân ẩn. Đây là đường dự phòng, không phải cấu hình đang chạy trên môi trường production.
+
+<<<HINH:ui-issuance-result.png>>>
 2. **Quy trình xác minh tính toàn vẹn (verification workflow):**
    * Người kiểm tra tải lên tệp nghi vấn, định dạng PDF, PNG hoặc JPEG $\rightarrow$ hệ thống tính mã băm SHA-256 và tìm bản cấp phát trùng khít từng byte $\rightarrow$ nếu không trùng, hệ thống bóc dải viền trơn để đưa ảnh về khung chuẩn rồi đọc thủy vân nhằm truy nguồn $\rightarrow$ xác minh chữ ký số Ed25519 trên manifest tương ứng $\rightarrow$ trả kết quả.
    * Hai câu hỏi được trả lời tách rời: tệp bắt nguồn từ bản cấp phát nào, và tệp có còn nguyên vẹn so với lúc phát hành hay không. Kết quả có thể là `VERIFIED_INTACT` khi khớp cả mã băm lẫn chữ ký, `SOURCE_IDENTIFIED_MODIFIED` khi đọc được thủy vân nhưng mã băm đã khác, hoặc `NO_WATERMARK` khi không tìm được nguồn nào.
+
+<<<HINH:ui-verification-match.png>>>
+
+<<<HINH:ui-verification-no-match.png>>>
 
 ---
 
@@ -389,7 +395,7 @@ Hệ thống được tổ chức thành hai phân hệ độc lập:
 
 Mọi con số trình bày trên slide thuyết trình và báo cáo bắt buộc phải sử dụng chính xác các giá trị sau.
 
-> **Lưu ý phạm vi:** bảng dưới đây là số liệu của thế hệ thuật toán V1. Kết quả đo của thế hệ V3 nằm riêng ở Mục 4.2.1 và không thay thế bất kỳ giá trị nào trong bảng này. Khi trích dẫn độ bền thủy vân, luôn nói rõ đang nói về thế hệ nào.
+> **Lưu ý phạm vi:** Bảng 4.1 là số liệu của thế hệ thuật toán V1. Kết quả đo của thế hệ V3 nằm riêng ở Mục 4.2.1 và không thay thế bất kỳ giá trị nào trong Bảng 4.1. Khi trích dẫn độ bền thủy vân, luôn nói rõ đang nói về thế hệ nào.
 
 | Số liệu thực nghiệm | Giá trị khóa chính xác | Nguồn gốc tệp artifact (SHA-256) | Đối tượng đo lường và chuỗi xử lý | Ý nghĩa chứng minh kỹ thuật |
 |---|---|---|---|---|
@@ -430,6 +436,8 @@ Nguồn: `reports/fingerprint-pregate-v3/`, ngày 2026-09-06, `status: complete`
 | Gán sai định danh | 0 | 0 | - |
 | PSNR tối thiểu | 69.31 dB | 42.47 dB | 12 |
 | SSIM tối thiểu | 0.99992 | 0.9554 | 12 |
+
+<<<HINH:chart-v1-vs-v3.png>>>
 
 **Phép so sánh này có kiểm soát.** Cả hai thế hệ được đo trên cùng một bộ trang mẫu khoá theo mã băm `e5837cd446ab9c9959ba3fc4b85d205ec9d80e91efc6f801d139810b088a77ef`, cùng định nghĩa cổng (JPEG-70 và resize-0.75 tối thiểu 0.95, crop-0.25 tối thiểu 0.90, quần thể chất lượng đúng 12) và cùng mẫu số 12 cặp ứng viên/trang dương tính. Do đó chênh lệch quy được cho thế hệ thuật toán, không phải do đổi tập dữ liệu hay đổi cách đo.
 
@@ -490,7 +498,7 @@ Một kết quả thực nghiệm chỉ có ý nghĩa khi biết nó đứng ở
 
 ### 7.3.1. Cơ sở đối chiếu và tính so sánh được của tiêu chí
 
-Bộ đo `wmbench` [16] chấm ba hệ thống Adobe TrustMark [17], Meta PixelSeal và Meta Watermark Anything [18] trên 18 ảnh, dưới 38 phép biến đổi. Điều khiến bộ đo này so sánh được trực tiếp với công trình của nhóm là tiêu chí thành công của nó trùng khít với cổng phát hành mà nhóm tự đặt ra: một lần giải mã chỉ được tính là thành công khi khôi phục chính xác toàn bộ payload, sai một bit cũng bị tính là trượt. Đây không phải độ chính xác theo bit.
+Bộ đo `wmbench` [21] chấm ba hệ thống Adobe TrustMark [3], Meta PixelSeal và Meta Watermark Anything [17] trên 18 ảnh, dưới 38 phép biến đổi. Điều khiến bộ đo này so sánh được trực tiếp với công trình của nhóm là tiêu chí thành công của nó trùng khít với cổng phát hành mà nhóm tự đặt ra: một lần giải mã chỉ được tính là thành công khi khôi phục chính xác toàn bộ payload, sai một bit cũng bị tính là trượt. Đây không phải độ chính xác theo bit.
 
 | Hệ thống | Nén JPEG mạnh | Thu nhỏ mạnh | Cắt còn 80% | Cắt còn 50% | Xoay 5 độ | Chụp màn hình | Chụp lại màn hình |
 |---|---|---|---|---|---|---|---|
@@ -499,11 +507,11 @@ Bộ đo `wmbench` [16] chấm ba hệ thống Adobe TrustMark [17], Meta PixelS
 | Meta Watermark Anything | 89% | 89% | 78% | 28% | 50% | 0% | 0% |
 | **SplitBind V3** | 75% (JPEG-70) | 67% (0.75x) | - | 75% (0.25x) | - | 0% | - |
 
-Nguồn của ba dòng đầu là tệp `results/results.json` công bố kèm [16]; nhóm đọc lại tệp này chứ không tự tái lập phép đo. Dòng SplitBind lấy từ Mục 4.2.1 của báo cáo, đo trên bộ ngữ liệu và bộ tấn công riêng của dự án, nên các ô không tương đương tuyệt đối về cường độ tấn công và chỉ nên đọc theo bậc độ lớn.
+Nguồn của ba dòng đầu là tệp `results/results.json` công bố kèm [21]; nhóm đọc lại tệp này chứ không tự tái lập phép đo. Dòng SplitBind lấy từ Mục 4.2.1 của báo cáo, đo trên bộ ngữ liệu và bộ tấn công riêng của dự án, nên các ô không tương đương tuyệt đối về cường độ tấn công và chỉ nên đọc theo bậc độ lớn.
 
 ### 7.3.2. Hai loại thất bại có bản chất khác nhau
 
-Bảng trên cho thấy nén và thu nhỏ là bài toán đã được giải trong công trình công khai. Để xác định vì sao cùng một lớp tấn công lại chặn được SplitBind, nhóm dựng một thí nghiệm đối chứng trên chính trang tài liệu do hệ thống render (tỉ lệ 2.0, kích thước 1190 x 1684 điểm ảnh), dùng một bộ mã hóa thủy vân DWT-DCT-SVD-QIM độc lập [19] thay cho bộ của dự án, payload 64 bit. Mỗi ảnh bị tấn công được giải hai lần: một lần ở đúng kích thước kẻ tấn công để lại, một lần sau khi đã phóng khung ảnh về kích thước nhúng ban đầu.
+Bảng 4.6 cho thấy nén và thu nhỏ là bài toán đã được giải trong công trình công khai. Để xác định vì sao cùng một lớp tấn công lại chặn được SplitBind, nhóm dựng một thí nghiệm đối chứng trên chính trang tài liệu do hệ thống render (tỉ lệ 2.0, kích thước 1190 x 1684 điểm ảnh), dùng một bộ mã hóa thủy vân DWT-DCT-SVD-QIM độc lập [8] thay cho bộ của dự án, payload 64 bit. Mỗi ảnh bị tấn công được giải hai lần: một lần ở đúng kích thước kẻ tấn công để lại, một lần sau khi đã phóng khung ảnh về kích thước nhúng ban đầu.
 
 | Phép tấn công | Giải ở kích thước bị tấn công | Giải sau khi phục hồi khung |
 |---|---|---|
@@ -525,7 +533,7 @@ Hai loại thất bại cộng dồn khi đi cùng nhau: tổ hợp thu nhỏ r�
 
 ### 7.3.3. Kiểm chứng lại kết luận đã bác bỏ hướng tinh chỉnh tham số
 
-Tham số `d1` của bộ thủy vân đối chứng [19] là bước lượng tử QIM, cùng loại tham số với bước lượng tử của SplitBind. Ở `d1` bằng 36, trang đã nhúng đo được 41.73 dB PSNR, lệch 0.04 dB so với giá trị 41.69 dB đã khóa của V1 ở Bảng 4.1, nên phép so sánh diễn ra ở cùng mức độ trung thực thị giác.
+Tham số `d1` của bộ thủy vân đối chứng [8] là bước lượng tử QIM, cùng loại tham số với bước lượng tử của SplitBind. Ở `d1` bằng 36, trang đã nhúng đo được 41.73 dB PSNR, lệch 0.04 dB so với giá trị 41.69 dB đã khóa của V1 ở Bảng 4.1, nên phép so sánh diễn ra ở cùng mức độ trung thực thị giác.
 
 | `d1` | PSNR (dB) | JPEG Q=70 | JPEG Q=50 | JPEG Q=30 | Thu nhỏ 0.5x sau khi phục khung |
 |---|---|---|---|---|---|
@@ -542,7 +550,7 @@ Khả năng sống sót qua nén JPEG không đơn điệu theo bước lượng
 ### 7.3.4. Bốn hệ quả rút ra
 
 1. **Chuẩn hóa khung ảnh là bước đi đúng và rẻ.** Bảng 4.7 chứng minh Loại A được giải triệt để chỉ bằng một phép biến đổi hình học, không cần đổi thuật toán thủy vân, không tốn thêm độ trung thực.
-2. Vị thế của SplitBind thuận lợi hơn các thư viện công khai ở đúng điểm này. Một công cụ thủy vân mù buộc phải suy đoán hình học gốc: thư viện [19] dò vét 200 mốc tỉ lệ trong dải 0.5 đến 2.0 bằng tương quan chuẩn hóa, và hàm ước lượng tham số cắt của nó còn đòi hỏi ảnh gốc. SplitBind giữ hồ sơ cấp phát nên có thể render lại trang gốc bất kỳ lúc nào; thứ mà thư viện phải đoán thì hệ thống của nhóm chỉ việc tra ra.
+2. Vị thế của SplitBind thuận lợi hơn các thư viện công khai ở đúng điểm này. Một công cụ thủy vân mù buộc phải suy đoán hình học gốc: thư viện [8] dò vét 200 mốc tỉ lệ trong dải 0.5 đến 2.0 bằng tương quan chuẩn hóa, và hàm ước lượng tham số cắt của nó còn đòi hỏi ảnh gốc. SplitBind giữ hồ sơ cấp phát nên có thể render lại trang gốc bất kỳ lúc nào; thứ mà thư viện phải đoán thì hệ thống của nhóm chỉ việc tra ra.
 3. Loại B cần đổi vật mang chứ không cần chỉnh tham số. Các hệ thống ở Bảng 4.6 đạt 100% dưới nén mạnh nhờ bộ mã hóa và giải mã học sâu chuẩn hóa toàn khung về một độ phân giải cố định trước khi giải, chứ không dò tìm lưới nhúng.
 4. Phần nhóm chưa giải được cũng là phần chưa ai giải được. Cắt còn một nửa cho 0% ở TrustMark và 28 đến 39% ở hai hệ còn lại; xoay 5 độ cho 22% ở TrustMark. Đây là thuộc tính của bài toán, không phải khuyết điểm riêng của cài đặt trong dự án này.
 
@@ -706,7 +714,7 @@ Chốt an toàn thật nằm ở chỗ khác và đã có sẵn: danh tính gi�
 - Cấp phát nhận PDF, PNG và JPEG. Đầu vào là ảnh thì nội dung trả về luôn được mã hoá thành PNG, vì nén lại bằng JPEG sẽ phá chính thủy vân vừa nhúng. Tệp nhận được giữ đúng kích thước gốc và không có viền chèn thêm.
 - Cần nói rõ một chi tiết mà câu trên dễ gây hiểu nhầm: bên trong chuỗi xử lý, ảnh không hề được giữ nguyên hình dạng. Hàm `_canonicalize_page` kéo mọi đầu vào về đúng một khung cố định 1152 x 2304 điểm ảnh, không giữ tỉ lệ khung hình (`DEMO_CANONICAL_CANVAS` trong `services/api/splitbind/demo/models.py: L20`). Thủy vân được nhúng trong khung méo đó, rồi ảnh mới được kéo ngược về kích thước ban đầu. Người dùng không thấy sự méo vì nó bị hoàn tác, nhưng tín hiệu thì đã đi qua hai lần lấy mẫu lại.
 - Tệp cấp phát cho tài liệu ảnh được lưu và tải về đúng đuôi `.png`, tên tệp là dạng ASCII đọc được suy từ tên tài liệu gốc. Trước bản `integrity-v0.2.1` đuôi này bị cố định là `.pdf` ở hai nơi cùng lúc nên hai lỗi che nhau và chỉ lộ khi thử trên hệ thống thật.
-- Xác minh nhận PDF, PNG và JPEG, kể cả ảnh chụp màn hình có viền. Nhận được tệp không đồng nghĩa với truy được nguồn; ranh giới đo được nằm ở bảng dưới đây.
+- Xác minh nhận PDF, PNG và JPEG, kể cả ảnh chụp màn hình có viền. Nhận được tệp không đồng nghĩa với truy được nguồn; ranh giới đo được nằm ở Bảng 4.13.
 - Phép kiểm cuối chạy bằng khoá thật trong container đang phục vụ: một ảnh JPEG 1400 x 900 đi qua đúng hàm cấp phát của hệ thống, rồi đem kết quả qua đúng hàm xác minh, cho ra `decoded` và đúng mã hồ sơ.
 
 #### Tám phép thử qua đúng giao diện người dùng, ngày 14/09/2026
@@ -722,7 +730,9 @@ Chốt an toàn thật nằm ở chỗ khác và đã có sẵn: danh tính gi�
 | Trang chữ dày 1400 x 1980 | Thu nhỏ 0.75, không nén, lưu PNG | Không truy được |
 | Trang render từ PDF đã cấp phát | Nén JPEG chất lượng 70 | Không truy được |
 
-Hàng thứ nhất là nội dung của Hình 4.4: mã băm của tệp nộp lên khác hẳn mã băm đã ký, giao diện ghi rõ "hai giá trị khác nhau", vậy mà hệ thống vẫn chỉ đúng bản cấp phát đã sinh ra tệp đó. Kết luận ấy không thể đến từ đối chiếu mã băm, nên nó chứng minh chuỗi cấp phát, nhúng, lưu trữ, giải mã và tra cứu hồ sơ chạy thông suốt trên môi trường thật. Năm hàng sau đó đều âm tính, và nếu dừng ở đây thì kết luận sẽ là hệ thống chỉ truy được bản sao giống hệt từng điểm ảnh.
+Hàng thứ nhất là nội dung của Hình 4.5: mã băm của tệp nộp lên khác hẳn mã băm đã ký, giao diện ghi rõ "hai giá trị khác nhau", vậy mà hệ thống vẫn chỉ đúng bản cấp phát đã sinh ra tệp đó. Kết luận ấy không thể đến từ đối chiếu mã băm, nên nó chứng minh chuỗi cấp phát, nhúng, lưu trữ, giải mã và tra cứu hồ sơ chạy thông suốt trên môi trường thật. Năm hàng sau đó đều âm tính, và nếu dừng ở đây thì kết luận sẽ là hệ thống chỉ truy được bản sao giống hệt từng điểm ảnh.
+
+<<<HINH:ui-verification-traced.png>>>
 
 Nhưng hai hàng cuối là phép thử quyết định, và chúng dựng lại đúng kịch bản của bài kiểm thử `test_letterboxed_screenshot_is_attributed` vốn luôn xanh trong kho mã.
 
@@ -744,7 +754,7 @@ Hàng cuối bị thu nhỏ mạnh hơn mà vẫn ra đúng mã hồ sơ. Đây 
 | Trang chữ dày | 1152 x 2304, đúng khung | `insufficient_sync_evidence` | `insufficient_sync_evidence` | `insufficient_sync_evidence` |
 | Trang chữ dày | 1400 x 1980, lệch khung | `insufficient_sync_evidence` | `insufficient_sync_evidence` | `insufficient_sync_evidence` |
 
-Bảng này tách bạch ba biến một cách sạch sẽ:
+Bảng 4.15 tách bạch ba biến một cách sạch sẽ:
 
 * **Vật mang quyết định toàn bộ.** Ảnh chuyển sắc giải được cả sáu ô, kể cả nén JPEG chất lượng 70. Trang chữ dày trượt cả sáu ô.
 * **Phép tấn công không phải nguyên nhân.** Trang chữ dày trượt ngay ở cột không tấn công gì, với trạng thái `insufficient_sync_evidence`, nghĩa là khâu đồng bộ có khoá không bắt được mẫu pilot. Chưa từng có từ mã nào được trích để mà hỏng.
@@ -990,12 +1000,12 @@ Năm tài liệu tiếng Việt ở thư mục gốc dự án đã được đ�
   môn là "giấu tin", thủy vân số là một nhánh của nó. Khi báo cáo, nên mở đầu bằng liên hệ
   này để nối đề tài vào chương trình học.
 - Hai giáo trình tiếng Việt không có nội dung nào về thủy vân số hay giấu tin. Toàn bộ
-  phần lý thuyết thủy vân của báo cáo dựa vào [2] Cox và cộng sự, cùng hai bài tổng quan
+  phần lý thuyết thủy vân của báo cáo dựa vào [5] Cox và cộng sự, cùng hai bài tổng quan
   steganography tiếng Anh ở thư mục gốc. Nếu giảng viên hỏi "lấy lý thuyết ở đâu", trả lời
   đúng là như vậy, không nói là lấy từ giáo trình.
-- Hai giáo trình đó khớp đúng mục [3] và [4] trong tài liệu tham khảo: [3] Hoàng Xuân Dậu,
+- Hai giáo trình đó khớp đúng mục [1] và [2] trong tài liệu tham khảo: [1] Hoàng Xuân Dậu,
   *Giáo trình Cơ sở An toàn Thông tin*, Học viện Công nghệ Bưu chính Viễn thông, 2020;
-  [4] TS. Thái Thanh Tùng, *Giáo trình Mật mã học và Hệ thống Thông tin An toàn*, Nhà xuất
+  [2] TS. Thái Thanh Tùng, *Giáo trình Mật mã học và Hệ thống Thông tin An toàn*, Nhà xuất
   bản Thông tin và Truyền thông, 2011. Đã kiểm trang bìa và lời giới thiệu của cả hai.
 - Các thuật ngữ chung mà báo cáo dùng - hàm băm, chữ ký số, tính toàn vẹn, mã hóa, bí mật,
   sẵn sàng, chống chối bỏ - đều trùng cách gọi trong giáo trình, nên không lệch với bài giảng.
@@ -1024,7 +1034,7 @@ Năm tài liệu tiếng Việt ở thư mục gốc dự án đã được đ�
 - Thư mục "Tài liệu tham khảo" của môn chỉ có đúng một tệp:
   `Image_Steganography_Techniques_An_Overview.pdf`. Đây là tài liệu duy nhất giảng viên
   cung cấp và nó trực tiếp liên quan đề tài, nên đã được bổ sung vào mục tham khảo của báo
-  cáo thành [14], cùng với [15] là bài tổng quan steganography còn lại ở thư mục gốc dự án.
+  cáo thành [10], cùng với [6] là bài tổng quan steganography còn lại ở thư mục gốc dự án.
 - Thông tin liên hệ của giảng viên, liên kết phòng học trực tuyến và nhóm Zalo nằm ở
   `docs/internal/lms-course-contacts.md`, cố ý để ngoài phạm vi Git vì là dữ liệu cá nhân.
 
@@ -1100,41 +1110,37 @@ Yêu cầu của giảng viên là mỗi nhóm chuẩn bị 03 câu hỏi tự l
 
 ---
 
-# PHẦN 11: TÀI LIỆU THAM KHẢO THEO CHUẨN IEEE
+# PHẦN 11: TÀI LIỆU THAM KHẢO
 
-Tất cả các trích dẫn trong bài thuyết trình và báo cáo thuyết minh được định dạng theo chuẩn IEEE:
+Danh mục xếp theo khối ngôn ngữ, khối tiếng Việt trước rồi tới khối tiếng Anh. Trong mỗi khối, tài liệu xếp theo thứ tự ABC: tác giả Việt Nam xếp theo tên, tác giả nước ngoài xếp theo họ, tài liệu không có tác giả xếp theo tên cơ quan ban hành. Số thứ tự đánh liên tục từ 1 qua cả hai khối.
 
-* **Sách chuyên khảo quốc tế:**
-  1. [1] W. Stallings, *Cryptography and Network Security: Principles and Practice*, 7th ed. Boston, MA, USA: Pearson, 2017, ch. 11-14.
-  2. [2] I. J. Cox, M. L. Miller, J. A. Bloom, J. Fridrich, and T. Kalker, *Digital Watermarking and Steganography*, 2nd ed. Burlington, MA, USA: Morgan Kaufmann, 2007.
+**Tiếng Việt**
 
-* **Giáo trình đại học trong nước:**
-  3. [3] Hoàng Xuân Dậu, *Giáo trình Cơ sở An toàn Thông tin*, Hà Nội: Học viện Công nghệ Bưu chính Viễn thông, 2020.
-  4. [4] T. T. Tùng, *Giáo trình Mật mã học và Hệ thống Thông tin An toàn*. Hà Nội: Nhà xuất bản Thông tin và Truyền thông, 2011.
+1. Hoàng Xuân Dậu (2020). *Giáo trình Cơ sở An toàn Thông tin*, Học viện Công nghệ Bưu chính Viễn thông, Hà Nội.
+2. Thái Thanh Tùng (2011). *Giáo trình Mật mã học và Hệ thống Thông tin An toàn*, Nhà xuất bản Thông tin và Truyền thông, Hà Nội.
 
-* **Bài báo khoa học tiêu biểu:**
-  5. [5] B. Chen and G. W. Wornell, "Quantization index modulation: a class of provably good methods for digital watermarking and information embedding," *IEEE Transactions on Information Theory*, vol. 47, no. 4, pp. 1423-1443, May 2001, doi: 10.1109/18.923725.
-  6. [6] J. Zhu, R. Kaplan, A. Johnson, and L. Fei-Fei, "HiDDeN: Hiding Data with Deep Networks," in *Proc. European Conference on Computer Vision (ECCV)*, Munich, Germany, 2018, pp. 657-672, doi: 10.1007/978-3-030-01267-0_40.
-  7. [7] M. Tancik, B. Mildenhall, and R. Ng, "StegaStamp: Invisible Hyperlinks in Physical Photographs," in *Proc. IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)*, Seattle, WA, USA, 2020, pp. 2117-2126.
+**Tiếng Anh**
 
-* **Tiêu chuẩn kỹ thuật và giao thức quốc tế:**
-  8. [8] A. Rundgren, B. Jordan, and S. Erdtman, "JSON Canonicalization Scheme (JCS)," Internet Engineering Task Force (IETF), RFC 8785, June 2020. [Online]. Available: https://www.rfc-editor.org/rfc/rfc8785
-  9. [9] S. Josefsson and I. Liusvaara, "Edwards-Curve Digital Signature Algorithm (EdDSA)," Internet Engineering Task Force (IETF), RFC 8032, January 2017. [Online]. Available: https://www.rfc-editor.org/rfc/rfc8032
-  10. [10] National Institute of Standards and Technology (NIST), "Secure Hash Standard (SHS)," Federal Information Processing Standards Publication (FIPS PUB) 180-4, August 2015.
-  11. [11] National Institute of Standards and Technology (NIST), "The Keyed-Hash Message Authentication Code (HMAC)," Federal Information Processing Standards Publication (FIPS PUB) 198-1, July 2008.
-  12. [12] H. Krawczyk, M. Bellare, and R. Canetti, "HMAC: Keyed-Hashing for Message Authentication," Internet Engineering Task Force (IETF), RFC 2104, February 1997. [Online]. Available: https://www.rfc-editor.org/rfc/rfc2104
-  13. [13] National Institute of Standards and Technology (NIST), "Implementation Guidance for FIPS 140-3 and the Cryptographic Module Verification Program," NIST CSRC, April 2026. [Online]. Available: https://csrc.nist.gov/projects/cryptographic-module-validation-program/fips-140-3-ig-announcements
-  14. [14] N. Hamid, A. Yahya, R. B. Ahmad, and O. M. Al-Qershi, "Image Steganography Techniques: An Overview," *International Journal of Computer Science and Security (IJCSS)*, vol. 6, no. 3, pp. 168-187, 2012.
-  15. [15] M. Douglas, K. Bailey, M. Leeney, and K. Curran, "An overview of steganography techniques applied to the protection of biometric data," *Multimedia Tools and Applications*, vol. 77, no. 13, pp. 17333-17373, 2018, doi: 10.1007/s11042-017-5308-3.
-
-* **Cài đặt mã nguồn mở dùng để đối chiếu:**
-  16. [16] wmbench contributors, "wmbench: image watermarking benchmark," GitHub repository, 2026. [Online]. Available: https://github.com/alexandersolonsky/wmbench
-  17. [17] Adobe Research, "TrustMark: Universal Watermarking for Arbitrary Resolution Images," GitHub repository, 2026. [Online]. Available: https://github.com/adobe/trustmark
-  18. [18] T. Sander, P. Fernandez, A. Durmus, M. Douze, and T. Furon, "Watermark Anything with Localized Messages," Meta AI Research, GitHub repository, 2025. [Online]. Available: https://github.com/facebookresearch/watermark-anything
-  19. [19] Guo Fei, "blind_watermark: blind and invisible image watermark," GitHub repository, 2025. [Online]. Available: https://github.com/guofei9987/blind_watermark
-  20. [20] gslxr, "Screen-Shooting-Resilient-Document-Image-Watermarking," GitHub repository. [Online]. Available: https://github.com/gslxr/Screen-Shooting-Resilient-Document-Image-Watermarking
-  21. [21] H. Fang, W. Zhang, H. Zhou, H. Cui and N. Yu, "Screen-shooting resilient watermarking," IEEE Transactions on Information Forensics and Security, vol. 14, no. 6, pp. 1403-1418, 2019. Mã nguồn: https://github.com/FangHanNUS/Screen-Shooting-Resilient-Watermarking
-  22. [22] ShieldMnt, "invisible-watermark: python library for invisible image watermark," GitHub repository. [Online]. Available: https://github.com/ShieldMnt/invisible-watermark
+3. Adobe Research. *TrustMark: Universal Watermarking for Arbitrary Resolution Images*, GitHub, truy cập tháng 9 năm 2026, https://github.com/adobe/trustmark
+4. Chen B., Wornell G. W. (2001). *Quantization index modulation: a class of provably good methods for digital watermarking and information embedding*, IEEE Transactions on Information Theory, 47 (4), 1423-1443.
+5. Cox I. J., Miller M. L., Bloom J. A., Fridrich J., Kalker T. (2007). *Digital Watermarking and Steganography*, Morgan Kaufmann, Burlington.
+6. Douglas M., Bailey K., Leeney M., Curran K. (2018). *An overview of steganography techniques applied to the protection of biometric data*, Multimedia Tools and Applications, 77 (13), 17333-17373.
+7. Fang H., Zhang W., Zhou H., Cui H., Yu N. (2019). *Screen-shooting resilient watermarking*, IEEE Transactions on Information Forensics and Security, 14 (6), 1403-1418.
+8. Guo Fei. *blind_watermark: blind and invisible image watermark*, GitHub, truy cập tháng 9 năm 2026, https://github.com/guofei9987/blind_watermark
+9. gslxr. *Screen-Shooting-Resilient-Document-Image-Watermarking*, GitHub, truy cập tháng 9 năm 2026, https://github.com/gslxr/Screen-Shooting-Resilient-Document-Image-Watermarking
+10. Hamid N., Yahya A., Ahmad R. B., Al-Qershi O. M. (2012). *Image Steganography Techniques: An Overview*, International Journal of Computer Science and Security, 6 (3), 168-187.
+11. Josefsson S., Liusvaara I. (2017). *Edwards-Curve Digital Signature Algorithm (EdDSA)*, Internet Engineering Task Force, RFC 8032, https://www.rfc-editor.org/rfc/rfc8032
+12. Krawczyk H., Bellare M., Canetti R. (1997). *HMAC: Keyed-Hashing for Message Authentication*, Internet Engineering Task Force, RFC 2104, https://www.rfc-editor.org/rfc/rfc2104
+13. National Institute of Standards and Technology (2026). *Implementation Guidance for FIPS 140-3 and the Cryptographic Module Verification Program*, NIST Computer Security Resource Center, truy cập tháng 9 năm 2026, https://csrc.nist.gov/projects/cryptographic-module-validation-program/fips-140-3-ig-announcements
+14. National Institute of Standards and Technology (2015). *Secure Hash Standard (SHS)*, Federal Information Processing Standards Publication 180-4, Gaithersburg.
+15. National Institute of Standards and Technology (2008). *The Keyed-Hash Message Authentication Code (HMAC)*, Federal Information Processing Standards Publication 198-1, Gaithersburg.
+16. Rundgren A., Jordan B., Erdtman S. (2020). *JSON Canonicalization Scheme (JCS)*, Internet Engineering Task Force, RFC 8785, https://www.rfc-editor.org/rfc/rfc8785
+17. Sander T., Fernandez P., Durmus A., Douze M., Furon T. (2025). *Watermark Anything with Localized Messages*, Meta AI Research, GitHub, truy cập tháng 9 năm 2026, https://github.com/facebookresearch/watermark-anything
+18. ShieldMnt. *invisible-watermark: python library for invisible image watermark*, GitHub, truy cập tháng 9 năm 2026, https://github.com/ShieldMnt/invisible-watermark
+19. Stallings W. (2017). *Cryptography and Network Security: Principles and Practice*, 7th ed., Pearson, Boston.
+20. Tancik M., Mildenhall B., Ng R. (2020). *StegaStamp: Invisible Hyperlinks in Physical Photographs*, Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, Seattle, 2117-2126.
+21. wmbench contributors (2026). *wmbench: image watermarking benchmark*, GitHub, truy cập tháng 9 năm 2026, https://github.com/alexandersolonsky/wmbench
+22. Zhu J., Kaplan R., Johnson A., Fei-Fei L. (2018). *HiDDeN: Hiding Data with Deep Networks*, Proceedings of the European Conference on Computer Vision, Munich, 657-672.
 
 ---
 
@@ -1170,6 +1176,8 @@ Ngoài ba trường hợp đó, bộ giải mã không sinh được giả thuy�
 
 Mọi phép biến đổi có sẵn giả thuyết đúng đều đạt 7-11/12, trừ JPEG-50. Mọi phép thiếu giả thuyết đúng đều đạt 0-2/12.
 
+<<<HINH:chart-attack-envelope.png>>>
+
 Cần chính xác một điểm: với các phép cắt, vẫn có giả thuyết được sinh ra - `pure_resize` kích hoạt vì cắt giữa làm hai trục co cùng tỉ lệ - nhưng nó căn sai, kéo vùng đã cắt ra kín khung chuẩn. Khuyết tật không nằm ở việc không sinh ra giả thuyết, mà ở chỗ tập giả thuyết sinh ra không phủ được trường hợp đúng: ứng viên đúng vắng mặt trong khi một ứng viên sai trông hợp lý chiếm chỗ. Đó là lý do các hàng này báo `payload_not_detected` (đã căn, không thấy tín hiệu) thay vì `insufficient_sync_evidence` (chưa từng căn được).
 
 **Bằng chứng sắc nhất cho luận điểm tối ưu quá mức:** crop 0.25 là phép cắt duy nhất có 0 hàng `payload_not_detected`. Mọi trang đều sinh được ít nhất bằng chứng một phần, và chỉ ở đó. Đúng như dự đoán "giả thuyết đúng tồn tại cho tỉ lệ này và không tỉ lệ nào khác", và không giải thích được bằng cường độ tín hiệu, vì crop 0.10 bỏ đi ít hơn.
@@ -1199,6 +1207,8 @@ Chẩn đoán trên sinh ra một dự đoán kiểm chứng được: nếu b�
 | 1366×768 | 0/12 | 0/12 |
 
 **9/12 đúng bằng tỉ lệ của resize-0.50** - chính là điều dự đoán đòi hỏi: bỏ viền đi thì ảnh chụp màn hình chính là một phép co giãn đều, mà bộ giải mã vốn đã xử lý được. Thủy vân, ECC, tham số trải phổ và vị trí tile giữ nguyên không đổi; phần sửa chỉ khoảng hai mươi dòng tiền xử lý tất định: tìm màu viền theo trung vị bốn cạnh rồi cắt các hàng/cột nằm trong dung sai của màu đó.
+
+<<<HINH:chart-frame-restore.png>>>
 
 Hai kích thước màn hình hỏng vì hai lý do khác nhau, và phép bóc viền tách bạch được chúng:
 
@@ -1233,7 +1243,7 @@ Tám ứng viên dùng ô 512 điểm ảnh bị loại ngay từ khâu nhúng: 
 
 #### Lặp lại phép quét trên một trang chữ thật: kết luận trên bị thu hẹp
 
-`[Experimentally observed]` Trang chữ dùng cho bảng trên được dựng bằng các khối chữ nhật đặc, tỉ lệ điểm tối 23,82 phần trăm. Để kiểm tra kết luận có khái quát được không, nhóm dựng một trang thứ hai bằng phông chữ thật với nét mảnh, tỉ lệ điểm tối 9,24 phần trăm, tức gần với một trang tài liệu thực tế hơn nhiều, rồi quét lại đúng tám ứng viên:
+`[Experimentally observed]` Trang chữ dùng cho Bảng 4.19 được dựng bằng các khối chữ nhật đặc, tỉ lệ điểm tối 23,82 phần trăm. Để kiểm tra kết luận có khái quát được không, nhóm dựng một trang thứ hai bằng phông chữ thật với nét mảnh, tỉ lệ điểm tối 9,24 phần trăm, tức gần với một trang tài liệu thực tế hơn nhiều, rồi quét lại đúng tám ứng viên:
 
 | # | qim | pilot | lặp | PSNR | Không tấn công | Nén JPEG 70 |
 |---:|---:|---:|---:|---:|---|---|
@@ -1246,13 +1256,15 @@ Tám ứng viên dùng ô 512 điểm ảnh bị loại ngay từ khâu nhúng: 
 | 12 | 64 | 4.0 | 3 | 36.95 | giải được | mất đồng bộ |
 | 13 | 64 | 4.0 | 5 | 36.79 | giải được | mất đồng bộ |
 
-Bảng này thu hẹp kết luận trước đó một cách đáng kể, và cần nói thẳng:
+Bảng 4.20 thu hẹp kết luận trước đó một cách đáng kể, và cần nói thẳng:
 
 * Không ứng viên nào sống sót qua nén JPEG 70 trên trang chữ thật. Cả tám đều mất đồng bộ.
 * Chỉ các mức cường độ cao nhất mới đọc được trang chữ chưa bị đụng tới, và mức 64 nằm dưới cổng chất lượng, còn mức 48 chỉ còn cách cổng 1,01 dB.
 * Đọc được một tệp chưa bị đụng tới gần như không có giá trị thực dụng. Tệp nguyên vẹn vốn đã khớp bằng mã băm; thủy vân chỉ có ý nghĩa khi tệp đã đổi. Nghĩa là ở tỉ lệ điểm tối 9 phần trăm, không cấu hình V2 nào cho năng lực truy vết dùng được.
 
-Hình 4.8 đặt hai bảng trên cạnh nhau theo cách dễ thấy nhất: hai đường PSNR gần như trùng nhau, nghĩa là cái giá về chất lượng chỉ phụ thuộc bước lượng tử chứ không phụ thuộc vật mang; nhưng ký hiệu thì một bên tô đặc dần còn một bên rỗng suốt, nghĩa là kết quả truy vết lại hoàn toàn do vật mang quyết định.
+Hình 4.8 đặt Bảng 4.19 và Bảng 4.20 cạnh nhau theo cách dễ thấy nhất: hai đường PSNR gần như trùng nhau, nghĩa là cái giá về chất lượng chỉ phụ thuộc bước lượng tử chứ không phụ thuộc vật mang; nhưng ký hiệu thì một bên tô đặc dần còn một bên rỗng suốt, nghĩa là kết quả truy vết lại hoàn toàn do vật mang quyết định.
+
+<<<HINH:chart-carrier-decides.png>>>
 
 `[Limitation]` Bài học phương pháp quan trọng hơn con số: "trang văn bản" không phải một loại vật mang duy nhất. Hai trang cùng gọi là trang chữ, khác nhau ở độ dày nét, cho kết quả trái ngược trên cùng một bộ tham số. Mọi phát biểu về độ bền vì thế phải kèm đặc trưng định lượng của vật mang, ở đây là tỉ lệ điểm tối, chứ không chỉ kèm tên gọi.
 
@@ -1274,7 +1286,7 @@ Ba điều kèm theo cần nêu vì chúng là phần khó của thay đổi, kh
 
 `[Experimentally observed]` (đọc mã nguồn) Sau khi xác định được nút thắt là vật mang trang văn bản, nhóm tải về và đọc mã của ba công trình công khai giải đúng lớp bài toán này, thay vì chỉ đọc tóm tắt bài báo.
 
-### Công trình 1: thủy vân ảnh trang văn bản chống chụp màn hình [20]
+### Công trình 1: thủy vân ảnh trang văn bản chống chụp màn hình [9]
 
 Đây là công trình gần bài toán của nhóm nhất, vì đối tượng của nó đúng là ảnh trang tài liệu. Cách làm là học sâu kiểu StegaStamp: một bộ mã hoá và một bộ giải mã cùng huấn luyện, ở giữa là một tầng biến dạng khả vi gồm làm mờ, nhiễu, đổi tương phản, đổi độ sáng, đổi sắc độ và nén JPEG khả vi tới chất lượng 50. Ô làm việc 400 x 400 điểm ảnh, tải trọng 100 bit.
 
@@ -1288,7 +1300,7 @@ Trên ảnh trang tài liệu, nét chữ có giá trị điểm ảnh thấp c�
 
 Điều này tương phản trực tiếp với thiết kế đang chạy của SplitBind. Bộ mã hoá hiện tại rải ô đều khắp khung chuẩn và dùng một bước lượng tử cố định, nên trên một trang chữ thì phần lớn ô rơi vào nền trắng gần như không có sức chứa, còn số ít ô còn lại nằm vắt qua biên nét chữ tương phản cao, đúng chỗ mà thay đổi vừa dễ thấy vừa dễ mất.
 
-### Công trình 2: thủy vân chống chụp màn hình dùng điểm đặc trưng [21]
+### Công trình 2: thủy vân chống chụp màn hình dùng điểm đặc trưng [7]
 
 Công trình này không dùng học sâu và gần với thiết kế hiện tại của nhóm hơn. Quy tắc nhúng của nó cũng là đẩy lệch một cặp hệ số DCT tần trung trong khối 8 x 8, cụ thể là cặp ở vị trí (4,5) và (5,4), tức cùng họ với cách SplitBind lượng tử hoá hiệu hai hệ số. Hai khác biệt mới là phần đáng học.
 
@@ -1300,7 +1312,7 @@ Cần nêu kèm một giới hạn để không phóng đại công trình này:
 
 Tải trọng của nó cũng nhỏ hơn nhiều: 30 bit thông tin, thêm CRC8, mã hoá BCH(63,36) thành 64 bit xếp vào ma trận 8 x 8. SplitBind đang đòi mang một định danh 128 bit, tức gấp hơn bốn lần, trên cùng một họ vật mang.
 
-### Công trình 3: thư viện đang được dùng trong sản phẩm thật [22]
+### Công trình 3: thư viện đang được dùng trong sản phẩm thật [18]
 
 Thư viện này được dùng rộng rãi trong các sản phẩm sinh ảnh, nên nó là mốc so sánh về mức kỳ vọng thực tế chứ không phải về kết quả nghiên cứu. Tài liệu của chính nó ghi thẳng rằng các phương pháp trong thư viện không bền trước phép thu nhỏ và trước phép cắt làm đổi tỉ lệ khung hình, chỉ bền trước nhiễu, đổi màu, đổi độ sáng và nén JPEG. Bảng kết quả kèm theo ghi thu nhỏ 50 phần trăm là trượt ở cả hai phương pháp, kể cả phương pháp học sâu. Tải trọng là 32 đến 64 bit.
 
@@ -1367,12 +1379,12 @@ Bảng đối chiếu toàn diện giữa các tuyên bố kỹ thuật trong t�
 | Chuẩn hoá RFC 8785 JCS và ký số Ed25519 trên manifest | `[Implemented]` & `[Production]` | `services/api/splitbind/release/manifest.py: L58-L119` | Đã kiểm chứng qua hàm `build_signed_issuance_manifest` và `_sign` với Ed25519 trên Azure. |
 | Trạng thái giao diện minh bạch "Chưa tìm thấy bản cấp phát khớp" | `[Production]` & `[Limitation]` | `STATUS_COPY` và `integrityVerdict` trong `apps/web/src/features/evidence/copy.ts`, `apps/web/src/pages/VerifyDocumentPage.tsx` | Đã kiểm chứng logic hiển thị trạng thái và thông báo phạm vi trên giao diện web production. |
 | Phân định rạch ròi ba cấp độ A (payload), B (kiến trúc), C (hệ thống thật) | `[Implemented]` & `[Production]` (thiết kế kiến trúc dự án) | `docs/superpowers/specs/2026-08-13-splitbind-production-design.md: Section 1-3`, `docs/decisions/001-azure-production-architecture.md` | Đã kiểm chứng thống nhất trong hồ sơ đặc tả thiết kế kiến trúc SplitBind. |
-| Thủy vân đã bật trên production từ 12/09/2026; trong năm phép thử ngày hôm đó, không bản biến đổi nào được truy vết | *Đang vận hành trên hệ thống thật* và *Giới hạn đã nhận diện* | Đo qua giao diện công khai; bảng ở Bảng 4.9 | Đã kiểm chứng: 1 trong 5 giải được, và đó là bản nguyên vẹn mà mã băm đã trả lời xong. Đây là số liệu của ngày 12/09, đã bị Mục 4.2.4 thay thế sau khi sửa nguyên nhân gốc thứ ba. |
+| Thủy vân đã bật trên production từ 12/09/2026; trong năm phép thử ngày hôm đó, không bản biến đổi nào được truy vết | *Đang vận hành trên hệ thống thật* và *Giới hạn đã nhận diện* | Đo qua giao diện công khai; số liệu ở Bảng 4.9 | Đã kiểm chứng: 1 trong 5 giải được, và đó là bản nguyên vẹn mà mã băm đã trả lời xong. Đây là số liệu của ngày 12/09, đã bị Mục 4.2.4 thay thế sau khi sửa nguyên nhân gốc thứ ba. |
 | Mẫu đồng bộ ORB không phải mảnh còn thiếu của bộ giải mã | *Giới hạn đã nhận diện* (giả thuyết bị bác bỏ) | 3 vật mang nhân 5 điều kiện, giải hai lần mỗi ô; Mục 4.2.3 | Đã kiểm chứng: 30/30 ô cho trạng thái giống hệt nhau khi có và không có mẫu đồng bộ. |
 | Trang văn bản là vật mang gần như tệ nhất cho thiết kế QIM trung tần | *Số liệu đo thực nghiệm* | Bảng 4.10 | Đã kiểm chứng: trang chuyển sắc giữ được bằng chứng payload qua thu nhỏ 0.50; trang văn bản không ra gì kể cả khi không tấn công. |
-| Chuẩn hóa khung ảnh khôi phục nguyên vẹn payload sau thu nhỏ 0.75x, 0.50x và 0.35x | *Số liệu đo thực nghiệm* | Thí nghiệm đối chứng trên trang render 1190x1684 của chính hệ thống, bộ mã hóa thủy vân [19], payload 64 bit; kết quả ở Bảng 4.7 | Đã kiểm chứng: 0.453, 0.422 và 0.438 khi giải trực tiếp; 1.000 sau khi phục hồi khung. |
+| Chuẩn hóa khung ảnh khôi phục nguyên vẹn payload sau thu nhỏ 0.75x, 0.50x và 0.35x | *Số liệu đo thực nghiệm* | Thí nghiệm đối chứng trên trang render 1190x1684 của chính hệ thống, bộ mã hóa thủy vân [8], payload 64 bit; kết quả ở Bảng 4.7 | Đã kiểm chứng: 0.453, 0.422 và 0.438 khi giải trực tiếp; 1.000 sau khi phục hồi khung. |
 | Bước lượng tử không phải đòn bẩy: sống sót JPEG không đơn điệu theo cường độ nhúng | *Giới hạn đã nhận diện* | Quét `d1` từ 36 đến 160 trên cùng vật mang; kết quả ở Bảng 4.8 | Đã kiểm chứng: PSNR giảm 13 dB trên toàn dải mà JPEG-70 dao động 0.422 đến 0.984 không theo chiều. |
-| Nén, thu nhỏ và chụp màn hình đã được giải trong công trình công khai; cắt một nửa và xoay thì chưa | *Số liệu đo thực nghiệm* (bên thứ ba) | Tệp `results/results.json` công bố kèm [16]; trích ở Bảng 4.6 | Đã đọc lại từ tệp công bố, không tự tái lập phép đo. |
+| Nén, thu nhỏ và chụp màn hình đã được giải trong công trình công khai; cắt một nửa và xoay thì chưa | *Số liệu đo thực nghiệm* (bên thứ ba) | Tệp `results/results.json` công bố kèm [21]; trích ở Bảng 4.6 | Đã đọc lại từ tệp công bố, không tự tái lập phép đo. |
 | Vật mang kiểu blind_watermark đo kém hơn vật mang đang dùng ở mọi tỉ lệ | `[Experimentally observed]` | Bảng Mục 4.2.4.1; vật mang đang dùng cài trong `research/python/src/splitbind_ref/fingerprint_v2_codec.py` | Đã kiểm chứng: 7 tỉ lệ, vật mang thay thế thua ở cả 7; đoạn mã thử nghiệm đã gỡ khỏi kho sau khi đo. |
 | Nguyên nhân gốc thứ ba: bên nhận khai nhiều ký hiệu bị xoá hơn mức mã sửa được | `[Experimentally observed]` & `[Implemented]` | Nhật ký đo in kèm ở Mục 4.2.4.2; ngân sách xoá cài trong `research/python/src/splitbind_ref/fingerprint_v2_codec.py`; đặc tả mã ở `contracts/algorithm/payload-profile.v1.json` | Đã kiểm chứng: tỉ lệ lỗi bit 0,000 đi kèm 21-24 ký hiệu bị khai xoá, vượt ngưỡng 16 mà mã chịu được. |
 | Bóc viền đưa ảnh về khung chuẩn trước khi giải mã | `[Implemented]` & `[Production]` | `research/python/src/splitbind_ref/frame_restore.py`; nối vào dịch vụ tại `services/api/splitbind/demo/verification.py` (`_geometry_hypotheses`) | Đã kiểm chứng bằng `services/api/tests/demo/test_screenshot_frame_restore.py`: ảnh chụp màn hình có viền chuyển từ `insufficient_sync_evidence` sang giải mã đúng mã hồ sơ. |
@@ -1384,5 +1396,5 @@ Bảng đối chiếu toàn diện giữa các tuyên bố kỹ thuật trong t�
 | Trên trang chữ có nét mảnh, không cấu hình V2 nào sống sót qua nén JPEG 70 | `[Experimentally observed]` & `[Limitation]` | Quét lại tám ứng viên dùng được trên trang phông chữ thật, tỉ lệ điểm tối 9,24 phần trăm; bảng ở Mục 4.3.4 | Đã kiểm chứng trên hệ thống thật: bản `integrity-v0.2.3` trả `insufficient_sync_evidence` cho đúng trang này sau khi nén JPEG 70. |
 | Một nửa lưới ứng viên V2 không dùng được trên khung chuẩn | `[Experimentally observed]` & `[Limitation]` | Tám ứng viên dùng ô 512 điểm ảnh; khung 1152 x 2304 chỉ chứa 8 ô không chồng lấn mà hồ sơ đòi 18 | Đã kiểm chứng: khâu nhúng báo lỗi ngay, nên các ứng viên này chưa bao giờ chạy được. |
 | Vật mang quyết định truy vết được hay không, phép tấn công và kích thước cấp phát thì không | `[Experimentally observed]` & `[Limitation]` | Phép đo giai thừa hai vật mang nhân hai kích thước nhân ba điều kiện, chạy trên `_decode_image` của dịch vụ; bảng ở Mục 4.2.4.5 | Đã kiểm chứng: ảnh chuyển sắc `decoded` cả sáu ô kể cả nén JPEG 70; trang chữ dày `insufficient_sync_evidence` cả sáu ô kể cả khi không tấn công. |
-| Trên hệ thống thật, một tệp có mã băm không khớp vẫn được truy đúng bản cấp phát nhờ thủy vân | `[Experimentally observed]` & `[Production]` | Phép thử ngày 14/09/2026 qua đúng giao diện web; ảnh chụp màn hình ở `docs/project/report-assets/evidence/2026-09-14-v0.2.1/`; nội dung ở Hình 4.4 | Đã kiểm chứng: giao diện ghi "hai giá trị khác nhau" ở phần đối chiếu mã băm, đồng thời ghi đúng mã hồ sơ cấp phát `b4401e85-c550-44b9-b1e8-0bf0428a9821`. Kết luận này không thể đến từ đối chiếu mã băm. |
+| Trên hệ thống thật, một tệp có mã băm không khớp vẫn được truy đúng bản cấp phát nhờ thủy vân | `[Experimentally observed]` & `[Production]` | Phép thử ngày 14/09/2026 qua đúng giao diện web; ảnh chụp màn hình ở `docs/project/report-assets/evidence/2026-09-14-v0.2.1/`; nội dung ở Hình 4.5 | Đã kiểm chứng: giao diện ghi "hai giá trị khác nhau" ở phần đối chiếu mã băm, đồng thời ghi đúng mã hồ sơ cấp phát `b4401e85-c550-44b9-b1e8-0bf0428a9821`. Kết luận này không thể đến từ đối chiếu mã băm. |
 | Đuôi tệp cấp phát suy từ kiểu nội dung của tài liệu nguồn, ở cả ba nơi quyết định | `[Implemented]` & `[Production]` | `services/api/splitbind/demo/worker.py: L45`, `services/api/splitbind/demo/issuance.py: L172`, `services/api/splitbind/documents/views.py: L200-L203` tại commit `52751f2`, chính là commit dựng nên ảnh chứa ghi trong `release-images.env` | Đã kiểm chứng bằng `services/api/tests/documents/test_issuance_download.py`: tài liệu ảnh tải về mang đuôi `.png` và tên ASCII đọc được. Trước đó đuôi bị cố định `.pdf` ở hai nơi nên hai lỗi triệt tiêu nhau và mọi kiểm tra nội bộ đều xanh. |
