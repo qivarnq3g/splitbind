@@ -222,7 +222,7 @@ Nhóm 9 đã tiếp cận và triển khai thực nghiệm cả hai bài toán �
 
 # PHẦN 4: ỨNG DỤNG KÝ SỐ TRONG BẢO VỆ THÔNG TIN TRUY VẾT (PHỤC VỤ YÊU CẦU 3)
 
-### 4.1. Phân định ba cấp độ kiến trúc (Bắt buộc không đánh đồng)
+## 4.1. Phân định ba cấp độ kiến trúc (Bắt buộc không đánh đồng)
 `[Established theory]`, `[Implemented]` & `[Production]`
 
 Để bảo vệ bài báo cáo trước hội đồng chuyên môn, nhóm phân định rạch ròi ba cấp độ:
@@ -237,21 +237,21 @@ Nhóm 9 đã tiếp cận và triển khai thực nghiệm cả hai bài toán �
 
 ---
 
-### 4.2. Kiến trúc hồ sơ toàn vẹn (Signed Manifest)
+## 4.2. Kiến trúc hồ sơ toàn vẹn (Signed Manifest)
 `[Implemented]` & `[Production]` (Tệp `services/api/splitbind/release/manifest.py: L58-L119`)
 
 Hệ thống không ký trực tiếp lên file PDF nhị phân, mà sử dụng mô hình Hồ sơ toàn vẹn chuẩn hóa (Signed Manifest) nhằm thiết lập liên kết mật mã (cryptographic binding) chặt chẽ giữa tài liệu phát hành và các siêu dữ liệu truy vết nghiệp vụ (`issuance_id`, `recipient_id`, `source_sha256`, `output_sha256`, `signing_key_id`...), được chuẩn tắc hóa qua RFC 8785 và ký bằng Ed25519:
 
 ```
-+-----------------------------------------------------------------------------+
-|                          INTERNAL MANIFEST PAYLOAD                          |
-|  - schema_version: 1                                                        |
-|  - issuance_id: "de5cf342-faf4-4cc7-a581-f8899467bc13" (Khóa liên kết)     |
-|  - recipient_id: "89904907-4a28-4bdb-853d-cb4fa783290c" (Người nhận)       |
-|  - source_sha256: Hash tệp gốc ban đầu                                      |
-|  - output_sha256: Hash tệp sau khi cấp phát                                 |
-|  - signing_key_id: "key-integrity-20260908-01"                             |
-+-----------------------------------------------------------------------------+
++---------------------------------------------------------------+
+|                    INTERNAL MANIFEST PAYLOAD                  |
+|  schema_version : 1                                           |
+|  issuance_id    : de5cf342-...-f8899467bc13   (khóa liên kết) |
+|  recipient_id   : 89904907-...-cb4fa783290c   (người nhận)    |
+|  source_sha256  : mã băm tệp gốc                              |
+|  output_sha256  : mã băm tệp sau khi cấp phát                 |
+|  signing_key_id : key-integrity-20260908-01                   |
++---------------------------------------------------------------+
                                        │
                                        ▼
                        RFC 8785 JSON Canonicalization (JCS)
@@ -270,7 +270,7 @@ Hệ thống không ký trực tiếp lên file PDF nhị phân, mà sử dụng
 
 ---
 
-### 4.3. Giải quyết "Mâu thuẫn giữa thủy vân số và chữ ký số"
+## 4.3. Giải quyết "Mâu thuẫn giữa thủy vân số và chữ ký số"
 `[Established theory]` (Giải quyết thắc mắc của Giảng viên TS. Hồ Đăng Thế)
 
 * **Vấn đề giảng viên nêu ra:** *"Chữ ký số đòi hỏi tính toàn vẹn từng bit (1 bit đổi là hỏng chữ ký). Thủy vân số lại chủ động làm thay đổi điểm ảnh/dữ liệu của tệp. Hai kỹ thuật này có mâu thuẫn triệt tiêu lẫn nhau không?"*
@@ -288,7 +288,7 @@ Hệ thống không ký trực tiếp lên file PDF nhị phân, mà sử dụng
 
 ---
 
-### 4.4. Minh bạch ngữ nghĩa trạng thái trên production (`NO_WATERMARK`)
+## 4.4. Minh bạch ngữ nghĩa trạng thái trên production (`NO_WATERMARK`)
 `[Production]` & `[Limitation]`
 
 * Trên backend API, khi không tìm được bản cấp phát nào trùng mã băm và cũng không đọc được thủy vân, trạng thái nội bộ trả về là `NO_WATERMARK` (`services/api/splitbind/documents/models.py: L205`). Kèm theo đó là danh sách mã hạn chế, được chọn theo đúng cấu hình đang bật (`services/api/splitbind/documents/serializers.py: L109-L117`):
@@ -308,7 +308,7 @@ Hệ thống không ký trực tiếp lên file PDF nhị phân, mà sử dụng
 
 `[Established theory]` (tổng hợp từ [1], [2], [14] và [15])
 
-### 5.1. Bảng ma trận so sánh đa chiều toàn diện (7 Tiêu chí $\times$ 6 Kỹ thuật)
+## 5.1. Bảng ma trận so sánh đa chiều toàn diện (7 Tiêu chí $\times$ 6 Kỹ thuật)
 
 | Tiêu chí so sánh | Hàm băm mật mã (Cryptographic Hash) | Mã xác thực thông điệp (HMAC / MAC) | Chữ ký số (Digital Signature) | Thủy vân bền vững (Robust Watermark) | Thủy vân bán dễ vỡ (Semi-fragile WM) | Giấu tin bí mật (Steganography) |
 |---|---|---|---|---|---|---|
@@ -322,7 +322,7 @@ Hệ thống không ký trực tiếp lên file PDF nhị phân, mà sử dụng
 
 ---
 
-### 5.2. Phân tích tương phản chuyên sâu giữa các cặp kỹ thuật
+## 5.2. Phân tích tương phản chuyên sâu giữa các cặp kỹ thuật
 
 #### A. Thủy vân số (Watermarking) vs giấu tin bí mật (Steganography)
 * **Điểm tương đồng:** Cùng sử dụng kỹ thuật nhúng dữ liệu vào vật mang đa phương tiện mà không làm thay đổi cảm nhận trực quan của con người.
@@ -338,7 +338,7 @@ Hệ thống không ký trực tiếp lên file PDF nhị phân, mà sử dụng
 
 # PHẦN 6: CASE STUDY HỆ THỐNG SPLITBIND VÀ KIẾN TRÚC THỰC THI
 
-### 6.1. Sơ đồ kiến trúc hệ thống SplitBind
+## 6.1. Sơ đồ kiến trúc hệ thống SplitBind
 `[Production]` & `[Implemented]`
 
 Hệ thống được tổ chức thành hai phân hệ độc lập:
@@ -361,17 +361,18 @@ Hệ thống được tổ chức thành hai phân hệ độc lập:
                   │                         (Metadata & Manifests)
                   │                                   │
                   ▼                                   ▼
-          Direct Presigned S3               [ Cloudflare R2 Bucket ]
-                  └───────────────────────────────► (PDF / PNG Objects)
+        Direct Presigned S3           [ Cloudflare R2 Bucket ]
+                  └──────────────────────► (PDF / PNG Objects)
 
-─────────────────────────────────────────────────────────────────────────────
-                TẦNG NGHIÊN CỨU & KIỂM THỬ THUẬT TOÁN (RESEARCH)
-  [ Python Reference Codec ] ──► [ Synthetic Corpus ] ──► [ Attack Matrix ]
-    - DWT-DCT-QIM Fingerprint                             - 31 Image Attacks
-    - Semi-fragile HMAC Tamper                            - 4 Tamper Attacks
+──────────────────────────────────────────────────────────────
+        TẦNG NGHIÊN CỨU & KIỂM THỬ THUẬT TOÁN (RESEARCH)
+  [ Python Reference Codec ]
+        ──► [ Synthetic Corpus ] ──► [ Attack Matrix ]
+    - DWT-DCT-QIM Fingerprint          - 31 Image Attacks
+    - Semi-fragile HMAC Tamper         - 4 Tamper Attacks
 ```
 
-### 6.2. Hai quy trình nghiệp vụ cốt lõi
+## 6.2. Hai quy trình nghiệp vụ cốt lõi
 `[Production]`
 
 1. **Quy trình cấp phát tài liệu (Issuance Workflow):**
@@ -651,8 +652,10 @@ Kết luận trung gian: nếu từ mã về tới nơi gần như nguyên vẹn
 `[Experimentally observed]` Phép đo quyết định là in tỉ lệ lỗi bit của từ mã trích được cạnh số ký hiệu bị khai là xoá, trong cùng một dòng:
 
 ```
-tỉ lệ 0.625   t0 ber=0.000 -- er=21 | t1 ber=0.000 -- er=21 | t2 ber=0.000 -- er=24
-tỉ lệ 0.500   t0 ber=0.000 OK er=3  | t1 ber=0.000 OK er=5  | t2 ber=0.000 OK er=10
+tỉ lệ 0.625
+  t0 ber=0.000 -- er=21 | t1 ber=0.000 -- er=21 | t2 ber=0.000 -- er=24
+tỉ lệ 0.500
+  t0 ber=0.000 OK er=3  | t1 ber=0.000 OK er=5  | t2 ber=0.000 OK er=10
 ```
 
 Ở tỉ lệ 0.625, tỉ lệ lỗi bit bằng 0,000: từ mã về tới nơi hoàn toàn chính xác. Nhưng bên nhận khai 21 tới 24 ký hiệu là không đáng tin, trong khi mã Reed-Solomon của thiết kế chỉ sửa được tối đa 16. Bộ giải mã vì thế từ chối chính những từ mã mà nó đã khôi phục đúng.
@@ -968,7 +971,8 @@ Còn thiếu một tệp PowerPoint. Khi thành viên làm xong, chép vào cùn
 Máy đã cài sẵn WinRAR và 7-Zip nhưng không nằm trong PATH. Lệnh tạo đúng định dạng `.rar` mà đề bài yêu cầu, chạy trong PowerShell:
 
 ```
-& "$env:ProgramFiles\WinRAR\WinRAR.exe" a -r -ep1 "Nhom9_TruyVetToanVenVanBan.rar" "submission\*"
+$rar = "$env:ProgramFiles\WinRAR\WinRAR.exe"
+& $rar a -r -ep1 "Nhom9_TruyVetToanVenVanBan.rar" "submission\*"
 ```
 
 Trước khi nộp, kiểm tra lại ba điều:
@@ -1048,10 +1052,14 @@ Yêu cầu của giảng viên là mỗi nhóm chuẩn bị 03 câu hỏi tự l
 [Khung Báo cáo BTL Nhóm 9 - 18 Slides]
 ├── MÀN 1: ĐẶT VẤN ĐỀ & BỐI CẢNH (Slides 1 - 3)
 ├── MÀN 2: LÝ THUYẾT DIGITAL WATERMARKING - YÊU CẦU 1 (Slides 4 - 6)
-├── MÀN 3: ỨNG DỤNG THỦY VÂN TRONG TRUY VẾT & TOÀN VẸN - YÊU CẦU 2 (Slides 7 - 10)
-├── MÀN 4: ỨNG DỤNG KÝ SỐ & GIẢI QUYẾT MÂU THUẪN - YÊU CẦU 3 (Slides 11 - 13)
-├── MÀN 5: MA TRẬN SO SÁNH CÁC KỸ THUẬT TOÀN VẸN - YÊU CẦU 4 (Slides 14 - 15)
-└── MÀN 6: THỰC THI HỆ THỐNG SPLITBIND, THỰC NGHIỆM & KẾT LUẬN (Slides 16 - 20)
+├── MÀN 3: THỦY VÂN TRONG TRUY VẾT VÀ TOÀN VẸN
+│           - yêu cầu 2 (Slides 7 - 10)
+├── MÀN 4: KÝ SỐ VÀ GIẢI QUYẾT MÂU THUẪN
+│           - yêu cầu 3 (Slides 11 - 13)
+├── MÀN 5: MA TRẬN SO SÁNH CÁC KỸ THUẬT TOÀN VẸN
+│           - yêu cầu 4 (Slides 14 - 15)
+└── MÀN 6: THỰC THI, THỰC NGHIỆM VÀ KẾT LUẬN
+            (Slides 16 - 20)
 ```
 
 ### Chi tiết phân bổ từng slide và khuyến nghị trực quan:

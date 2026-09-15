@@ -310,7 +310,7 @@ Nhóm 9 đã tiếp cận và triển khai thực nghiệm cả hai bài toán �
 
 ## 3.1. Ứng dụng chữ ký số trong bảo vệ thông tin truy vết
 
-#### 3.1.0.1. Phân định ba cấp độ kiến trúc (Bắt buộc không đánh đồng)
+### 3.1.1. Phân định ba cấp độ kiến trúc (Bắt buộc không đánh đồng)
 *Lý thuyết đã công bố*, *Đã hiện thực trong mã nguồn* và *Đang vận hành trên hệ thống thật*
 
 Để bảo vệ bài báo cáo trước hội đồng chuyên môn, nhóm phân định rạch ròi ba cấp độ:
@@ -325,21 +325,21 @@ Nhóm 9 đã tiếp cận và triển khai thực nghiệm cả hai bài toán �
 
 ---
 
-#### 3.1.0.2. Kiến trúc hồ sơ toàn vẹn (Signed Manifest)
+### 3.1.2. Kiến trúc hồ sơ toàn vẹn (Signed Manifest)
 *Đã hiện thực trong mã nguồn* và *Đang vận hành trên hệ thống thật* (Tệp `services/api/splitbind/release/manifest.py: L58-L119`)
 
 Hệ thống không ký trực tiếp lên file PDF nhị phân, mà sử dụng mô hình Hồ sơ toàn vẹn chuẩn hóa (Signed Manifest) nhằm thiết lập liên kết mật mã (cryptographic binding) chặt chẽ giữa tài liệu phát hành và các siêu dữ liệu truy vết nghiệp vụ (`issuance_id`, `recipient_id`, `source_sha256`, `output_sha256`, `signing_key_id`...), được chuẩn tắc hóa qua RFC 8785 và ký bằng Ed25519:
 
 ```
-+-----------------------------------------------------------------------------+
-|                          INTERNAL MANIFEST PAYLOAD                          |
-|  - schema_version: 1                                                        |
-|  - issuance_id: "de5cf342-faf4-4cc7-a581-f8899467bc13" (Khóa liên kết)     |
-|  - recipient_id: "89904907-4a28-4bdb-853d-cb4fa783290c" (Người nhận)       |
-|  - source_sha256: Hash tệp gốc ban đầu                                      |
-|  - output_sha256: Hash tệp sau khi cấp phát                                 |
-|  - signing_key_id: "key-integrity-20260908-01"                             |
-+-----------------------------------------------------------------------------+
++---------------------------------------------------------------+
+|                    INTERNAL MANIFEST PAYLOAD                  |
+|  schema_version : 1                                           |
+|  issuance_id    : de5cf342-...-f8899467bc13   (khóa liên kết) |
+|  recipient_id   : 89904907-...-cb4fa783290c   (người nhận)    |
+|  source_sha256  : mã băm tệp gốc                              |
+|  output_sha256  : mã băm tệp sau khi cấp phát                 |
+|  signing_key_id : key-integrity-20260908-01                   |
++---------------------------------------------------------------+
                                        │
                                        ▼
                        RFC 8785 JSON Canonicalization (JCS)
@@ -358,7 +358,7 @@ Hệ thống không ký trực tiếp lên file PDF nhị phân, mà sử dụng
 
 ---
 
-#### 3.1.0.3. Giải quyết "Mâu thuẫn giữa thủy vân số và chữ ký số"
+### 3.1.3. Giải quyết "Mâu thuẫn giữa thủy vân số và chữ ký số"
 *Lý thuyết đã công bố* (Giải quyết thắc mắc của Giảng viên TS. Hồ Đăng Thế)
 
 * **Vấn đề giảng viên nêu ra:** *"Chữ ký số đòi hỏi tính toàn vẹn từng bit (1 bit đổi là hỏng chữ ký). Thủy vân số lại chủ động làm thay đổi điểm ảnh/dữ liệu của tệp. Hai kỹ thuật này có mâu thuẫn triệt tiêu lẫn nhau không?"*
@@ -376,7 +376,7 @@ Hệ thống không ký trực tiếp lên file PDF nhị phân, mà sử dụng
 
 ---
 
-#### 3.1.0.4. Minh bạch ngữ nghĩa trạng thái trên production (`NO_WATERMARK`)
+### 3.1.4. Minh bạch ngữ nghĩa trạng thái trên production (`NO_WATERMARK`)
 
 * Trên backend API, khi không tìm được bản cấp phát nào trùng mã băm và cũng không đọc được thủy vân, trạng thái nội bộ trả về là `NO_WATERMARK` (`services/api/splitbind/documents/models.py: L205`). Kèm theo đó là danh sách mã hạn chế, được chọn theo đúng cấu hình đang bật (`services/api/splitbind/documents/serializers.py: L109-L117`):
   * Khi phân hệ thủy vân đang bật, như trên hệ thống hiện chạy, mã hạn chế là `fingerprint.recall_below_release_gate`, nghĩa là bộ đọc thủy vân có chạy nhưng độ thu hồi chưa đạt cổng phát hành.
@@ -393,7 +393,7 @@ Hệ thống không ký trực tiếp lên file PDF nhị phân, mà sử dụng
 
 *Lý thuyết đã công bố* (tổng hợp từ [1], [2], [14] và [15])
 
-#### 3.2.0.1. Bảng ma trận so sánh đa chiều toàn diện (7 Tiêu chí $\times$ 6 Kỹ thuật)
+### 3.2.1. Bảng ma trận so sánh đa chiều toàn diện (7 Tiêu chí $\times$ 6 Kỹ thuật)
 
 **Bảng 3.1:** Ma trận so sánh sáu kỹ thuật bảo vệ toàn vẹn trên bảy tiêu chí an ninh
 
@@ -409,7 +409,7 @@ Hệ thống không ký trực tiếp lên file PDF nhị phân, mà sử dụng
 
 ---
 
-#### 3.2.0.2. Phân tích tương phản chuyên sâu giữa các cặp kỹ thuật
+### 3.2.2. Phân tích tương phản chuyên sâu giữa các cặp kỹ thuật
 
 ##### Thủy vân số (Watermarking) vs giấu tin bí mật (Steganography)
 * **Điểm tương đồng:** Cùng sử dụng kỹ thuật nhúng dữ liệu vào vật mang đa phương tiện mà không làm thay đổi cảm nhận trực quan của con người.
@@ -429,7 +429,7 @@ Hệ thống không ký trực tiếp lên file PDF nhị phân, mà sử dụng
 
 ## 4.1. Kiến trúc và hiện thực hệ thống
 
-#### 4.1.0.1. Sơ đồ kiến trúc hệ thống SplitBind
+### 4.1.1. Sơ đồ kiến trúc hệ thống SplitBind
 
 Hệ thống được tổ chức thành hai phân hệ độc lập:
 
@@ -451,17 +451,18 @@ Hệ thống được tổ chức thành hai phân hệ độc lập:
                   │                         (Metadata & Manifests)
                   │                                   │
                   ▼                                   ▼
-          Direct Presigned S3               [ Cloudflare R2 Bucket ]
-                  └───────────────────────────────► (PDF / PNG Objects)
+        Direct Presigned S3           [ Cloudflare R2 Bucket ]
+                  └──────────────────────► (PDF / PNG Objects)
 
-─────────────────────────────────────────────────────────────────────────────
-                TẦNG NGHIÊN CỨU và KIỂM THỬ THUẬT TOÁN (RESEARCH)
-  [ Python Reference Codec ] ──► [ Synthetic Corpus ] ──► [ Attack Matrix ]
-    - DWT-DCT-QIM Fingerprint                             - 31 Image Attacks
-    - Semi-fragile HMAC Tamper                            - 4 Tamper Attacks
+──────────────────────────────────────────────────────────────
+        TẦNG NGHIÊN CỨU và KIỂM THỬ THUẬT TOÁN (RESEARCH)
+  [ Python Reference Codec ]
+        ──► [ Synthetic Corpus ] ──► [ Attack Matrix ]
+    - DWT-DCT-QIM Fingerprint          - 31 Image Attacks
+    - Semi-fragile HMAC Tamper         - 4 Tamper Attacks
 ```
 
-#### 4.1.0.2. Hai quy trình nghiệp vụ cốt lõi
+### 4.1.2. Hai quy trình nghiệp vụ cốt lõi
 
 1. **Quy trình cấp phát tài liệu (Issuance Workflow):**
    * Người cấp phát tải lên tệp nguồn, định dạng PDF, PNG hoặc JPEG $\rightarrow$ hệ thống sinh mã cấp phát `issuance_id` $\rightarrow$ đưa ảnh từng trang về khung chuẩn rồi nhúng thủy vân ẩn mang mã ấy $\rightarrow$ trả ảnh về đúng kích thước ban đầu $\rightarrow$ tính mã băm SHA-256 của tệp nguồn và tệp phát hành $\rightarrow$ dựng Manifest chuẩn hoá theo RFC 8785 $\rightarrow$ ký số bằng khoá riêng Ed25519 $\rightarrow$ lưu hồ sơ cấp phát và cấp liên kết tải có thời hạn.
@@ -756,8 +757,10 @@ Kết luận trung gian: nếu từ mã về tới nơi gần như nguyên vẹn
 *Số liệu đo thực nghiệm* Phép đo quyết định là in tỉ lệ lỗi bit của từ mã trích được cạnh số ký hiệu bị khai là xoá, trong cùng một dòng:
 
 ```
-tỉ lệ 0.625   t0 ber=0.000 -- er=21 | t1 ber=0.000 -- er=21 | t2 ber=0.000 -- er=24
-tỉ lệ 0.500   t0 ber=0.000 OK er=3  | t1 ber=0.000 OK er=5  | t2 ber=0.000 OK er=10
+tỉ lệ 0.625
+  t0 ber=0.000 -- er=21 | t1 ber=0.000 -- er=21 | t2 ber=0.000 -- er=24
+tỉ lệ 0.500
+  t0 ber=0.000 OK er=3  | t1 ber=0.000 OK er=5  | t2 ber=0.000 OK er=10
 ```
 
 Ở tỉ lệ 0.625, tỉ lệ lỗi bit bằng 0,000: từ mã về tới nơi hoàn toàn chính xác. Nhưng bên nhận khai 21 tới 24 ký hiệu là không đáng tin, trong khi mã Reed-Solomon của thiết kế chỉ sửa được tối đa 16. Bộ giải mã vì thế từ chối chính những từ mã mà nó đã khôi phục đúng.

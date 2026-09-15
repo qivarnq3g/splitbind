@@ -116,6 +116,8 @@ def number_cell(cell: str, ordinal: int) -> str:
     if text is None:
         return cell
     cut = text.end()
+    if re.match(r"\s*\d+\s*[.)]\s", cell[cut:]):
+        return cell
     return cell[:cut] + f"{ordinal}. " + cell[cut:]
 
 
@@ -239,6 +241,55 @@ def compact_table_cells(xml: str) -> str:
     return re.sub(r"<w:tc>.*?</w:tc>", fix_cell, xml, flags=re.S)
 
 
+BREAK_ONLY = re.compile(
+    r'<w:p(?:\s[^>]*)?>(?:(?!</w:p>).)*?<w:br w:type="page"\s*/>(?:(?!</w:p>).)*?</w:p>',
+    re.S,
+)
+
+
+def fold_page_breaks(xml: str) -> str:
+    def carries_text(block: str) -> bool:
+        return bool(re.search(r"<w:t(?:\s[^>]*)?>[^<]", block))
+
+    while True:
+        found = BREAK_ONLY.search(xml)
+        while found is not None and carries_text(found.group(0)):
+            found = BREAK_ONLY.search(xml, found.end())
+        if found is None:
+            return xml
+        after = re.compile(r"<w:p(?:\s[^>]*)?>", re.S).search(xml, found.end())
+        if after is None or xml[found.end():after.start()].strip():
+            xml = xml[:found.start()] + xml[found.end():]
+            continue
+        target = re.compile(r"<w:p(?:\s[^>]*)?>.*?</w:p>", re.S).match(xml, after.start())
+        folded = insert_paragraph_props(target.group(0), "<w:pageBreakBefore/>")
+        xml = xml[:found.start()] + folded + xml[target.end():]
+
+
+def attach_section(cover: str, properties: str) -> str:
+    cover = re.sub(r"<w:sectPr(?:\s[^>]*)?>.*?</w:sectPr>", "", cover, flags=re.S)
+    cover = re.sub(r"<w:sectPr(?:\s[^>]*)?/>", "", cover)
+    while True:
+        blocks = list(re.finditer(r"<w:p(?:\s[^>]*)?>.*?</w:p>", cover, re.S))
+        if not blocks or cover[blocks[-1].end():].strip():
+            break
+        tail = blocks[-1].group(0)
+        if re.search(r"<w:t(?:\s[^>]*)?>[^<]", tail) or "<w:drawing>" in tail:
+            break
+        cover = cover[:blocks[-1].start()] + cover[blocks[-1].end():]
+    blocks = list(re.finditer(r"<w:p(?:\s[^>]*)?>.*?</w:p>", cover, re.S))
+    if not blocks or cover[blocks[-1].end():].strip():
+        return cover + "<w:p><w:pPr>" + properties + "</w:pPr></w:p>"
+    last = blocks[-1]
+    block = last.group(0)
+    if "<w:pPr>" in block:
+        block = block.replace("</w:pPr>", properties + "</w:pPr>", 1)
+    else:
+        opening = re.match(r"<w:p(?:\s[^>]*)?>", block).group(0)
+        block = block.replace(opening, opening + "<w:pPr>" + properties + "</w:pPr>", 1)
+    return cover[:last.start()] + block + cover[last.end():]
+
+
 def drop_third_student(xml: str) -> str:
     for row in re.findall(r"<w:tr[ >].*?</w:tr>", xml, re.S):
         if "Tên sv 3" in row or "MSSV 3" in row:
@@ -312,16 +363,14 @@ def main() -> int:
         document = document.replace("<w:sectPr>", "<w:sectPr>" + PAGE_SIZE)
 
     cover_section = (
-        "<w:p><w:pPr><w:sectPr>"
-        + PAGE_SIZE
-        + cover_margin
-        + borders
-        + "</w:sectPr></w:pPr></w:p>"
+        "<w:sectPr>" + PAGE_SIZE + cover_margin + borders + "</w:sectPr>"
     )
     cover = rebuild_cover_table(single_spaced(cover), available)
+    cover = attach_section(cover, cover_section)
     document = compact_table_cells(document)
     document = unjustify_code_paragraphs(document)
-    document = document.replace("<w:body>", "<w:body>" + cover + cover_section, 1)
+    document = fold_page_breaks(document)
+    document = document.replace("<w:body>", "<w:body>" + cover, 1)
     items["word/document.xml"] = document.encode("utf-8")
 
     backup = REPORT.with_suffix(".pre-cover.docx")
