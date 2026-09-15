@@ -94,6 +94,12 @@ ABBREVIATIONS = [
     ("SSIM", "Structural Similarity Index Measure"),
     ("SSOT", "Single Source of Truth, nguồn chân lý duy nhất"),
     ("WM", "Watermark, thủy vân số"),
+    ("API", "Application Programming Interface, giao diện lập trình ứng dụng"),
+    ("CSPRNG", "Cryptographically Secure Pseudo-Random Number Generator, bộ sinh số giả ngẫu nhiên an toàn mật mã"),
+    ("DPI", "Dots Per Inch, số điểm ảnh trên mỗi inch, dùng để nói độ phân giải khi kết xuất trang"),
+    ("SIFT", "Scale-Invariant Feature Transform, phép trích đặc trưng ảnh bất biến với tỉ lệ"),
+    ("SVD", "Singular Value Decomposition, phân tích giá trị kỳ dị"),
+    ("UUID", "Universally Unique Identifier, định danh duy nhất toàn cục, dài 128 bit"),
 ]
 
 TERMS = [
@@ -110,6 +116,7 @@ TERMS = [
     ("Reed-Solomon", "Mã sửa lỗi khối trên trường hữu hạn, cho phép khôi phục dữ liệu khi một số ký hiệu bị sai hoặc bị khai là mất."),
     ("artifact", "Tệp kết quả do một lần chạy thực nghiệm sinh ra và được lưu lại để kiểm chứng về sau."),
     ("benchmark", "Bộ phép đo chuẩn hoá chạy trên cùng một corpus, để các lần chạy khác nhau so sánh được với nhau."),
+    ("StegaStamp", "Tên một kiến trúc thủy vân học sâu công bố năm 2019, huấn luyện đồng thời bộ mã hoá và bộ giải mã qua một tầng mô phỏng biến dạng. Giữ nguyên tên riêng."),
     ("production", "Môi trường máy chủ đang phục vụ người dùng thật, phân biệt với môi trường thử nghiệm. Giữ nguyên tiếng Anh theo cách gọi phổ biến trong ngành phần mềm."),
 ]
 
