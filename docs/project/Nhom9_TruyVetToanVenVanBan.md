@@ -1180,8 +1180,6 @@ Hướng phát triển rút ra trực tiếp từ chẩn đoán: chuẩn hoá kh
 
 # TÀI LIỆU THAM KHẢO
 
-Danh mục xếp theo khối ngôn ngữ, khối tiếng Việt trước rồi tới khối tiếng Anh. Trong mỗi khối, tài liệu xếp theo thứ tự ABC: tác giả Việt Nam xếp theo tên, tác giả nước ngoài xếp theo họ, tài liệu không có tác giả xếp theo tên cơ quan ban hành. Số thứ tự đánh liên tục từ 1 qua cả hai khối.
-
 **Tiếng Việt**
 
 1. Hoàng Xuân Dậu (2020). *Giáo trình Cơ sở An toàn Thông tin*, Học viện Công nghệ Bưu chính Viễn thông, Hà Nội.
