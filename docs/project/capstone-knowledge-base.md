@@ -1220,14 +1220,37 @@ Tám ứng viên dùng ô 512 điểm ảnh bị loại ngay từ khâu nhúng: 
 
 Đọc kỹ hơn, có hai điều đáng nói:
 
-* **Chênh lệch giữa trượt sạch và giải được chỉ là một bậc tham số.** Từ số 0 sang số 4 chỉ nâng bước lượng tử từ 24 lên 32 và cường độ pilot từ 1.5 lên 2.0. Cái giá là 2,07 dB PSNR, đưa 44.09 xuống 42.02, vẫn cách cổng chất lượng 38 dB một khoảng rộng. Đổi lại, trang chữ chuyển từ không đồng bộ được sang giải được cả khi bị nén JPEG chất lượng 70.
-* **Nâng tiếp không mua thêm gì.** Các mức 48 và 64 cho cùng kết quả chức năng như mức 32 nhưng PSNR tụt xuống 39.16 và 37.04, tức mức 64 đã rơi xuống dưới cổng chất lượng. Đây là một ví dụ sạch của tam giác đánh đổi ở Mục 1.3: sau một điểm nhất định, tăng cường độ chỉ còn trả giá mà không thu được độ bền.
+* **Chênh lệch giữa trượt sạch và giải được chỉ là một bậc tham số.** Từ số 0 sang số 4 chỉ nâng bước lượng tử từ 24 lên 32 và cường độ pilot từ 1.5 lên 2.0. Cái giá là 2,07 dB PSNR, đưa 44.09 xuống 42.02, vẫn cách cổng chất lượng 38 dB một khoảng rộng.
+* **Nâng tiếp không mua thêm gì trên trang này.** Các mức 48 và 64 cho cùng kết quả chức năng như mức 32 nhưng PSNR tụt xuống 39.16 và 37.04, tức mức 64 đã rơi xuống dưới cổng chất lượng. Đây là một ví dụ sạch của tam giác đánh đổi ở Mục 1.3: sau một điểm nhất định, tăng cường độ chỉ còn trả giá mà không thu được độ bền.
 
-`[Limitation]` Cột chụp màn hình vẫn là ranh giới chưa vượt qua trên vật mang trang chữ. Các ứng viên mạnh hơn chuyển trạng thái từ mất đồng bộ sang không thấy payload, nghĩa là khâu hình học đã làm được việc còn tín hiệu thì không đủ sống sót. Đây đúng là lớp thất bại thứ ba trong cách phân loại ở Mục 4.3.2.
+#### Lặp lại phép quét trên một trang chữ thật: kết luận trên bị thu hẹp
+
+`[Experimentally observed]` Trang chữ dùng cho bảng trên được dựng bằng các khối chữ nhật đặc, tỉ lệ điểm tối 23,82 phần trăm. Để kiểm tra kết luận có khái quát được không, nhóm dựng một trang thứ hai bằng phông chữ thật với nét mảnh, tỉ lệ điểm tối 9,24 phần trăm, tức gần với một trang tài liệu thực tế hơn nhiều, rồi quét lại đúng tám ứng viên:
+
+| # | qim | pilot | lặp | PSNR | Không tấn công | Nén JPEG 70 |
+|---:|---:|---:|---:|---:|---|---|
+| 0 | 24 | 1.5 | 3 | 44.03 | mất đồng bộ | mất đồng bộ |
+| 1 | 24 | 1.5 | 5 | 43.89 | mất đồng bộ | mất đồng bộ |
+| 4 | 32 | 2.0 | 3 | 41.91 | mất đồng bộ | mất đồng bộ |
+| 5 | 32 | 2.0 | 5 | 41.74 | mất đồng bộ | mất đồng bộ |
+| 8 | 48 | 3.0 | 3 | 39.01 | **giải được** | mất đồng bộ |
+| 9 | 48 | 3.0 | 5 | 38.86 | mất đồng bộ | mất đồng bộ |
+| 12 | 64 | 4.0 | 3 | 36.95 | **giải được** | mất đồng bộ |
+| 13 | 64 | 4.0 | 5 | 36.79 | **giải được** | mất đồng bộ |
+
+Bảng này thu hẹp kết luận trước đó một cách đáng kể, và cần nói thẳng:
+
+* **Không ứng viên nào sống sót qua nén JPEG 70 trên trang chữ thật.** Cả tám đều mất đồng bộ.
+* **Chỉ các mức cường độ cao nhất mới đọc được trang chữ chưa bị đụng tới**, và mức 64 nằm dưới cổng chất lượng, còn mức 48 chỉ còn cách cổng 1,01 dB.
+* **Đọc được một tệp chưa bị đụng tới gần như không có giá trị thực dụng.** Tệp nguyên vẹn vốn đã khớp bằng mã băm; thủy vân chỉ có ý nghĩa khi tệp đã đổi. Nghĩa là ở tỉ lệ điểm tối 9 phần trăm, không cấu hình V2 nào cho năng lực truy vết dùng được.
+
+`[Limitation]` Bài học phương pháp quan trọng hơn con số: "trang văn bản" không phải một loại vật mang duy nhất. Hai trang cùng gọi là trang chữ, khác nhau ở độ dày nét, cho kết quả trái ngược trên cùng một bộ tham số. Mọi phát biểu về độ bền vì thế phải kèm đặc trưng định lượng của vật mang, ở đây là tỉ lệ điểm tối, chứ không chỉ kèm tên gọi.
 
 ### Cách nhóm đã xử lý phát hiện này
 
-`[Implemented]` Nhóm chuyển hồ sơ phát hành sang ứng viên số 4. Ba điều kèm theo cần nêu vì chúng là phần khó của thay đổi, không phải bản thân việc đổi tham số:
+`[Implemented]` Nhóm chuyển hồ sơ phát hành sang ứng viên số 4 và đã đưa lên hệ thống đang chạy trong bản `integrity-v0.2.3`. Cần nói rõ thay đổi này mua được gì: trên trang chữ thô nó đưa kết quả từ mất đồng bộ hoàn toàn sang giải được kể cả khi nén JPEG 70, còn trên trang chữ thật thì không đổi gì, cả hồ sơ cũ lẫn mới đều mất đồng bộ. Nhóm giữ hồ sơ mới vì nó không thua hồ sơ cũ ở bất kỳ phép đo nào và chất lượng vẫn ở 41,91 dB, nhưng không trình bày nó như lời giải cho bài toán trang văn bản.
+
+Ba điều kèm theo cần nêu vì chúng là phần khó của thay đổi, không phải bản thân việc đổi tham số:
 
 1. **Định danh ứng viên bị khoá cứng trong ràng buộc cơ sở dữ liệu.** Bảng bằng chứng cấp phát có một `CheckConstraint` đòi đúng một định danh, nên đổi hồ sơ kéo theo một migration nới ràng buộc để chấp nhận cả định danh cũ lẫn mới.
 2. **Bản cấp phát cũ phải đọc được tiếp.** Khâu xác minh giữ danh sách hồ sơ được chấp nhận, thử hồ sơ hiện hành trước rồi mới tới hồ sơ đã bị thay thế.
@@ -1347,7 +1370,8 @@ Bảng đối chiếu toàn diện giữa các tuyên bố kỹ thuật trong t�
 | Cấp phát ảnh: đầu vào PNG hoặc JPEG, nội dung đầu ra luôn là PNG, giữ nguyên kích thước gốc | `[Implemented]` & `[Production]` | `_build_issuance_artifact` trong `services/api/splitbind/demo/issuance.py` | Đã kiểm chứng bằng `services/api/tests/demo/test_image_issuance.py`: ảnh JPEG 1400 x 900 cấp phát xong truy ngược lại đúng mã hồ sơ, kích thước không đổi. |
 | Trên hệ thống thật, ảnh chụp màn hình thu nhỏ còn 0.469 kèm viền đen vẫn truy được nguồn, nếu bản cấp phát đúng khung chuẩn | `[Experimentally observed]` & `[Production]` | Phép so sánh có kiểm soát ngày 14/09/2026 qua đúng giao diện web; ảnh chụp màn hình ở `docs/project/report-assets/evidence/2026-09-14-v0.2.1/`; bảng ở Mục 4.2.4.5 | Đã kiểm chứng: cùng cách dựng ảnh chụp màn hình, bản cấp phát lệch khung chuẩn thì trượt còn bản đúng khung chuẩn thì chỉ đúng mã hồ sơ, dù tệp bị thu nhỏ mạnh hơn. |
 | Giao diện hiện "Chưa đủ bằng chứng xác minh" ngay cả khi hệ thống đã truy đúng nguồn | `[Implemented]` & `[Limitation]` | `integrityVerdict` trong `apps/web/src/features/evidence/copy.ts` tại commit `52751f2`; ảnh chụp màn hình trong thư mục bằng chứng ngày 14/09 | Đã kiểm chứng: hàm không có nhánh cho `SOURCE_IDENTIFIED_MODIFIED` nên trạng thái này rơi vào nhánh mặc định, trong khi `STATUS_COPY` đã có sẵn nhãn đúng cho nó. |
-| Hồ sơ tham số mà hệ thống đang chạy ghim là hồ sơ yếu nhất trong lưới ứng viên | `[Experimentally observed]` | Quét toàn bộ 16 ứng viên của `contracts/algorithm/fingerprint-candidates.v2.json` trên trang chữ ở khung chuẩn; bảng ở Mục 4.3.4 | Đã kiểm chứng: ứng viên số 0 là cái duy nhất trượt hoàn toàn, bảy ứng viên còn lại đều giải được trang chữ không bị tấn công. |
+| Hồ sơ tham số mà hệ thống đang chạy ghim là hồ sơ yếu nhất trong lưới ứng viên | `[Experimentally observed]` | Quét toàn bộ 16 ứng viên của `contracts/algorithm/fingerprint-candidates.v2.json` trên trang chữ thô ở khung chuẩn; bảng ở Mục 4.3.4 | Đã kiểm chứng: ứng viên số 0 là cái duy nhất trượt hoàn toàn, bảy ứng viên còn lại đều giải được trang chữ thô không bị tấn công. |
+| Trên trang chữ có nét mảnh, không cấu hình V2 nào sống sót qua nén JPEG 70 | `[Experimentally observed]` & `[Limitation]` | Quét lại tám ứng viên dùng được trên trang phông chữ thật, tỉ lệ điểm tối 9,24 phần trăm; bảng ở Mục 4.3.4 | Đã kiểm chứng trên hệ thống thật: bản `integrity-v0.2.3` trả `insufficient_sync_evidence` cho đúng trang này sau khi nén JPEG 70. |
 | Một nửa lưới ứng viên V2 không dùng được trên khung chuẩn | `[Experimentally observed]` & `[Limitation]` | Tám ứng viên dùng ô 512 điểm ảnh; khung 1152 x 2304 chỉ chứa 8 ô không chồng lấn mà hồ sơ đòi 18 | Đã kiểm chứng: khâu nhúng báo lỗi ngay, nên các ứng viên này chưa bao giờ chạy được. |
 | Vật mang quyết định truy vết được hay không, phép tấn công và kích thước cấp phát thì không | `[Experimentally observed]` & `[Limitation]` | Phép đo giai thừa hai vật mang nhân hai kích thước nhân ba điều kiện, chạy trên `_decode_image` của dịch vụ; bảng ở Mục 4.2.4.5 | Đã kiểm chứng: ảnh chuyển sắc `decoded` cả sáu ô kể cả nén JPEG 70; trang chữ dày `insufficient_sync_evidence` cả sáu ô kể cả khi không tấn công. |
 | Trên hệ thống thật, một tệp có mã băm không khớp vẫn được truy đúng bản cấp phát nhờ thủy vân | `[Experimentally observed]` & `[Production]` | Phép thử ngày 14/09/2026 qua đúng giao diện web; ảnh chụp màn hình ở `docs/project/report-assets/evidence/2026-09-14-v0.2.1/`; nội dung ở Hình 4.4 | Đã kiểm chứng: giao diện ghi "hai giá trị khác nhau" ở phần đối chiếu mã băm, đồng thời ghi đúng mã hồ sơ cấp phát `b4401e85-c550-44b9-b1e8-0bf0428a9821`. Kết luận này không thể đến từ đối chiếu mã băm. |
