@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <title>SplitBind</title>
+  <style>
+    .m { fill: #03080e; }
+    .a { fill: #005277; }
+    @media (prefers-color-scheme: dark) {
+      .m { fill: #edeff2; }
+      .a { fill: #41a6c9; }
+    }
+  </style>
+  <polygon class="m" points="2.683,7.07 23.99,0.96 23.99,7.175 2.683,13.284" />
+  <polygon class="a" points="8.01,14.42 29.317,8.31 29.317,14.525 8.01,20.635" />
+  <polygon class="m" points="2.683,24.825 23.99,18.716 23.99,24.93 2.683,31.04" />
+</svg>
