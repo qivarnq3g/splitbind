@@ -117,6 +117,14 @@ TERMS = [
     ("artifact", "Tệp kết quả do một lần chạy thực nghiệm sinh ra và được lưu lại để kiểm chứng về sau."),
     ("benchmark", "Bộ phép đo chuẩn hoá chạy trên cùng một corpus, để các lần chạy khác nhau so sánh được với nhau."),
     ("StegaStamp", "Tên một kiến trúc thủy vân học sâu công bố năm 2019, huấn luyện đồng thời bộ mã hoá và bộ giải mã qua một tầng mô phỏng biến dạng. Giữ nguyên tên riêng."),
+    ("vật mang", "Dữ liệu dùng để chở thủy vân. Trong hệ thống này vật mang là ảnh của từng trang tài liệu, nên nội dung trang quyết định thủy vân sống được hay không."),
+    ("chuỗi xử lý (pipeline)", "Dãy bước xử lý nối tiếp nhau, đầu ra của bước trước là đầu vào của bước sau. Tài liệu tiếng Việt cũng gọi là quy trình xử lý; bản báo cáo này dùng thống nhất một cách gọi."),
+    ("fail-safe", "Cơ chế tự chuyển về trạng thái an toàn khi không đủ căn cứ kết luận: ở đây là từ chối báo vùng sửa đổi thay vì báo bừa. Tài liệu tiếng Việt thường giữ nguyên từ này."),
+    ("kết xuất (render)", "Chuyển một trang tài liệu thành lưới điểm ảnh để thuật toán xử lý tín hiệu làm việc lên đó."),
+    ("luminance", "Kênh độ sáng của ảnh, tách riêng khỏi kênh màu. Thủy vân chỉ được nhúng trên kênh này."),
+    ("pilot", "Tín hiệu mốc cài sẵn ở các vị trí tần số đã biết, giúp bên giải mã dò lại khung hình gốc của ảnh. Tài liệu viễn thông tiếng Việt giữ nguyên từ này."),
+    ("raster", "Cách biểu diễn ảnh bằng lưới điểm ảnh, phân biệt với ảnh vector vẽ bằng đường nét."),
+    ("trải phổ (spread spectrum)", "Kỹ thuật rải một bit thông tin ra nhiều hệ số tín hiệu, để mất một phần hệ số vẫn đọc lại được bit đó."),
     ("production", "Môi trường máy chủ đang phục vụ người dùng thật, phân biệt với môi trường thử nghiệm. Giữ nguyên tiếng Anh theo cách gọi phổ biến trong ngành phần mềm."),
 ]
 

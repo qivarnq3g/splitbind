@@ -109,9 +109,9 @@ def figure_envelope() -> None:
     _despine(ax)
 
     handles = [
-        Patch(facecolor=BLUE, label="Có giả thuyết hình học đúng, sóng mang sống"),
+        Patch(facecolor=BLUE, label="Có giả thuyết hình học đúng, vật mang còn sống"),
         Patch(facecolor=ORANGE, label="Thiếu giả thuyết hình học đúng"),
-        Patch(facecolor=AQUA, label="Có giả thuyết đúng, sóng mang chết"),
+        Patch(facecolor=AQUA, label="Có giả thuyết đúng, vật mang đã chết"),
     ]
     ax.legend(handles=handles, frameon=False, loc="upper center",
               bbox_to_anchor=(0.5, -0.16), fontsize=9.5, ncol=1,
@@ -156,8 +156,6 @@ def figure_letterbox() -> None:
     plt.close(fig)
 
 def figure_carrier() -> None:
-    """Chất lượng nhúng đổi lấy độ bền, trên hai vật mang khác nhau."""
-
     qim = [24, 32, 48, 64]
     coarse_psnr = [44.09, 42.02, 39.16, 37.04]
     coarse_ok = [False, True, True, True]
