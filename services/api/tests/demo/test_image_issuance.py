@@ -59,7 +59,7 @@ def test_an_uploaded_image_is_issued_as_a_traceable_png(extension):
         width=1400,
         height=900,
         fingerprint_key=KEY,
-        candidate=candidate,
+        candidates=(candidate,),
     )
     assert pages == 1
     assert summary.status == "decoded", summary.status
@@ -103,6 +103,6 @@ def test_a_page_sized_image_round_trips_through_the_canonical_canvas():
 
     candidate, _frozen = _select_frozen_candidate()
     summary, _pages = _decode_image(
-        output, width=width, height=height, fingerprint_key=KEY, candidate=candidate
+        output, width=width, height=height, fingerprint_key=KEY, candidates=(candidate,)
     )
     assert summary.issuance_id == ISSUANCE_ID

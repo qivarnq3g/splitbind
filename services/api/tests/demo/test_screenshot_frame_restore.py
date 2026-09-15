@@ -131,7 +131,7 @@ def test_letterboxed_screenshot_is_attributed(screenshot_png):
         width=width,
         height=height,
         fingerprint_key=KEY,
-        candidate=candidate,
+        candidates=(candidate,),
     )
 
     assert pages == 1

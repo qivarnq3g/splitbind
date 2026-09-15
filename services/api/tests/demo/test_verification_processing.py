@@ -146,7 +146,7 @@ def test_pdf_decode_honors_user_unit_for_equivalent_physical_page():
     candidate, _identifier = _select_frozen_candidate()
 
     decision, page_count = _decode_pdf(
-        rewritten.getvalue(), fingerprint_key=FINGERPRINT_KEY, candidate=candidate
+        rewritten.getvalue(), fingerprint_key=FINGERPRINT_KEY, candidates=(candidate,)
     )
 
     assert page_count == 1
@@ -181,7 +181,7 @@ def test_forms_are_initialized_before_verification_page_count_access(monkeypatch
     )
 
     with pytest.raises(verification_module.DemoVerificationError, match="DEMO_PDF_PAGE_LIMIT"):
-        _decode_pdf(b"%PDF-synthetic", fingerprint_key=FINGERPRINT_KEY, candidate=object())
+        _decode_pdf(b"%PDF-synthetic", fingerprint_key=FINGERPRINT_KEY, candidates=(object(),))
 
     assert events == ["init_forms", "len", "close"]
 
@@ -219,7 +219,7 @@ def test_legacy_canonical_pages_use_72_dpi_compatibility_scale():
         document.close()
     candidate, _identifier = _select_frozen_candidate()
     decision, page_count = _decode_pdf(
-        legacy, fingerprint_key=FINGERPRINT_KEY, candidate=candidate
+        legacy, fingerprint_key=FINGERPRINT_KEY, candidates=(candidate,)
     )
     assert page_count == 4
     assert decision.status == "decoded"
@@ -961,7 +961,7 @@ def test_standalone_issued_page_with_wrong_key_never_attributes(
     summary, page_count = verification_module._decode_content(
         suspect,
         fingerprint_key=b"wrong-key-material".ljust(32, b"!"),
-        candidate=candidate,
+        candidates=(candidate,),
     )
 
     assert page_count == 1
@@ -979,19 +979,15 @@ def test_standalone_image_rejects_conflicting_page_index_decodes(monkeypatch):
     monkeypatch.setenv("SPLITBIND_DEMO_FINGERPRINT_KEY_HEX", FINGERPRINT_KEY.hex())
     context = _new_verification_context(synthetic_image_bytes(extension=".png"))
     page_indices = []
-    decisions = iter(
-        (
-            DecodeV2Decision(uuid.uuid4(), 0.9, 3, 0.0, "decoded"),
-            DecodeV2Decision(uuid.uuid4(), 0.8, 3, 0.0, "decoded"),
-            DecodeV2Decision(None, 0.0, 0, None, "insufficient_sync_evidence"),
-            DecodeV2Decision(None, 0.0, 0, None, "insufficient_sync_evidence"),
-            DecodeV2Decision(None, 0.0, 0, None, "insufficient_sync_evidence"),
-        )
-    )
+    conflicting = {
+        0: DecodeV2Decision(uuid.uuid4(), 0.9, 3, 0.0, "decoded"),
+        1: DecodeV2Decision(uuid.uuid4(), 0.8, 3, 0.0, "decoded"),
+    }
+    unreadable = DecodeV2Decision(None, 0.0, 0, None, "insufficient_sync_evidence")
 
     def conflicting_decode(_raster, _key, page_index, _canvas, _candidates):
         page_indices.append(page_index)
-        return next(decisions)
+        return conflicting.get(page_index, unreadable)
 
     monkeypatch.setattr(
         verification_module,
@@ -1001,7 +997,7 @@ def test_standalone_image_rejects_conflicting_page_index_decodes(monkeypatch):
 
     result = process_verification_job(job_id=context[0].id, storage=context[2])
 
-    assert page_indices == [0, 1, 2, 3, 4]
+    assert sorted(set(page_indices)) == [0, 1, 2, 3, 4]
     assert result.status == VerificationStatus.PARTIAL_EVIDENCE
     assert result.decode_status == "partial_payload_evidence"
     assert result.recovered_issuance_id is None
@@ -1608,7 +1604,7 @@ def test_integrity_release_runs_the_fingerprint_decoder_once_the_capability_is_e
     def record(source, **kwargs):
         observed["ran"] = True
         observed["has_key"] = kwargs.get("fingerprint_key") is not None
-        observed["has_candidate"] = kwargs.get("candidate") is not None
+        observed["candidate_count"] = len(kwargs.get("candidates") or ())
         return original(source, **kwargs)
 
     monkeypatch.setattr(verification_module, "_decode_content", record)
@@ -1617,5 +1613,5 @@ def test_integrity_release_runs_the_fingerprint_decoder_once_the_capability_is_e
 
     assert observed.get("ran") is True, "the decoder never ran with the capability on"
     assert observed.get("has_key") is True
-    assert observed.get("has_candidate") is True
+    assert observed.get("candidate_count", 0) >= 1
     assert "fingerprint.transformed_attribution_unavailable" not in result.limitations

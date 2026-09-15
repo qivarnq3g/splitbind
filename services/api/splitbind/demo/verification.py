@@ -24,7 +24,7 @@ from splitbind.demo.capabilities import DEMO_ALGORITHM_LABEL
 from splitbind.demo.issuance import DemoIssuanceError as DemoIssuanceProcessingError
 from splitbind.demo.issuance import _canonicalize_page, _load_fingerprint_key
 from splitbind.demo.issuance import _receipt_id as _issuance_receipt_id
-from splitbind.demo.issuance import _select_frozen_candidate
+from splitbind.demo.issuance import accepted_decode_candidates
 from splitbind.access.models import SigningKey
 from splitbind.demo.models import (
     DEMO_CANONICAL_CANVAS,
@@ -120,11 +120,11 @@ def process_verification_job(
             getattr(settings, "SPLITBIND_FINGERPRINT_ENABLED", False)
         )
         fingerprint_key = None
-        candidate = None
+        candidates = ()
         if not integrity_mode or fingerprint_enabled:
             try:
                 fingerprint_key = _load_fingerprint_key()
-                candidate, _candidate_identifier = _select_frozen_candidate()
+                candidates = accepted_decode_candidates()
             except DemoIssuanceProcessingError as error:
                 raise DemoVerificationError(error.code) from error
         if _cancel_before_work(acquired):
@@ -165,7 +165,7 @@ def process_verification_job(
                 decode, pages_analyzed = _decode_content(
                     source_bytes,
                     fingerprint_key=fingerprint_key,
-                    candidate=candidate,
+                    candidates=candidates,
                 )
         except Exception as error:
             cleanup_failures = _cleanup_workspace(workspace)
@@ -269,16 +269,16 @@ def _acquire_processing_claim(*, job_id, owner_token):
 
 
 def _decode_content(
-    source: bytes, *, fingerprint_key: bytes, candidate
+    source: bytes, *, fingerprint_key: bytes, candidates
 ) -> tuple[_DecodeSummary, int]:
     if len(source) > settings.MAX_PDF_BYTES:
         raise DemoVerificationError("DEMO_INPUT_FILE_LIMIT")
     if source.startswith(b"%PDF-"):
-        return _decode_pdf(source, fingerprint_key=fingerprint_key, candidate=candidate)
+        return _decode_pdf(source, fingerprint_key=fingerprint_key, candidates=candidates)
     if source.startswith(b"\x89PNG\r\n\x1a\n"):
-        return _decode_png(source, fingerprint_key=fingerprint_key, candidate=candidate)
+        return _decode_png(source, fingerprint_key=fingerprint_key, candidates=candidates)
     if source.startswith(b"\xff\xd8\xff"):
-        return _decode_jpeg(source, fingerprint_key=fingerprint_key, candidate=candidate)
+        return _decode_jpeg(source, fingerprint_key=fingerprint_key, candidates=candidates)
     raise DemoVerificationError("DEMO_INPUT_FORMAT_INVALID")
 
 
@@ -317,7 +317,7 @@ def _inspect_integrity_content(source: bytes) -> int:
     raise DemoVerificationError("DEMO_INPUT_FORMAT_INVALID")
 
 
-def _decode_pdf(source: bytes, *, fingerprint_key: bytes, candidate) -> tuple[_DecodeSummary, int]:
+def _decode_pdf(source: bytes, *, fingerprint_key: bytes, candidates) -> tuple[_DecodeSummary, int]:
     try:
         document = pdfium.PdfDocument(source)
     except pdfium.PdfiumError as error:
@@ -356,13 +356,13 @@ def _decode_pdf(source: bytes, *, fingerprint_key: bytes, candidate) -> tuple[_D
                 raise DemoVerificationError("DEMO_PDF_RENDER_FAILED")
             if raster.shape[2] == 4:
                 raster = raster[:, :, :3]
+            canvas = np.ascontiguousarray(_canonicalize_page(raster).canvas)
             decisions.append(
-                decode_fingerprint_v2(
-                    np.ascontiguousarray(_canonicalize_page(raster).canvas),
-                    fingerprint_key,
-                    page_index,
-                    DEMO_CANONICAL_CANVAS,
-                    (candidate,),
+                _first_conclusive_decision(
+                    canvas,
+                    fingerprint_key=fingerprint_key,
+                    page_index=page_index,
+                    candidates=candidates,
                 )
             )
         return _aggregate_decisions(decisions), page_count
@@ -370,7 +370,7 @@ def _decode_pdf(source: bytes, *, fingerprint_key: bytes, candidate) -> tuple[_D
         document.close()
 
 
-def _decode_png(source: bytes, *, fingerprint_key: bytes, candidate) -> tuple[_DecodeSummary, int]:
+def _decode_png(source: bytes, *, fingerprint_key: bytes, candidates) -> tuple[_DecodeSummary, int]:
     if (
         len(source) < 33
         or source[8:12] != b"\x00\x00\x00\r"
@@ -384,11 +384,11 @@ def _decode_png(source: bytes, *, fingerprint_key: bytes, candidate) -> tuple[_D
         width=width,
         height=height,
         fingerprint_key=fingerprint_key,
-        candidate=candidate,
+        candidates=candidates,
     )
 
 
-def _decode_jpeg(source: bytes, *, fingerprint_key: bytes, candidate) -> tuple[_DecodeSummary, int]:
+def _decode_jpeg(source: bytes, *, fingerprint_key: bytes, candidates) -> tuple[_DecodeSummary, int]:
     width, height = _jpeg_dimensions(source)
     _validate_image_dimensions(width=width, height=height)
     return _decode_image(
@@ -396,7 +396,7 @@ def _decode_jpeg(source: bytes, *, fingerprint_key: bytes, candidate) -> tuple[_
         width=width,
         height=height,
         fingerprint_key=fingerprint_key,
-        candidate=candidate,
+        candidates=candidates,
     )
 
 
@@ -408,13 +408,37 @@ def _geometry_hypotheses(raster: np.ndarray) -> list[np.ndarray]:
     return hypotheses
 
 
+def _first_conclusive_decision(canvas, *, fingerprint_key, page_index, candidates):
+    """Try each profile in turn and stop as soon as one reaches the payload.
+
+    The decoder aligns geometry once per profile, so handing it every profile at
+    once makes a current artifact pay for the superseded ones as well. Ordering
+    the attempts keeps the common case at its original cost.
+    """
+
+    fallback = None
+    for candidate in candidates:
+        decision = decode_fingerprint_v2(
+            canvas,
+            fingerprint_key,
+            page_index,
+            DEMO_CANONICAL_CANVAS,
+            (candidate,),
+        )
+        if decision.status in ("decoded", "partial_payload_evidence"):
+            return decision
+        if fallback is None:
+            fallback = decision
+    return fallback
+
+
 def _decode_image(
     source: bytes,
     *,
     width: int,
     height: int,
     fingerprint_key: bytes,
-    candidate,
+    candidates,
 ) -> tuple[_DecodeSummary, int]:
     raster = cv2.imdecode(np.frombuffer(source, dtype=np.uint8), cv2.IMREAD_COLOR)
     if (
@@ -427,12 +451,11 @@ def _decode_image(
     fallback = None
     for page in _geometry_hypotheses(raster):
         decisions = [
-            decode_fingerprint_v2(
+            _first_conclusive_decision(
                 page,
-                fingerprint_key,
-                page_index,
-                DEMO_CANONICAL_CANVAS,
-                (candidate,),
+                fingerprint_key=fingerprint_key,
+                page_index=page_index,
+                candidates=candidates,
             )
             for page_index in range(PAGE_INDEX_HYPOTHESES)
         ]

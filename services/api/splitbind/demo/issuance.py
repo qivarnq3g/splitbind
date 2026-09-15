@@ -23,6 +23,7 @@ from django.utils import timezone
 from splitbind.demo.capabilities import DEMO_ALGORITHM_LABEL
 from splitbind.demo.models import (
     DEMO_CANONICAL_CANVAS,
+    DEMO_ACCEPTED_CANDIDATE_IDENTIFIERS,
     DEMO_FROZEN_CANDIDATE_IDENTIFIER,
     DEMO_LIMITATIONS,
     DEMO_STALE_RECOVERY_FENCE_CODE,
@@ -706,15 +707,29 @@ def _load_fingerprint_key() -> bytes:
     return bytes.fromhex(encoded)
 
 
+def _candidate_by_identifier(identifier_hex: str):
+    for candidate in load_v2_profiles():
+        if candidate_identifier_v2(candidate).hex() == identifier_hex:
+            return candidate, identifier_hex
+    raise DemoIssuanceError("DEMO_FINGERPRINT_CANDIDATE_INVALID")
+
+
 def _select_frozen_candidate():
-    candidates = load_v2_profiles()
-    if not candidates:
-        raise DemoIssuanceError("DEMO_FINGERPRINT_CANDIDATE_INVALID")
-    candidate = candidates[0]
-    identifier = candidate_identifier_v2(candidate).hex()
-    if identifier != FROZEN_CANDIDATE_IDENTIFIER_HEX:
-        raise DemoIssuanceError("DEMO_FINGERPRINT_CANDIDATE_INVALID")
-    return candidate, identifier
+    return _candidate_by_identifier(FROZEN_CANDIDATE_IDENTIFIER_HEX)
+
+
+def accepted_decode_candidates() -> tuple:
+    """Every profile a stored issuance may have been embedded with.
+
+    The frozen profile comes first so a current artifact is resolved without
+    paying for the legacy attempts, and earlier profiles follow so issuances
+    created before a profile change stay readable.
+    """
+
+    return tuple(
+        _candidate_by_identifier(identifier)[0]
+        for identifier in DEMO_ACCEPTED_CANDIDATE_IDENTIFIERS
+    )
 
 
 PNG_MAGIC = bytes([137, 80, 78, 71, 13, 10, 26, 10])

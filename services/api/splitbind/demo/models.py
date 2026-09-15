@@ -19,10 +19,21 @@ from splitbind.validators import SHA256_PATTERN, validate_sha256
 
 DEMO_CANONICAL_CANVAS = (2304, 1152)
 DEMO_MAX_COMMITTED_PAGES = 50
+DEMO_LEGACY_CANDIDATE_IDENTIFIERS = (
+    (
+        "5342463201e7490f80b69ef1a3289afce40ef02989c9a4d89f00b916055cbf1c4"
+        "c83a97b880000000240380000000000003ff8000000000000000001800000001200"
+        "00000300000003"
+    ),
+)
 DEMO_FROZEN_CANDIDATE_IDENTIFIER = (
     "5342463201e7490f80b69ef1a3289afce40ef02989c9a4d89f00b916055cbf1c4"
-    "c83a97b880000000240380000000000003ff8000000000000000001800000001200"
-    "00000300000003"
+    "c83a97b88000000024040000000000000400000000000000000000180000000120"
+    "000000300000003"
+)
+DEMO_ACCEPTED_CANDIDATE_IDENTIFIERS = (
+    DEMO_FROZEN_CANDIDATE_IDENTIFIER,
+    *DEMO_LEGACY_CANDIDATE_IDENTIFIERS,
 )
 DEMO_LIMITATIONS = (
     "fingerprint.experimental_unreleased_v2",
@@ -233,7 +244,7 @@ class DemoIssuanceResult(ValidatedOrganizationOwnedModel):
                 condition=~Q(output_state=DemoOutputState.COMMITTED)
                 | (
                     Q(algorithm_label=DEMO_ALGORITHM_LABEL)
-                    & Q(candidate_identifier=DEMO_FROZEN_CANDIDATE_IDENTIFIER)
+                    & Q(candidate_identifier__in=DEMO_ACCEPTED_CANDIDATE_IDENTIFIERS)
                     & Q(canvas_height=DEMO_CANONICAL_CANVAS[0])
                     & Q(canvas_width=DEMO_CANONICAL_CANVAS[1])
                     & Q(input_sha256__isnull=False)
@@ -286,7 +297,7 @@ class DemoIssuanceResult(ValidatedOrganizationOwnedModel):
                 raise ValidationError("committed demo result evidence is incomplete")
             if (
                 self.algorithm_label != DEMO_ALGORITHM_LABEL
-                or self.candidate_identifier != DEMO_FROZEN_CANDIDATE_IDENTIFIER
+                or self.candidate_identifier not in DEMO_ACCEPTED_CANDIDATE_IDENTIFIERS
                 or (self.canvas_height, self.canvas_width) != DEMO_CANONICAL_CANVAS
                 or self.limitations != list(DEMO_LIMITATIONS)
                 or self.cleanup_failures != 0
