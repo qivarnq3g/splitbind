@@ -626,7 +626,7 @@ Nguồn của ba dòng đầu là tệp `results/results.json` công bố kèm [
 
 #### 4.2.2.2. Hai loại thất bại có bản chất khác nhau
 
-Bảng 4.6 cho thấy nén và thu nhỏ là bài toán đã được giải trong công trình công khai. Để xác định vì sao cùng một lớp tấn công lại chặn được SplitBind, nhóm dựng một thí nghiệm đối chứng trên chính trang tài liệu do hệ thống render (tỉ lệ 2.0, kích thước 1190 x 1684 điểm ảnh), dùng một bộ mã hóa thủy vân DWT-DCT-SVD-QIM độc lập [8] thay cho bộ của dự án, payload 64 bit. Mỗi ảnh bị tấn công được giải hai lần: một lần ở đúng kích thước kẻ tấn công để lại, một lần sau khi đã phóng khung ảnh về kích thước nhúng ban đầu.
+Bảng 4.6 cho thấy nén và thu nhỏ là bài toán đã được giải trong công trình công khai. Để xác định vì sao cùng một lớp tấn công lại chặn được SplitBind, nhóm dựng một thí nghiệm đối chứng trên chính trang tài liệu do hệ thống render (tỉ lệ 2.0, kích thước 1190 x 1684 điểm ảnh), dùng một bộ mã hóa thủy vân DWT-DCT-SVD-QIM độc lập [9] thay cho bộ của dự án, payload 64 bit. Mỗi ảnh bị tấn công được giải hai lần: một lần ở đúng kích thước kẻ tấn công để lại, một lần sau khi đã phóng khung ảnh về kích thước nhúng ban đầu.
 
 **Bảng 4.7:** Tác động của bước chuẩn hóa khung ảnh, đo trên trang tài liệu của SplitBind
 
@@ -650,7 +650,7 @@ Hai loại thất bại cộng dồn khi đi cùng nhau: tổ hợp thu nhỏ r�
 
 #### 4.2.2.3. Kiểm chứng lại kết luận đã bác bỏ hướng tinh chỉnh tham số
 
-Tham số `d1` của bộ thủy vân đối chứng [8] là bước lượng tử QIM, cùng loại tham số với bước lượng tử của SplitBind. Ở `d1` bằng 36, trang đã nhúng đo được 41.73 dB PSNR, lệch 0.04 dB so với giá trị 41.69 dB đã khóa của V1 ở Bảng 4.1, nên phép so sánh diễn ra ở cùng mức độ trung thực thị giác.
+Tham số `d1` của bộ thủy vân đối chứng [9] là bước lượng tử QIM, cùng loại tham số với bước lượng tử của SplitBind. Ở `d1` bằng 36, trang đã nhúng đo được 41.73 dB PSNR, lệch 0.04 dB so với giá trị 41.69 dB đã khóa của V1 ở Bảng 4.1, nên phép so sánh diễn ra ở cùng mức độ trung thực thị giác.
 
 **Bảng 4.8:** Quét cường độ nhúng đối chiếu độ bền với độ trung thực, trên trang tài liệu của SplitBind
 
@@ -669,7 +669,7 @@ Khả năng sống sót qua nén JPEG không đơn điệu theo bước lượng
 #### 4.2.2.4. Bốn hệ quả rút ra
 
 1. **Chuẩn hóa khung ảnh là bước đi đúng và rẻ.** Bảng 4.7 chứng minh Loại A được giải triệt để chỉ bằng một phép biến đổi hình học, không cần đổi thuật toán thủy vân, không tốn thêm độ trung thực.
-2. Vị thế của SplitBind thuận lợi hơn các thư viện công khai ở đúng điểm này. Một công cụ thủy vân mù buộc phải suy đoán hình học gốc: thư viện [8] dò vét 200 mốc tỉ lệ trong dải 0.5 đến 2.0 bằng tương quan chuẩn hóa, và hàm ước lượng tham số cắt của nó còn đòi hỏi ảnh gốc. SplitBind giữ hồ sơ cấp phát nên có thể render lại trang gốc bất kỳ lúc nào; thứ mà thư viện phải đoán thì hệ thống của nhóm chỉ việc tra ra.
+2. Vị thế của SplitBind thuận lợi hơn các thư viện công khai ở đúng điểm này. Một công cụ thủy vân mù buộc phải suy đoán hình học gốc: thư viện [9] dò vét 200 mốc tỉ lệ trong dải 0.5 đến 2.0 bằng tương quan chuẩn hóa, và hàm ước lượng tham số cắt của nó còn đòi hỏi ảnh gốc. SplitBind giữ hồ sơ cấp phát nên có thể render lại trang gốc bất kỳ lúc nào; thứ mà thư viện phải đoán thì hệ thống của nhóm chỉ việc tra ra.
 3. Loại B cần đổi vật mang chứ không cần chỉnh tham số. Các hệ thống ở Bảng 4.6 đạt 100% dưới nén mạnh nhờ bộ mã hóa và giải mã học sâu chuẩn hóa toàn khung về một độ phân giải cố định trước khi giải, chứ không dò tìm lưới nhúng.
 4. Phần nhóm chưa giải được cũng là phần chưa ai giải được. Cắt còn một nửa cho 0% ở TrustMark và 28 đến 39% ở hai hệ còn lại; xoay 5 độ cho 22% ở TrustMark. Đây là thuộc tính của bài toán, không phải khuyết điểm riêng của cài đặt trong dự án này.
 
@@ -1083,7 +1083,7 @@ Ba điều kèm theo cần nêu vì chúng là phần khó của thay đổi, kh
 
 *Số liệu đo thực nghiệm* (đọc mã nguồn) Sau khi xác định được nút thắt là vật mang trang văn bản, nhóm tải về và đọc mã của ba công trình công khai giải đúng lớp bài toán này, thay vì chỉ đọc tóm tắt bài báo.
 
-#### 4.3.5.1. Công trình 1: thủy vân ảnh trang văn bản chống chụp màn hình [9]
+#### 4.3.5.1. Công trình 1: thủy vân ảnh trang văn bản chống chụp màn hình [8]
 
 Đây là công trình gần bài toán của nhóm nhất, vì đối tượng của nó đúng là ảnh trang tài liệu. Cách làm là học sâu kiểu StegaStamp: một bộ mã hoá và một bộ giải mã cùng huấn luyện, ở giữa là một tầng biến dạng khả vi gồm làm mờ, nhiễu, đổi tương phản, đổi độ sáng, đổi sắc độ và nén JPEG khả vi tới chất lượng 50. Ô làm việc 400 x 400 điểm ảnh, tải trọng 100 bit.
 
@@ -1182,31 +1182,31 @@ Hướng phát triển rút ra trực tiếp từ chẩn đoán: chuẩn hoá kh
 
 **Tiếng Việt**
 
-1. Hoàng Xuân Dậu (2020). *Giáo trình Cơ sở An toàn Thông tin*, Học viện Công nghệ Bưu chính Viễn thông, Hà Nội.
-2. Thái Thanh Tùng (2011). *Giáo trình Mật mã học và Hệ thống Thông tin An toàn*, Nhà xuất bản Thông tin và Truyền thông, Hà Nội.
+1. Hoàng Xuân Dậu. (2020). Giáo trình Cơ sở An toàn Thông tin. Học viện Công nghệ Bưu chính Viễn thông.
+2. Thái Thanh Tùng. (2011). Giáo trình Mật mã học và Hệ thống Thông tin An toàn. Nhà xuất bản Thông tin và Truyền thông.
 
 **Tiếng Anh**
 
-3. Adobe Research. *TrustMark: Universal Watermarking for Arbitrary Resolution Images*, GitHub, truy cập tháng 9 năm 2026, https://github.com/adobe/trustmark
-4. Chen B., Wornell G. W. (2001). *Quantization index modulation: a class of provably good methods for digital watermarking and information embedding*, IEEE Transactions on Information Theory, 47 (4), 1423-1443.
-5. Cox I. J., Miller M. L., Bloom J. A., Fridrich J., Kalker T. (2007). *Digital Watermarking and Steganography*, Morgan Kaufmann, Burlington.
-6. Douglas M., Bailey K., Leeney M., Curran K. (2018). *An overview of steganography techniques applied to the protection of biometric data*, Multimedia Tools and Applications, 77 (13), 17333-17373.
-7. Fang H., Zhang W., Zhou H., Cui H., Yu N. (2019). *Screen-shooting resilient watermarking*, IEEE Transactions on Information Forensics and Security, 14 (6), 1403-1418.
-8. Guo Fei. *blind_watermark: blind and invisible image watermark*, GitHub, truy cập tháng 9 năm 2026, https://github.com/guofei9987/blind_watermark
-9. gslxr. *Screen-Shooting-Resilient-Document-Image-Watermarking*, GitHub, truy cập tháng 9 năm 2026, https://github.com/gslxr/Screen-Shooting-Resilient-Document-Image-Watermarking
-10. Hamid N., Yahya A., Ahmad R. B., Al-Qershi O. M. (2012). *Image Steganography Techniques: An Overview*, International Journal of Computer Science and Security, 6 (3), 168-187.
-11. Josefsson S., Liusvaara I. (2017). *Edwards-Curve Digital Signature Algorithm (EdDSA)*, Internet Engineering Task Force, RFC 8032, https://www.rfc-editor.org/rfc/rfc8032
-12. Krawczyk H., Bellare M., Canetti R. (1997). *HMAC: Keyed-Hashing for Message Authentication*, Internet Engineering Task Force, RFC 2104, https://www.rfc-editor.org/rfc/rfc2104
-13. National Institute of Standards and Technology (2026). *Implementation Guidance for FIPS 140-3 and the Cryptographic Module Verification Program*, NIST Computer Security Resource Center, truy cập tháng 9 năm 2026, https://csrc.nist.gov/projects/cryptographic-module-validation-program/fips-140-3-ig-announcements
-14. National Institute of Standards and Technology (2015). *Secure Hash Standard (SHS)*, Federal Information Processing Standards Publication 180-4, Gaithersburg.
-15. National Institute of Standards and Technology (2008). *The Keyed-Hash Message Authentication Code (HMAC)*, Federal Information Processing Standards Publication 198-1, Gaithersburg.
-16. Rundgren A., Jordan B., Erdtman S. (2020). *JSON Canonicalization Scheme (JCS)*, Internet Engineering Task Force, RFC 8785, https://www.rfc-editor.org/rfc/rfc8785
-17. Sander T., Fernandez P., Durmus A., Douze M., Furon T. (2025). *Watermark Anything with Localized Messages*, Meta AI Research, GitHub, truy cập tháng 9 năm 2026, https://github.com/facebookresearch/watermark-anything
-18. ShieldMnt. *invisible-watermark: python library for invisible image watermark*, GitHub, truy cập tháng 9 năm 2026, https://github.com/ShieldMnt/invisible-watermark
-19. Stallings W. (2017). *Cryptography and Network Security: Principles and Practice*, 7th ed., Pearson, Boston.
-20. Tancik M., Mildenhall B., Ng R. (2020). *StegaStamp: Invisible Hyperlinks in Physical Photographs*, Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, Seattle, 2117-2126.
-21. wmbench contributors (2026). *wmbench: image watermarking benchmark*, GitHub, truy cập tháng 9 năm 2026, https://github.com/alexandersolonsky/wmbench
-22. Zhu J., Kaplan R., Johnson A., Fei-Fei L. (2018). *HiDDeN: Hiding Data with Deep Networks*, Proceedings of the European Conference on Computer Vision, Munich, 657-672.
+3. Adobe Research. (2026). TrustMark: Universal Watermarking for Arbitrary Resolution Images. GitHub. https://github.com/adobe/trustmark
+4. Chen, B., & Wornell, G. W. (2001). Quantization index modulation: a class of provably good methods for digital watermarking and information embedding. IEEE Transactions on Information Theory, 47(4), 1423-1443. https://doi.org/10.1109/18.923725
+5. Cox, I. J., Miller, M. L., Bloom, J. A., Fridrich, J., & Kalker, T. (2007). Digital Watermarking and Steganography (2nd ed.). Morgan Kaufmann.
+6. Douglas, M., Bailey, K., Leeney, M., & Curran, K. (2018). An overview of steganography techniques applied to the protection of biometric data. Multimedia Tools and Applications, 77(13), 17333-17373. https://doi.org/10.1007/s11042-017-5308-3
+7. Fang, H., Zhang, W., Zhou, H., Cui, H., & Yu, N. (2019). Screen-shooting resilient watermarking. IEEE Transactions on Information Forensics and Security, 14(6), 1403-1418. https://doi.org/10.1109/TIFS.2018.2878541
+8. gslxr. (2024). Screen-Shooting-Resilient-Document-Image-Watermarking. GitHub. https://github.com/gslxr/Screen-Shooting-Resilient-Document-Image-Watermarking
+9. Guo Fei. (2025). blind_watermark: blind and invisible image watermark. GitHub. https://github.com/guofei9987/blind_watermark
+10. Hamid, N., Yahya, A., Ahmad, R. B., & Al-Qershi, O. M. (2012). Image Steganography Techniques: An Overview. International Journal of Computer Science and Security, 6(3), 168-187.
+11. Josefsson, S., & Liusvaara, I. (2017). Edwards-Curve Digital Signature Algorithm (EdDSA). In RFC 8032. Internet Engineering Task Force. https://www.rfc-editor.org/rfc/rfc8032
+12. Krawczyk, H., Bellare, M., & Canetti, R. (1997). HMAC: Keyed-Hashing for Message Authentication. In RFC 2104. Internet Engineering Task Force. https://www.rfc-editor.org/rfc/rfc2104
+13. National Institute of Standards and Technology. (2008). The Keyed-Hash Message Authentication Code (HMAC). In Federal Information Processing Standards Publication 198-1. National Institute of Standards and Technology. https://doi.org/10.6028/NIST.FIPS.198-1
+14. National Institute of Standards and Technology. (2015). Secure Hash Standard (SHS). In Federal Information Processing Standards Publication 180-4. National Institute of Standards and Technology. https://doi.org/10.6028/NIST.FIPS.180-4
+15. National Institute of Standards and Technology. (2026). Implementation Guidance for FIPS 140-3 and the Cryptographic Module Verification Program. NIST Computer Security Resource Center. https://csrc.nist.gov/projects/cryptographic-module-validation-program/fips-140-3-ig-announcements
+16. Rundgren, A., Jordan, B., & Erdtman, S. (2020). JSON Canonicalization Scheme (JCS). In RFC 8785. Internet Engineering Task Force. https://www.rfc-editor.org/rfc/rfc8785
+17. Sander, T., Fernandez, P., Durmus, A., Douze, M., & Furon, T. (2025). Watermark Anything with Localized Messages. Meta AI Research. https://github.com/facebookresearch/watermark-anything
+18. ShieldMnt. (2024). invisible-watermark: python library for invisible image watermark. GitHub. https://github.com/ShieldMnt/invisible-watermark
+19. Stallings, W. (2017). Cryptography and Network Security: Principles and Practice (7th ed.). Pearson.
+20. Tancik, M., Mildenhall, B., & Ng, R. (2020). StegaStamp: Invisible Hyperlinks in Physical Photographs. Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, 2117-2126. https://doi.org/10.1109/CVPR42600.2020.00219
+21. wmbench contributors. (2026). wmbench: image watermarking benchmark. GitHub. https://github.com/alexandersolonsky/wmbench
+22. Zhu, J., Kaplan, R., Johnson, J., & Fei-Fei, L. (2018). HiDDeN: Hiding Data with Deep Networks. Proceedings of the European Conference on Computer Vision, 657-672. https://doi.org/10.1007/978-3-030-01267-0_40
 
 ```{=openxml}
 <w:p><w:r><w:br w:type="page"/></w:r></w:p>
@@ -1234,7 +1234,7 @@ Bảng đối chiếu toàn diện giữa các tuyên bố kỹ thuật trong t�
 | Thủy vân đã bật trên production từ 12/09/2026; trong năm phép thử ngày hôm đó, không bản biến đổi nào được truy vết | *Đang vận hành trên hệ thống thật* và *Giới hạn đã nhận diện* | Đo qua giao diện công khai; số liệu ở Bảng 4.9 | Đã kiểm chứng: 1 trong 5 giải được, và đó là bản nguyên vẹn mà mã băm đã trả lời xong. Đây là số liệu của ngày 12/09, đã bị Mục 4.2.4 thay thế sau khi sửa nguyên nhân gốc thứ ba. |
 | Mẫu đồng bộ ORB không phải mảnh còn thiếu của bộ giải mã | *Giới hạn đã nhận diện* (giả thuyết bị bác bỏ) | 3 vật mang nhân 5 điều kiện, giải hai lần mỗi ô; Mục 4.2.3 | Đã kiểm chứng: 30/30 ô cho trạng thái giống hệt nhau khi có và không có mẫu đồng bộ. |
 | Trang văn bản là vật mang gần như tệ nhất cho thiết kế QIM trung tần | *Số liệu đo thực nghiệm* | Bảng 4.10 | Đã kiểm chứng: trang chuyển sắc giữ được bằng chứng payload qua thu nhỏ 0.50; trang văn bản không ra gì kể cả khi không tấn công. |
-| Chuẩn hóa khung ảnh khôi phục nguyên vẹn payload sau thu nhỏ 0.75x, 0.50x và 0.35x | *Số liệu đo thực nghiệm* | Thí nghiệm đối chứng trên trang render 1190x1684 của chính hệ thống, bộ mã hóa thủy vân [8], payload 64 bit; kết quả ở Bảng 4.7 | Đã kiểm chứng: 0.453, 0.422 và 0.438 khi giải trực tiếp; 1.000 sau khi phục hồi khung. |
+| Chuẩn hóa khung ảnh khôi phục nguyên vẹn payload sau thu nhỏ 0.75x, 0.50x và 0.35x | *Số liệu đo thực nghiệm* | Thí nghiệm đối chứng trên trang render 1190x1684 của chính hệ thống, bộ mã hóa thủy vân [9], payload 64 bit; kết quả ở Bảng 4.7 | Đã kiểm chứng: 0.453, 0.422 và 0.438 khi giải trực tiếp; 1.000 sau khi phục hồi khung. |
 | Bước lượng tử không phải đòn bẩy: sống sót JPEG không đơn điệu theo cường độ nhúng | *Giới hạn đã nhận diện* | Quét `d1` từ 36 đến 160 trên cùng vật mang; kết quả ở Bảng 4.8 | Đã kiểm chứng: PSNR giảm 13 dB trên toàn dải mà JPEG-70 dao động 0.422 đến 0.984 không theo chiều. |
 | Nén, thu nhỏ và chụp màn hình đã được giải trong công trình công khai; cắt một nửa và xoay thì chưa | *Số liệu đo thực nghiệm* (bên thứ ba) | Tệp `results/results.json` công bố kèm [21]; trích ở Bảng 4.6 | Đã đọc lại từ tệp công bố, không tự tái lập phép đo. |
 | Vật mang kiểu blind_watermark đo kém hơn vật mang đang dùng ở mọi tỉ lệ | *Số liệu đo thực nghiệm* | Bảng Mục 4.2.4.1; vật mang đang dùng cài trong `research/python/src/splitbind_ref/fingerprint_v2_codec.py` | Đã kiểm chứng: 7 tỉ lệ, vật mang thay thế thua ở cả 7; đoạn mã thử nghiệm đã gỡ khỏi kho sau khi đo. |
