@@ -1112,49 +1112,49 @@ Yêu cầu của giảng viên là mỗi nhóm chuẩn bị 03 câu hỏi tự l
 
 # PHẦN 11: TÀI LIỆU THAM KHẢO
 
-[1] Adobe Research, "TrustMark: Universal Watermarking for Arbitrary Resolution Images," 2026, GitHub. [Online]. Available: https://github.com/adobe/trustmark
+[1] Adobe Research, “TrustMark: Universal Watermarking for Arbitrary Resolution Images,” 2026, GitHub. [Online]. Available: https://github.com/adobe/trustmark
 
-[2] B. Chen and G. W. Wornell, "Quantization index modulation: a class of provably good methods for digital watermarking and information embedding," IEEE Transactions on Information Theory, vol. 47, no. 4, pp. 1423-1443, 2001, doi: 10.1109/18.923725.
+[2] B. Chen and G. W. Wornell, “Quantization index modulation: a class of provably good methods for digital watermarking and information embedding,” IEEE Transactions on Information Theory, vol. 47, no. 4, pp. 1423-1443, 2001, doi: 10.1109/18.923725.
 
 [3] I. J. Cox, M. L. Miller, J. A. Bloom, J. Fridrich, and T. Kalker, Digital Watermarking and Steganography, 2nd ed. Burlington: Morgan Kaufmann, 2007.
 
-[4] M. Douglas, K. Bailey, M. Leeney, and K. Curran, "An overview of steganography techniques applied to the protection of biometric data," Multimedia Tools and Applications, vol. 77, no. 13, pp. 17333-17373, 2018, doi: 10.1007/s11042-017-5308-3.
+[4] M. Douglas, K. Bailey, M. Leeney, and K. Curran, “An overview of steganography techniques applied to the protection of biometric data,” Multimedia Tools and Applications, vol. 77, no. 13, pp. 17333-17373, 2018, doi: 10.1007/s11042-017-5308-3.
 
-[5] H. Fang, W. Zhang, H. Zhou, H. Cui, and N. Yu, "Screen-shooting resilient watermarking," IEEE Transactions on Information Forensics and Security, vol. 14, no. 6, pp. 1403-1418, 2019, doi: 10.1109/TIFS.2018.2878541.
+[5] H. Fang, W. Zhang, H. Zhou, H. Cui, and N. Yu, “Screen-shooting resilient watermarking,” IEEE Transactions on Information Forensics and Security, vol. 14, no. 6, pp. 1403-1418, 2019, doi: 10.1109/TIFS.2018.2878541.
 
-[6] gslxr, "Screen-Shooting-Resilient-Document-Image-Watermarking," 2024, GitHub. [Online]. Available: https://github.com/gslxr/Screen-Shooting-Resilient-Document-Image-Watermarking
+[6] gslxr, “Screen-Shooting-Resilient-Document-Image-Watermarking,” 2024, GitHub. [Online]. Available: https://github.com/gslxr/Screen-Shooting-Resilient-Document-Image-Watermarking
 
-[7] Guo Fei, "blind_watermark: blind and invisible image watermark," 2025, GitHub. [Online]. Available: https://github.com/guofei9987/blind_watermark
+[7] Guo Fei, “blind_watermark: blind and invisible image watermark,” 2025, GitHub. [Online]. Available: https://github.com/guofei9987/blind_watermark
 
-[8] N. Hamid, A. Yahya, R. B. Ahmad, and O. M. Al-Qershi, "Image Steganography Techniques: An Overview," International Journal of Computer Science and Security, vol. 6, no. 3, pp. 168-187, 2012.
+[8] N. Hamid, A. Yahya, R. B. Ahmad, and O. M. Al-Qershi, “Image Steganography Techniques: An Overview,” International Journal of Computer Science and Security, vol. 6, no. 3, pp. 168-187, 2012.
 
 [9] Hoàng Xuân Dậu, Giáo trình Cơ sở An toàn Thông tin. Hà Nội: Học viện Công nghệ Bưu chính Viễn thông, 2020.
 
-[10] S. Josefsson and I. Liusvaara, "Edwards-Curve Digital Signature Algorithm (EdDSA), RFC 8032," Internet Engineering Task Force, 2017. [Online]. Available: https://www.rfc-editor.org/rfc/rfc8032
+[10] S. Josefsson and I. Liusvaara, “Edwards-Curve Digital Signature Algorithm (EdDSA), RFC 8032,” Internet Engineering Task Force, 2017. [Online]. Available: https://www.rfc-editor.org/rfc/rfc8032
 
-[11] H. Krawczyk, M. Bellare, and R. Canetti, "HMAC: Keyed-Hashing for Message Authentication, RFC 2104," Internet Engineering Task Force, 1997. [Online]. Available: https://www.rfc-editor.org/rfc/rfc2104
+[11] H. Krawczyk, M. Bellare, and R. Canetti, “HMAC: Keyed-Hashing for Message Authentication, RFC 2104,” Internet Engineering Task Force, 1997. [Online]. Available: https://www.rfc-editor.org/rfc/rfc2104
 
-[12] National Institute of Standards and Technology, "Implementation Guidance for FIPS 140-3 and the Cryptographic Module Verification Program," NIST Computer Security Resource Center, 2026. [Online]. Available: https://csrc.nist.gov/projects/cryptographic-module-validation-program/fips-140-3-ig-announcements
+[12] National Institute of Standards and Technology, “Implementation Guidance for FIPS 140-3 and the Cryptographic Module Verification Program,” NIST Computer Security Resource Center, 2026. [Online]. Available: https://csrc.nist.gov/projects/cryptographic-module-validation-program/fips-140-3-ig-announcements
 
-[13] National Institute of Standards and Technology, "Secure Hash Standard (SHS), FIPS PUB 180-4," National Institute of Standards and Technology, Gaithersburg, 2015. doi: 10.6028/NIST.FIPS.180-4.
+[13] National Institute of Standards and Technology, “Secure Hash Standard (SHS), FIPS PUB 180-4,” National Institute of Standards and Technology, Gaithersburg, 2015. doi: 10.6028/NIST.FIPS.180-4.
 
-[14] National Institute of Standards and Technology, "The Keyed-Hash Message Authentication Code (HMAC), FIPS PUB 198-1," National Institute of Standards and Technology, Gaithersburg, 2008. doi: 10.6028/NIST.FIPS.198-1.
+[14] National Institute of Standards and Technology, “The Keyed-Hash Message Authentication Code (HMAC), FIPS PUB 198-1,” National Institute of Standards and Technology, Gaithersburg, 2008. doi: 10.6028/NIST.FIPS.198-1.
 
-[15] A. Rundgren, B. Jordan, and S. Erdtman, "JSON Canonicalization Scheme (JCS), RFC 8785," Internet Engineering Task Force, 2020. [Online]. Available: https://www.rfc-editor.org/rfc/rfc8785
+[15] A. Rundgren, B. Jordan, and S. Erdtman, “JSON Canonicalization Scheme (JCS), RFC 8785,” Internet Engineering Task Force, 2020. [Online]. Available: https://www.rfc-editor.org/rfc/rfc8785
 
-[16] T. Sander, P. Fernandez, A. Durmus, M. Douze, and T. Furon, "Watermark Anything with Localized Messages," 2025, Meta AI Research. [Online]. Available: https://github.com/facebookresearch/watermark-anything
+[16] T. Sander, P. Fernandez, A. Durmus, M. Douze, and T. Furon, “Watermark Anything with Localized Messages,” 2025, Meta AI Research. [Online]. Available: https://github.com/facebookresearch/watermark-anything
 
-[17] ShieldMnt, "invisible-watermark: python library for invisible image watermark," 2024, GitHub. [Online]. Available: https://github.com/ShieldMnt/invisible-watermark
+[17] ShieldMnt, “invisible-watermark: python library for invisible image watermark,” 2024, GitHub. [Online]. Available: https://github.com/ShieldMnt/invisible-watermark
 
 [18] W. Stallings, Cryptography and Network Security: Principles and Practice, 7th ed. Boston: Pearson, 2017.
 
-[19] M. Tancik, B. Mildenhall, and R. Ng, "StegaStamp: Invisible Hyperlinks in Physical Photographs," in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, Seattle, 2020, pp. 2117-2126. doi: 10.1109/CVPR42600.2020.00219.
+[19] M. Tancik, B. Mildenhall, and R. Ng, “StegaStamp: Invisible Hyperlinks in Physical Photographs,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, Seattle, 2020, pp. 2114-2123. doi: 10.1109/CVPR42600.2020.00219.
 
 [20] Thái Thanh Tùng, Giáo trình Mật mã học và Hệ thống Thông tin An toàn. Hà Nội: Nhà xuất bản Thông tin và Truyền thông, 2011.
 
-[21] wmbench contributors, "wmbench: image watermarking benchmark," 2026, GitHub. [Online]. Available: https://github.com/alexandersolonsky/wmbench
+[21] wmbench contributors, “wmbench: image watermarking benchmark,” 2026, GitHub. [Online]. Available: https://github.com/alexandersolonsky/wmbench
 
-[22] J. Zhu, R. Kaplan, J. Johnson, and L. Fei-Fei, "HiDDeN: Hiding Data with Deep Networks," in Proceedings of the European Conference on Computer Vision, Munich, 2018, pp. 657-672. doi: 10.1007/978-3-030-01267-0_40.
+[22] J. Zhu, R. Kaplan, J. Johnson, and L. Fei-Fei, “HiDDeN: Hiding Data with Deep Networks,” in Proceedings of the European Conference on Computer Vision, Munich, 2018, pp. 682-697. doi: 10.1007/978-3-030-01267-0_40.
 
 ---
 
