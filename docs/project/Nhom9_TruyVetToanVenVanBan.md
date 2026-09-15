@@ -84,11 +84,12 @@ lang: vi
 |---|---|
 | Hình 4.1 | Giao diện cấp phát tài liệu trên hệ thống đang vận hành |
 | Hình 4.2 | Kết quả xác minh khi tệp khớp bản cấp phát: mã SHA-256 trùng khớp và chữ ký hồ sơ hợp lệ |
-| Hình 4.3 | Kết quả xác minh khi tệp đã bị chỉnh sửa: hệ thống báo không khớp và không quy kết hành vi cho bất kỳ ai |
+| Hình 4.3 | Kết quả khi không tìm được bản cấp phát nào trùng mã băm: hệ thống nói rõ đây chưa phải bằng chứng tệp đã bị chỉnh sửa, và không quy kết hành vi cho bất kỳ ai |
 | Hình 4.4 | Truy nguồn bằng thủy vân khi mã băm không khớp: tệp là ảnh chụp màn hình đã thu nhỏ còn 0,469 kèm viền đen, mã băm khác hẳn bản đã ký, nhưng hệ thống vẫn chỉ đúng bản cấp phát gốc |
 | Hình 4.5 | Tỉ lệ giải mã của thế hệ V1 và V3 trên cùng hợp đồng corpus, cùng định nghĩa cổng |
-| Hình 4.6 | Tỉ lệ truy vết của 13 phép biến đổi, phân theo ba lớp nguyên nhân thất bại |
+| Hình 4.6 | Tỉ lệ truy vết của 13 phép biến đổi đo ngày 11/09/2026, phân theo ba lớp nguyên nhân thất bại. Hàng JPEG 50 về sau được khôi phục nhờ bản sửa ngân sách ký hiệu xoá ở Mục 4.2.4 |
 | Hình 4.7 | Hiệu quả của bước bóc viền letterbox trước khi giải mã, đo trên 12 trang dương tính |
+| Hình 4.8 | Vật mang quyết định, không phải cường độ nhúng: hai trang chữ khác nhau độ dày nét trả cùng một cái giá về chất lượng nhưng cho kết quả truy vết ngược nhau |
 
 ```{=openxml}
 <w:p><w:r><w:br w:type="page"/></w:r></w:p>
@@ -993,6 +994,8 @@ Bảng này thu hẹp kết luận trước đó một cách đáng kể, và c�
 * **Chỉ các mức cường độ cao nhất mới đọc được trang chữ chưa bị đụng tới**, và mức 64 nằm dưới cổng chất lượng, còn mức 48 chỉ còn cách cổng 1,01 dB.
 * **Đọc được một tệp chưa bị đụng tới gần như không có giá trị thực dụng.** Tệp nguyên vẹn vốn đã khớp bằng mã băm; thủy vân chỉ có ý nghĩa khi tệp đã đổi. Nghĩa là ở tỉ lệ điểm tối 9 phần trăm, không cấu hình V2 nào cho năng lực truy vết dùng được.
 
+Hình 4.8 đặt hai bảng trên cạnh nhau theo cách dễ thấy nhất: hai đường PSNR gần như trùng nhau, nghĩa là cái giá về chất lượng chỉ phụ thuộc bước lượng tử chứ không phụ thuộc vật mang; nhưng ký hiệu thì một bên tô đặc dần còn một bên rỗng suốt, nghĩa là kết quả truy vết lại hoàn toàn do vật mang quyết định.
+
 *Giới hạn đã nhận diện* Bài học phương pháp quan trọng hơn con số: "trang văn bản" không phải một loại vật mang duy nhất. Hai trang cùng gọi là trang chữ, khác nhau ở độ dày nét, cho kết quả trái ngược trên cùng một bộ tham số. Mọi phát biểu về độ bền vì thế phải kèm đặc trưng định lượng của vật mang, ở đây là tỉ lệ điểm tối, chứ không chỉ kèm tên gọi.
 
 #### 4.3.4.1. Cách nhóm đã xử lý phát hiện này
@@ -1098,7 +1101,7 @@ Các hình dưới đây được chụp từ hệ thống đang vận hành và
 
 ![](report-assets/figures/ui-verification-no-match.png)
 
-**Hình 4.3:** Kết quả xác minh khi tệp đã bị chỉnh sửa: hệ thống báo không khớp và không quy kết hành vi cho bất kỳ ai
+**Hình 4.3:** Kết quả khi không tìm được bản cấp phát nào trùng mã băm: hệ thống nói rõ đây chưa phải bằng chứng tệp đã bị chỉnh sửa, và không quy kết hành vi cho bất kỳ ai
 
 ![](report-assets/figures/ui-verification-traced.png)
 
@@ -1110,11 +1113,15 @@ Các hình dưới đây được chụp từ hệ thống đang vận hành và
 
 ![](report-assets/figures/chart-attack-envelope.png)
 
-**Hình 4.6:** Tỉ lệ truy vết của 13 phép biến đổi, phân theo ba lớp nguyên nhân thất bại
+**Hình 4.6:** Tỉ lệ truy vết của 13 phép biến đổi đo ngày 11/09/2026, phân theo ba lớp nguyên nhân thất bại. Hàng JPEG 50 về sau được khôi phục nhờ bản sửa ngân sách ký hiệu xoá ở Mục 4.2.4
 
 ![](report-assets/figures/chart-frame-restore.png)
 
 **Hình 4.7:** Hiệu quả của bước bóc viền letterbox trước khi giải mã, đo trên 12 trang dương tính
+
+![](report-assets/figures/chart-carrier-decides.png)
+
+**Hình 4.8:** Vật mang quyết định, không phải cường độ nhúng: hai trang chữ khác nhau độ dày nét trả cùng một cái giá về chất lượng nhưng cho kết quả truy vết ngược nhau
 
 ```{=openxml}
 <w:p><w:r><w:br w:type="page"/></w:r></w:p>

@@ -4,7 +4,7 @@ Hai loại ảnh, để riêng vì chúng có vòng đời khác nhau.
 
 ## `figures/`
 
-Bảy ảnh được nhúng thẳng vào báo cáo. Danh sách và chú thích nằm trong biến `FIGURES`
+Tám ảnh được nhúng thẳng vào báo cáo. Danh sách và chú thích nằm trong biến `FIGURES`
 của `build_report_v2.py`; đổi tên tệp ở đây thì phải sửa cả biến đó.
 
 | Tệp | Nguồn |
@@ -16,6 +16,7 @@ của `build_report_v2.py`; đổi tên tệp ở đây thì phải sửa cả b
 | `chart-v1-vs-v3.png` | `make_figures.py` dựng từ dữ liệu đo |
 | `chart-attack-envelope.png` | `make_figures.py` dựng từ dữ liệu đo |
 | `chart-frame-restore.png` | `make_figures.py` dựng từ dữ liệu đo |
+| `chart-carrier-decides.png` | `make_figures.py` dựng từ dữ liệu đo |
 
 Ba biểu đồ là tệp sinh ra, chạy `python make_figures.py` để dựng lại. Ba ảnh giao diện
 là tệp chụp tay, phải chụp lại mỗi khi chữ trên giao diện đổi, nếu không ảnh sẽ mâu thuẫn

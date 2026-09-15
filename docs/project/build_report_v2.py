@@ -30,15 +30,17 @@ FIGURES = [
     ("ui-verification-match.png",
      "Kết quả xác minh khi tệp khớp bản cấp phát: mã SHA-256 trùng khớp và chữ ký hồ sơ hợp lệ"),
     ("ui-verification-no-match.png",
-     "Kết quả xác minh khi tệp đã bị chỉnh sửa: hệ thống báo không khớp và không quy kết hành vi cho bất kỳ ai"),
+     "Kết quả khi không tìm được bản cấp phát nào trùng mã băm: hệ thống nói rõ đây chưa phải bằng chứng tệp đã bị chỉnh sửa, và không quy kết hành vi cho bất kỳ ai"),
     ("ui-verification-traced.png",
      "Truy nguồn bằng thủy vân khi mã băm không khớp: tệp là ảnh chụp màn hình đã thu nhỏ còn 0,469 kèm viền đen, mã băm khác hẳn bản đã ký, nhưng hệ thống vẫn chỉ đúng bản cấp phát gốc"),
     ("chart-v1-vs-v3.png",
      "Tỉ lệ giải mã của thế hệ V1 và V3 trên cùng hợp đồng corpus, cùng định nghĩa cổng"),
     ("chart-attack-envelope.png",
-     "Tỉ lệ truy vết của 13 phép biến đổi, phân theo ba lớp nguyên nhân thất bại"),
+     "Tỉ lệ truy vết của 13 phép biến đổi đo ngày 11/09/2026, phân theo ba lớp nguyên nhân thất bại. Hàng JPEG 50 về sau được khôi phục nhờ bản sửa ngân sách ký hiệu xoá ở Mục 4.2.4"),
     ("chart-frame-restore.png",
      "Hiệu quả của bước bóc viền letterbox trước khi giải mã, đo trên 12 trang dương tính"),
+    ("chart-carrier-decides.png",
+     "Vật mang quyết định, không phải cường độ nhúng: hai trang chữ khác nhau độ dày nét trả cùng một cái giá về chất lượng nhưng cho kết quả truy vết ngược nhau"),
 ]
 
 TABLE_CAPTIONS = [

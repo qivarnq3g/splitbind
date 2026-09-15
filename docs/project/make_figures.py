@@ -4,6 +4,7 @@ from pathlib import Path
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 OUT = Path(__file__).resolve().parent / "report-assets" / "figures"
@@ -93,9 +94,9 @@ def figure_envelope() -> None:
 
     fig, ax = plt.subplots(figsize=(6.3, 4.4))
     y = range(len(names))
-    ax.barh(list(y), vals, height=0.68, color=cols, zorder=3)
+    ax.barh(list(y), [max(val, 0.09) for val in vals], height=0.68, color=cols, zorder=3)
     for yi, val in zip(y, vals):
-        ax.text(val + 0.18, yi, str(val), va="center", ha="left",
+        ax.text(max(val, 0.09) + 0.18, yi, str(val), va="center", ha="left",
                 fontsize=9.5, fontweight="bold", color=INK)
 
     ax.set_xlim(0, 12.6)
@@ -129,12 +130,14 @@ def figure_letterbox() -> None:
     top = [i - offset for i in y]
     bottom = [i + offset for i in y]
 
-    ax.barh(top, raw, height, color=ORANGE, label="Ảnh chụp màn hình thô", zorder=3)
-    ax.barh(bottom, stripped, height, color=BLUE, label="Sau khi bóc viền", zorder=3)
+    ax.barh(top, [max(v, 0.09) for v in raw], height, color=ORANGE,
+            label="Ảnh chụp màn hình thô", zorder=3)
+    ax.barh(bottom, [max(v, 0.09) for v in stripped], height, color=BLUE,
+            label="Sau khi bóc viền", zorder=3)
     for positions, values in ((top, raw), (bottom, stripped)):
         for position, value in zip(positions, values):
-            ax.text(value + 0.2, position, f"{value}/12", va="center", ha="left",
-                    fontsize=9.5, fontweight="bold", color=INK)
+            ax.text(max(value, 0.09) + 0.2, position, f"{value}/12", va="center",
+                    ha="left", fontsize=9.5, fontweight="bold", color=INK)
 
     ax.set_xlim(0, 12.8)
     ax.set_ylim(len(groups) - 0.55, -0.45)
@@ -152,10 +155,69 @@ def figure_letterbox() -> None:
     fig.savefig(OUT / "chart-frame-restore.png")
     plt.close(fig)
 
+def figure_carrier() -> None:
+    """Chất lượng nhúng đổi lấy độ bền, trên hai vật mang khác nhau."""
+
+    qim = [24, 32, 48, 64]
+    coarse_psnr = [44.09, 42.02, 39.16, 37.04]
+    coarse_ok = [False, True, True, True]
+    fine_psnr = [44.03, 41.91, 39.01, 36.95]
+    fine_ok = [False, False, False, False]
+
+    fig, ax = plt.subplots(figsize=(6.3, 3.5))
+    x = list(range(len(qim)))
+
+    ax.axhspan(30, 38, color=ORANGE, alpha=0.10, zorder=0)
+    ax.axhline(38, color=ORANGE, linewidth=1.1, linestyle="--", zorder=2)
+    ax.text(len(qim) - 0.55, 38.25, "cổng chất lượng 38 dB",
+            fontsize=9, color=ORANGE, va="bottom", ha="right")
+
+    ax.plot(x, coarse_psnr, color=BLUE, linewidth=1.2, zorder=3)
+    ax.plot(x, fine_psnr, color=MUTED, linewidth=1.2, linestyle=":", zorder=3)
+
+    for xi, value, ok in zip(x, coarse_psnr, coarse_ok):
+        ax.scatter([xi], [value], s=90, zorder=4, color=BLUE if ok else "white",
+                   edgecolors=BLUE, linewidths=1.4)
+    for xi, value, ok in zip(x, fine_psnr, fine_ok):
+        ax.scatter([xi], [value], s=90, zorder=4, marker="s",
+                   color=MUTED if ok else "white", edgecolors=MUTED, linewidths=1.4)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels([f"{value}" for value in qim])
+    ax.set_xlabel("Bước lượng tử QIM")
+    ax.set_ylabel("PSNR sau khi nhúng (dB)")
+    ax.set_ylim(35.5, 45.5)
+    ax.set_xlim(-0.45, len(qim) - 0.55)
+    ax.yaxis.grid(True, color=RULE, linewidth=0.6, zorder=0)
+    ax.set_axisbelow(True)
+    _despine(ax)
+
+    handles = [
+        Line2D([], [], color=BLUE, marker="o", markerfacecolor=BLUE,
+               markeredgecolor=BLUE, markersize=8, linewidth=1.2,
+               label="Trang chữ nét dày, 23,82 phần trăm điểm tối"),
+        Line2D([], [], color=MUTED, marker="s", markerfacecolor="white",
+               markeredgecolor=MUTED, markersize=8, linewidth=1.2, linestyle=":",
+               label="Trang chữ nét mảnh, 9,24 phần trăm điểm tối"),
+        Line2D([], [], color="none", marker="o", markerfacecolor=INK,
+               markeredgecolor=INK, markersize=8,
+               label="Ký hiệu tô đặc: truy được nguồn sau khi nén JPEG 70"),
+        Line2D([], [], color="none", marker="o", markerfacecolor="white",
+               markeredgecolor=INK, markersize=8,
+               label="Ký hiệu rỗng: không truy được"),
+    ]
+    ax.legend(handles=handles, frameon=False, loc="upper center",
+              bbox_to_anchor=(0.5, -0.20), fontsize=9, ncol=1,
+              handlelength=1.8, labelspacing=0.35)
+    fig.savefig(OUT / "chart-carrier-decides.png")
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     figure_v1_v3()
     figure_envelope()
     figure_letterbox()
-    for name in ("chart-v1-vs-v3", "chart-attack-envelope", "chart-frame-restore"):
+    figure_carrier()
+    for name in ("chart-v1-vs-v3", "chart-attack-envelope", "chart-frame-restore", "chart-carrier-decides"):
         path = OUT / f"{name}.png"
         print(f"{path.name:34} {path.stat().st_size / 1024:7.1f} KB")
